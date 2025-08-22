@@ -14,9 +14,9 @@ class CamposGeneralesFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'id': tk.StringVar(),
+            'sid': tk.StringVar(),
             'area': tk.StringVar(),
-            'empleo': tk.StringVar(),
+            'subarea': tk.StringVar(),
             'ingreso_por': tk.StringVar(),
             'fecha': tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
         }
@@ -28,9 +28,9 @@ class CamposGeneralesFrame:
         
         # Campos
         campos = [
-            ("ID:", "id", "entry"),
-            ("Área:", "area", "entry"),
-            ("Empleo:", "empleo", "entry"),
+            ("SID:", "sid", "entry"),
+            ("Área:", "area", "combobox", ["Recursos Humanos", "Tecnología", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
+            ("Subárea:", "subarea", "entry"),
             ("Quien hace el ingreso:", "ingreso_por", "combobox", ["Juan Pérez", "María García"]),
             ("Fecha:", "fecha", "entry")
         ]
@@ -62,7 +62,7 @@ class CamposGeneralesFrame:
     
     def validar_campos_obligatorios(self):
         """Valida que los campos obligatorios estén completos"""
-        campos_obligatorios = ['id', 'area', 'empleo']
+        campos_obligatorios = ['sid', 'area']
         campos_vacios = []
         
         for campo in campos_obligatorios:
@@ -83,12 +83,8 @@ class OnboardingFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'fecha_ingreso': tk.StringVar(value=datetime.now().strftime("%Y-%m-%d")),
-            'departamento_destino': tk.StringVar(),
-            'supervisor': tk.StringVar(),
-            'salario': tk.StringVar(),
-            'tipo_contrato': tk.StringVar(),
-            'observaciones': tk.StringVar()
+            'submenu_onboarding': tk.StringVar(),
+            'other_onboarding': tk.StringVar()
         }
     
     def _crear_widgets(self):
@@ -96,51 +92,45 @@ class OnboardingFrame:
         self.frame = ttk.Frame(self.parent)
         
         # Título
-        ttk.Label(self.frame, text="Información de Onboarding", 
+        ttk.Label(self.frame, text="Tipo de Onboarding", 
                   font=("Arial", 12, "bold")).pack(pady=10)
         
-        # Frame para campos
-        campos_frame = ttk.Frame(self.frame)
-        campos_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        campos_frame.columnconfigure(1, weight=1)
+        # Frame para radio buttons
+        radio_frame = ttk.Frame(self.frame)
+        radio_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
-        # Campos específicos
-        campos = [
-            ("Fecha de Ingreso:", "fecha_ingreso", "entry"),
-            ("Departamento Destino:", "departamento_destino", "entry"),
-            ("Supervisor:", "supervisor", "entry"),
-            ("Salario:", "salario", "entry"),
-            ("Tipo de Contrato:", "tipo_contrato", "combobox", 
-             ["Indefinido", "Temporal", "Prácticas", "Otro"]),
-            ("Observaciones:", "observaciones", "entry")
-        ]
+        # Submenú con radio buttons
+        opciones_submenu = ["Nuevo Empleado", "Recontratación", "Transferencia Interna", "Promoción"]
+        for i, opcion in enumerate(opciones_submenu):
+            ttk.Radiobutton(radio_frame, text=opcion, 
+                           variable=self.variables['submenu_onboarding'], 
+                           value=opcion).pack(anchor=tk.W, pady=5)
         
-        for i, campo in enumerate(campos):
-            label_text, var_name, tipo = campo[:3]
-            ttk.Label(campos_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=2)
-            
-            if tipo == "entry":
-                ttk.Entry(campos_frame, textvariable=self.variables[var_name], width=30).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(campos_frame, textvariable=self.variables[var_name], 
-                            values=valores).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
+        # Opción Other con campo de texto
+        other_frame = ttk.Frame(radio_frame)
+        other_frame.pack(anchor=tk.W, pady=5)
+        
+        ttk.Radiobutton(other_frame, text="Other:", 
+                       variable=self.variables['submenu_onboarding'], 
+                       value="other").pack(side=tk.LEFT)
+        
+        ttk.Entry(other_frame, textvariable=self.variables['other_onboarding'], 
+                 width=25).pack(side=tk.LEFT, padx=(5, 0))
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
-        return {name: var.get() for name, var in self.variables.items()}
+        datos = {name: var.get() for name, var in self.variables.items()}
+        
+        # Si se seleccionó "other", usar el valor del campo de texto
+        if datos['submenu_onboarding'] == 'other':
+            datos['submenu_onboarding'] = datos['other_onboarding']
+        
+        return datos
     
     def limpiar(self):
         """Limpia todos los campos"""
-        for name, var in self.variables.items():
-            if name == 'fecha_ingreso':
-                var.set(datetime.now().strftime("%Y-%m-%d"))
-            else:
-                var.set("")
+        for var in self.variables.values():
+            var.set("")
 
 class OffboardingFrame:
     """Componente para la pestaña de offboarding"""
@@ -154,12 +144,8 @@ class OffboardingFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'fecha_salida': tk.StringVar(value=datetime.now().strftime("%Y-%m-%d")),
-            'motivo_salida': tk.StringVar(),
-            'tipo_salida': tk.StringVar(),
-            'entrevista_salida': tk.StringVar(),
-            'equipos_devueltos': tk.StringVar(),
-            'observaciones': tk.StringVar()
+            'submenu_offboarding': tk.StringVar(),
+            'other_offboarding': tk.StringVar()
         }
     
     def _crear_widgets(self):
@@ -167,54 +153,45 @@ class OffboardingFrame:
         self.frame = ttk.Frame(self.parent)
         
         # Título
-        ttk.Label(self.frame, text="Información de Offboarding", 
+        ttk.Label(self.frame, text="Tipo de Offboarding", 
                   font=("Arial", 12, "bold")).pack(pady=10)
         
-        # Frame para campos
-        campos_frame = ttk.Frame(self.frame)
-        campos_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        campos_frame.columnconfigure(1, weight=1)
+        # Frame para radio buttons
+        radio_frame = ttk.Frame(self.frame)
+        radio_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
-        # Campos específicos
-        campos = [
-            ("Fecha de Salida:", "fecha_salida", "entry"),
-            ("Motivo de Salida:", "motivo_salida", "combobox", 
-             ["Renuncia", "Despido", "Fin de contrato", "Jubilación", "Otro"]),
-            ("Tipo de Salida:", "tipo_salida", "combobox", 
-             ["Voluntaria", "Involuntaria", "Mutuo acuerdo"]),
-            ("Entrevista de Salida:", "entrevista_salida", "combobox", 
-             ["Sí", "No", "Pendiente"]),
-            ("Equipos Devueltos:", "equipos_devueltos", "combobox", 
-             ["Completo", "Pendiente", "No aplica"]),
-            ("Observaciones:", "observaciones", "entry")
-        ]
+        # Submenú con radio buttons
+        opciones_submenu = ["Salida Definitiva", "Reducción de Personal", "Fin de Proyecto", "Cambio de Empresa"]
+        for i, opcion in enumerate(opciones_submenu):
+            ttk.Radiobutton(radio_frame, text=opcion, 
+                           variable=self.variables['submenu_offboarding'], 
+                           value=opcion).pack(anchor=tk.W, pady=5)
         
-        for i, campo in enumerate(campos):
-            label_text, var_name, tipo = campo[:3]
-            ttk.Label(campos_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=2)
-            
-            if tipo == "entry":
-                ttk.Entry(campos_frame, textvariable=self.variables[var_name], width=30).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(campos_frame, textvariable=self.variables[var_name], 
-                            values=valores).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
+        # Opción Other con campo de texto
+        other_frame = ttk.Frame(radio_frame)
+        other_frame.pack(anchor=tk.W, pady=5)
+        
+        ttk.Radiobutton(other_frame, text="Other:", 
+                       variable=self.variables['submenu_offboarding'], 
+                       value="other").pack(side=tk.LEFT)
+        
+        ttk.Entry(other_frame, textvariable=self.variables['other_offboarding'], 
+                 width=25).pack(side=tk.LEFT, padx=(5, 0))
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
-        return {name: var.get() for name, var in self.variables.items()}
+        datos = {name: var.get() for name, var in self.variables.items()}
+        
+        # Si se seleccionó "other", usar el valor del campo de texto
+        if datos['submenu_offboarding'] == 'other':
+            datos['submenu_offboarding'] = datos['other_offboarding']
+        
+        return datos
     
     def limpiar(self):
         """Limpia todos los campos"""
-        for name, var in self.variables.items():
-            if name == 'fecha_salida':
-                var.set(datetime.now().strftime("%Y-%m-%d"))
-            else:
-                var.set("")
+        for var in self.variables.values():
+            var.set("")
 
 class LateralMovementFrame:
     """Componente para la pestaña de lateral movement"""
@@ -228,13 +205,9 @@ class LateralMovementFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'fecha_movimiento': tk.StringVar(value=datetime.now().strftime("%Y-%m-%d")),
-            'departamento_origen': tk.StringVar(),
-            'departamento_destino': tk.StringVar(),
-            'cargo_anterior': tk.StringVar(),
-            'cargo_nuevo': tk.StringVar(),
-            'motivo_movimiento': tk.StringVar(),
-            'observaciones': tk.StringVar()
+            'empleo_anterior': tk.StringVar(),
+            'submenu_lateral': tk.StringVar(),
+            'other_lateral': tk.StringVar()
         }
     
     def _crear_widgets(self):
@@ -250,41 +223,43 @@ class LateralMovementFrame:
         campos_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         campos_frame.columnconfigure(1, weight=1)
         
-        # Campos específicos
-        campos = [
-            ("Fecha de Movimiento:", "fecha_movimiento", "entry"),
-            ("Departamento Origen:", "departamento_origen", "entry"),
-            ("Departamento Destino:", "departamento_destino", "entry"),
-            ("Cargo Anterior:", "cargo_anterior", "entry"),
-            ("Cargo Nuevo:", "cargo_nuevo", "entry"),
-            ("Motivo del Movimiento:", "motivo_movimiento", "combobox", 
-             ["Promoción", "Reorganización", "Desarrollo profesional", "Necesidad del negocio", "Otro"]),
-            ("Observaciones:", "observaciones", "entry")
-        ]
+        # Campo empleo anterior
+        ttk.Label(campos_frame, text="Empleo Anterior:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        ttk.Entry(campos_frame, textvariable=self.variables['empleo_anterior'], width=30).grid(
+            row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
+        )
         
-        for i, campo in enumerate(campos):
-            label_text, var_name, tipo = campo[:3]
-            ttk.Label(campos_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=2)
-            
-            if tipo == "entry":
-                ttk.Entry(campos_frame, textvariable=self.variables[var_name], width=30).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(campos_frame, textvariable=self.variables[var_name], 
-                            values=valores).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=2
-                )
+        # Título para radio buttons
+        ttk.Label(campos_frame, text="Tipo de Movimiento:", font=("Arial", 10, "bold")).grid(
+            row=1, column=0, sticky=tk.W, pady=(15, 5))
+        
+        # Submenú con radio buttons
+        opciones_submenu = ["Movimiento Horizontal", "Reasignación de Proyecto", "Cambio de Equipo", "Rotación de Funciones"]
+        for i, opcion in enumerate(opciones_submenu):
+            ttk.Radiobutton(campos_frame, text=opcion, 
+                           variable=self.variables['submenu_lateral'], 
+                           value=opcion).grid(row=2+i, column=1, sticky=tk.W, pady=2)
+        
+        # Opción Other con campo de texto
+        other_row = 2 + len(opciones_submenu)
+        ttk.Radiobutton(campos_frame, text="Other:", 
+                       variable=self.variables['submenu_lateral'], 
+                       value="other").grid(row=other_row, column=0, sticky=tk.W, pady=2)
+        
+        ttk.Entry(campos_frame, textvariable=self.variables['other_lateral'], 
+                 width=25).grid(row=other_row, column=1, sticky=tk.W, padx=(10, 0), pady=2)
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
-        return {name: var.get() for name, var in self.variables.items()}
+        datos = {name: var.get() for name, var in self.variables.items()}
+        
+        # Si se seleccionó "other", usar el valor del campo de texto
+        if datos['submenu_lateral'] == 'other':
+            datos['submenu_lateral'] = datos['other_lateral']
+        
+        return datos
     
     def limpiar(self):
         """Limpia todos los campos"""
-        for name, var in self.variables.items():
-            if name == 'fecha_movimiento':
-                var.set(datetime.now().strftime("%Y-%m-%d"))
-            else:
-                var.set("")
+        for var in self.variables.values():
+            var.set("")

@@ -14,14 +14,11 @@ class EmpleadoService:
         errores = []
         
         # Validar campos obligatorios
-        if not datos.get('id', '').strip():
-            errores.append("ID es obligatorio")
+        if not datos.get('sid', '').strip():
+            errores.append("SID es obligatorio")
         
         if not datos.get('area', '').strip():
             errores.append("Área es obligatoria")
-        
-        if not datos.get('empleo', '').strip():
-            errores.append("Empleo es obligatorio")
         
         return len(errores) == 0, errores
     
@@ -41,10 +38,10 @@ class EmpleadoService:
         """Crea un objeto Empleado desde los datos del formulario"""
         try:
             return Empleado(
-                id_empleado=datos.get('id', ''),
+                sid=datos.get('sid', ''),
                 area=datos.get('area', ''),
-                empleo=datos.get('empleo', ''),
                 ingreso_por=datos.get('ingreso_por', ''),
+                subarea=datos.get('subarea', ''),
                 fecha=datos.get('fecha', '')
             )
         except Exception as e:
@@ -60,12 +57,7 @@ class EmpleadoService:
             
             return Onboarding(
                 empleado=empleado,
-                fecha_ingreso=datos_especificos.get('fecha_ingreso', ''),
-                departamento_destino=datos_especificos.get('departamento_destino', ''),
-                supervisor=datos_especificos.get('supervisor', ''),
-                salario=datos_especificos.get('salario', ''),
-                tipo_contrato=datos_especificos.get('tipo_contrato', ''),
-                observaciones=datos_especificos.get('observaciones', '')
+                submenu_onboarding=datos_especificos.get('submenu_onboarding', '')
             )
         except Exception as e:
             print(f"Error al crear onboarding: {str(e)}")
@@ -80,12 +72,7 @@ class EmpleadoService:
             
             return Offboarding(
                 empleado=empleado,
-                fecha_salida=datos_especificos.get('fecha_salida', ''),
-                motivo_salida=datos_especificos.get('motivo_salida', ''),
-                tipo_salida=datos_especificos.get('tipo_salida', ''),
-                entrevista_salida=datos_especificos.get('entrevista_salida', ''),
-                equipos_devueltos=datos_especificos.get('equipos_devueltos', ''),
-                observaciones=datos_especificos.get('observaciones', '')
+                submenu_offboarding=datos_especificos.get('submenu_offboarding', '')
             )
         except Exception as e:
             print(f"Error al crear offboarding: {str(e)}")
@@ -100,13 +87,8 @@ class EmpleadoService:
             
             return LateralMovement(
                 empleado=empleado,
-                fecha_movimiento=datos_especificos.get('fecha_movimiento', ''),
-                departamento_origen=datos_especificos.get('departamento_origen', ''),
-                departamento_destino=datos_especificos.get('departamento_destino', ''),
-                cargo_anterior=datos_especificos.get('cargo_anterior', ''),
-                cargo_nuevo=datos_especificos.get('cargo_nuevo', ''),
-                motivo_movimiento=datos_especificos.get('motivo_movimiento', ''),
-                observaciones=datos_especificos.get('observaciones', '')
+                empleo_anterior=datos_especificos.get('empleo_anterior', ''),
+                submenu_lateral=datos_especificos.get('submenu_lateral', '')
             )
         except Exception as e:
             print(f"Error al crear lateral movement: {str(e)}")
