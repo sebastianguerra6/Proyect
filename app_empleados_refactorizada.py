@@ -5,7 +5,8 @@ from datetime import datetime
 from models import Empleado, Onboarding, Offboarding, LateralMovement
 from data import EmpleadoRepository
 from services import EmpleadoService
-from ui import CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, LateralMovementFrame
+from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
+                LateralMovementFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
 
 class AppEmpleadosRefactorizada:
     """Aplicación principal refactorizada siguiendo buenas prácticas de POO"""
@@ -13,7 +14,7 @@ class AppEmpleadosRefactorizada:
     def __init__(self, root):
         self.root = root
         self.root.title("Sistema de Gestión de Empleados - Refactorizado")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x700")  # Aumentar tamaño para las nuevas pestañas
         
         # Inicializar servicios y componentes
         self.repository = EmpleadoRepository()
@@ -44,22 +45,55 @@ class AppEmpleadosRefactorizada:
                           font=("Arial", 16, "bold"))
         titulo.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
+        # Pestañas principales
+        self.crear_pestanas_principales(main_frame)
+        
+    def crear_pestanas_principales(self, parent):
+        """Crea el sistema de pestañas principales"""
+        # Frame para pestañas principales
+        pestanas_principales_frame = ttk.Frame(parent)
+        pestanas_principales_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
+        pestanas_principales_frame.columnconfigure(0, weight=1)
+        pestanas_principales_frame.rowconfigure(1, weight=1)
+        
+        # Notebook para pestañas principales
+        self.notebook_principal = ttk.Notebook(pestanas_principales_frame)
+        self.notebook_principal.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Pestaña de Gestión de Procesos
+        self.crear_pestana_gestion_procesos()
+        
+        # Pestaña de Edición y Búsqueda
+        self.crear_pestana_edicion_busqueda()
+        
+        # Pestaña de Creación de Persona
+        self.crear_pestana_creacion_persona()
+        
+    def crear_pestana_gestion_procesos(self):
+        """Crea la pestaña de gestión de procesos (onboarding, offboarding, lateral)"""
+        gestion_frame = ttk.Frame(self.notebook_principal)
+        self.notebook_principal.add(gestion_frame, text="Gestión de Procesos")
+        
+        # Configurar grid
+        gestion_frame.columnconfigure(0, weight=1)
+        gestion_frame.rowconfigure(1, weight=1)
+        
         # Campos generales
-        self.componentes['generales'] = CamposGeneralesFrame(main_frame)
-        self.componentes['generales'].frame.grid(row=1, column=0, columnspan=2, 
+        self.componentes['generales'] = CamposGeneralesFrame(gestion_frame)
+        self.componentes['generales'].frame.grid(row=0, column=0, 
                                                sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # Pestañas
-        self.crear_pestanas(main_frame)
+        # Pestañas de tipo de proceso
+        self.crear_pestanas_tipo_proceso(gestion_frame)
         
         # Botones
-        self.crear_botones(main_frame)
+        self.crear_botones(gestion_frame)
         
-    def crear_pestanas(self, parent):
-        """Crea el sistema de pestañas"""
+    def crear_pestanas_tipo_proceso(self, parent):
+        """Crea el sistema de pestañas para tipos de proceso"""
         # Frame para pestañas
         pestanas_frame = ttk.LabelFrame(parent, text="Tipo de Proceso", padding="10")
-        pestanas_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), 
+        pestanas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), 
                            pady=(0, 10))
         pestanas_frame.columnconfigure(0, weight=1)
         pestanas_frame.rowconfigure(1, weight=1)
@@ -143,11 +177,21 @@ class AppEmpleadosRefactorizada:
         self.componentes['lateral'] = LateralMovementFrame(self.notebook)
         self.pestanas_dinamicas['lateral'] = self.componentes['lateral'].frame
     
+    def crear_pestana_edicion_busqueda(self):
+        """Crea la pestaña de edición y búsqueda"""
+        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.notebook_principal, self.service)
+        self.notebook_principal.add(self.componentes['edicion_busqueda'].frame, text="Edición y Búsqueda")
+        
+    def crear_pestana_creacion_persona(self):
+        """Crea la pestaña de creación de persona"""
+        self.componentes['creacion_persona'] = CreacionPersonaFrame(self.notebook_principal, self.service)
+        self.notebook_principal.add(self.componentes['creacion_persona'].frame, text="Crear Persona")
+    
     def crear_botones(self, parent):
         """Crea los botones de acción"""
         # Frame para botones
         botones_frame = ttk.Frame(parent)
-        botones_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        botones_frame.grid(row=2, column=0, columnspan=2, pady=10)
         
         # Botones
         ttk.Button(botones_frame, text="Guardar", command=self.guardar_datos).pack(side=tk.LEFT, padx=5)
@@ -212,6 +256,7 @@ class AppEmpleadosRefactorizada:
         mensaje += f"Onboardings: {estadisticas['onboarding']}\n"
         mensaje += f"Offboardings: {estadisticas['offboarding']}\n"
         mensaje += f"Lateral Movements: {estadisticas['lateral']}\n"
+        mensaje += f"Personas en Headcount: {estadisticas['headcount']}\n"
         mensaje += f"Total: {sum(estadisticas.values())}"
         
         messagebox.showinfo("Estadísticas", mensaje)

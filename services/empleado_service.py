@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-from models import Empleado, Onboarding, Offboarding, LateralMovement
+from models import Empleado, Onboarding, Offboarding, LateralMovement, PersonaHeadcount
 from data import EmpleadoRepository
 from tkinter import messagebox
 
@@ -19,6 +19,28 @@ class EmpleadoService:
         
         if not datos.get('area', '').strip():
             errores.append("Área es obligatoria")
+        
+        return len(errores) == 0, errores
+    
+    def validar_datos_persona_headcount(self, datos: dict) -> Tuple[bool, List[str]]:
+        """Valida los datos de una persona del headcount"""
+        errores = []
+        
+        # Validar campos obligatorios
+        if not datos.get('nombre', '').strip():
+            errores.append("Nombre es obligatorio")
+        
+        if not datos.get('apellido', '').strip():
+            errores.append("Apellido es obligatorio")
+        
+        if not datos.get('email', '').strip():
+            errores.append("Email es obligatorio")
+        
+        if not datos.get('departamento', '').strip():
+            errores.append("Departamento es obligatorio")
+        
+        if not datos.get('cargo', '').strip():
+            errores.append("Cargo es obligatorio")
         
         return len(errores) == 0, errores
     
@@ -46,6 +68,24 @@ class EmpleadoService:
             )
         except Exception as e:
             print(f"Error al crear empleado: {str(e)}")
+            return None
+    
+    def crear_persona_headcount(self, datos: dict) -> Optional[PersonaHeadcount]:
+        """Crea un objeto PersonaHeadcount desde los datos del formulario"""
+        try:
+            return PersonaHeadcount(
+                nombre=datos.get('nombre', ''),
+                apellido=datos.get('apellido', ''),
+                email=datos.get('email', ''),
+                departamento=datos.get('departamento', ''),
+                cargo=datos.get('cargo', ''),
+                telefono=datos.get('telefono', ''),
+                fecha_contratacion=datos.get('fecha_contratacion', ''),
+                salario=datos.get('salario', ''),
+                estado=datos.get('estado', 'Activo')
+            )
+        except Exception as e:
+            print(f"Error al crear persona del headcount: {str(e)}")
             return None
     
     def crear_onboarding(self, datos_generales: dict, datos_especificos: dict) -> Optional[Onboarding]:
@@ -132,6 +172,33 @@ class EmpleadoService:
         except Exception as e:
             return False, f"Error inesperado: {str(e)}"
     
+    def guardar_persona_headcount(self, datos: dict) -> Tuple[bool, str]:
+        """Guarda una persona en el headcount"""
+        try:
+            # Validar datos
+            es_valido, errores = self.validar_datos_persona_headcount(datos)
+            if not es_valido:
+                return False, f"Errores en datos: {', '.join(errores)}"
+            
+            # Crear persona
+            persona = self.crear_persona_headcount(datos)
+            if not persona:
+                return False, "Error al crear persona del headcount"
+            
+            # Guardar en repositorio
+            exito = self.repository.guardar_persona_headcount(persona)
+            return exito, "Persona guardada exitosamente en el headcount" if exito else "Error al guardar persona en el headcount"
+            
+        except Exception as e:
+            return False, f"Error inesperado: {str(e)}"
+    
+    def buscar_por_sid(self, sid: str) -> List[dict]:
+        """Busca registros por SID"""
+        if not sid.strip():
+            return []
+        
+        return self.repository.buscar_por_sid(sid.strip())
+    
     def obtener_estadisticas(self) -> dict:
         """Obtiene estadísticas de los procesos almacenados"""
         return self.repository.obtener_estadisticas()
@@ -147,3 +214,7 @@ class EmpleadoService:
     def cargar_lateral_movements(self) -> List[LateralMovement]:
         """Carga todos los procesos de lateral movement"""
         return self.repository.cargar_lateral_movements()
+    
+    def cargar_personas_headcount(self) -> List[PersonaHeadcount]:
+        """Carga todas las personas del headcount"""
+        return self.repository.cargar_personas_headcount()

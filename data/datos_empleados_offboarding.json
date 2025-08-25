@@ -1,0 +1,12 @@
+[
+  {
+    "sid": "EMP003",
+    "area": "Marketing",
+    "ingreso_por": "Juan Pérez",
+    "subarea": "Digital",
+    "fecha": "2024-01-10",
+    "fecha_registro": "2024-01-10 09:15:00",
+    "tipo_proceso": "offboarding",
+    "submenu_offboarding": "Salida Definitiva"
+  }
+]

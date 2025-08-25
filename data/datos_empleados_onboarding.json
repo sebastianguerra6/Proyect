@@ -1,0 +1,22 @@
+[
+  {
+    "sid": "EMP001",
+    "area": "Tecnología",
+    "ingreso_por": "Juan Pérez",
+    "subarea": "Desarrollo",
+    "fecha": "2024-01-15",
+    "fecha_registro": "2024-01-15 10:30:00",
+    "tipo_proceso": "onboarding",
+    "submenu_onboarding": "Nuevo Empleado"
+  },
+  {
+    "sid": "EMP002",
+    "area": "Recursos Humanos",
+    "ingreso_por": "María García",
+    "subarea": "Selección",
+    "fecha": "2024-01-16",
+    "fecha_registro": "2024-01-16 14:20:00",
+    "tipo_proceso": "onboarding",
+    "submenu_onboarding": "Recontratación"
+  }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "sid": "EMP001",
+    "area": "Tecnología",
+    "ingreso_por": "Juan Pérez",
+    "subarea": "Desarrollo",
+    "fecha": "2024-01-20",
+    "fecha_registro": "2024-01-20 11:45:00",
+    "tipo_proceso": "lateral",
+    "empleo_anterior": "Desarrollador Junior",
+    "submenu_lateral": "Promoción"
+  }
+]

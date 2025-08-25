@@ -1,185 +1,180 @@
-# Sistema de Gestión de Empleados - Versión Refactorizada
+# Sistema de Gestión de Empleados - Refactorizado
 
-Una aplicación de escritorio desarrollada en Python con Tkinter para gestionar procesos de empleados, siguiendo buenas prácticas de Programación Orientada a Objetos (POO) y arquitectura en capas.
+## Descripción
+Sistema de gestión de empleados desarrollado en Python con Tkinter, siguiendo principios de Programación Orientada a Objetos (POO) y arquitectura en capas.
 
-## 🏗️ Arquitectura del Proyecto
+## Características Principales
 
-El proyecto está organizado siguiendo el patrón de **Arquitectura en Capas** con separación clara de responsabilidades:
+### 🏢 Gestión de Procesos
+- **Onboarding**: Gestión de nuevos empleados, recontrataciones, transferencias internas y promociones
+- **Offboarding**: Manejo de salidas definitivas, reducción de personal, fin de proyectos y cambios de empresa
+- **Lateral Movement**: Control de movimientos horizontales, reasignaciones de proyecto, cambios de equipo y rotación de funciones
 
+### 🔍 Edición y Búsqueda
+- **Búsqueda por SID**: Localización rápida de registros anteriores por identificador de empleado
+- **Edición de Campos**: Modificación de información de empleados existentes
+- **Visualización de Resultados**: Tabla interactiva con todos los registros encontrados
+- **Selección y Carga**: Carga automática de datos en formularios de edición
+
+### 👥 Creación de Personas en Headcount
+- **Formulario Completo**: Campos para información personal, laboral y de contacto
+- **Validación de Datos**: Verificación de campos obligatorios
+- **Almacenamiento JSON**: Persistencia de datos en archivo headcount.json
+- **Gestión de Estados**: Control de estado laboral (Activo, Inactivo, Vacaciones, Licencia)
+
+## Arquitectura del Sistema
+
+### 📁 Estructura de Archivos
 ```
 Pruebas-Tranbajo/
-├── models/                    # Capa de Modelos (Entidades de negocio)
+├── app_empleados_refactorizada.py    # Aplicación principal
+├── data/                             # Capa de datos
 │   ├── __init__.py
-│   ├── empleado.py           # Clase Empleado
-│   └── procesos.py           # Clases Onboarding, Offboarding, LateralMovement
-├── data/                     # Capa de Datos (Acceso a datos)
+│   ├── repository.py                 # Repositorio de datos
+│   ├── headcount.json               # Datos de personas
+│   ├── datos_empleados_onboarding.json
+│   ├── datos_empleados_offboarding.json
+│   └── datos_empleados_lateral.json
+├── models/                           # Modelos de datos
 │   ├── __init__.py
-│   └── repository.py         # EmpleadoRepository
-├── services/                 # Capa de Servicios (Lógica de negocio)
+│   ├── empleado.py                  # Modelo de empleado y persona
+│   └── procesos.py                  # Modelos de procesos
+├── services/                         # Capa de servicios
 │   ├── __init__.py
-│   └── empleado_service.py   # EmpleadoService
-├── ui/                       # Capa de Presentación (Interfaz de usuario)
-│   ├── __init__.py
-│   └── components.py         # Componentes de UI reutilizables
-├── app_empleados.py          # Versión original (monolítica)
-├── app_empleados_refactorizada.py  # Versión refactorizada
-└── README.md
+│   └── empleado_service.py          # Lógica de negocio
+└── ui/                              # Interfaz de usuario
+    ├── __init__.py
+    └── components.py                # Componentes de UI
 ```
 
-## 📋 Características
+### 🏗️ Patrones de Diseño
+- **Arquitectura en Capas**: Separación clara entre UI, servicios y datos
+- **Repository Pattern**: Abstracción del acceso a datos
+- **Service Layer**: Lógica de negocio centralizada
+- **Component-based UI**: Interfaz modular y reutilizable
 
-### Campos Generales
-- **ID**: Identificador único del empleado
-- **Área**: Área o departamento del empleado
-- **Empleo**: Cargo o puesto del empleado
-- **Quien hace el ingreso**: Persona responsable del registro
-- **Fecha**: Fecha del registro (se establece automáticamente)
+## Funcionalidades por Pestaña
 
-### Tipos de Proceso
+### 1. Gestión de Procesos
+- **Campos Generales**: SID, Área, Subárea, Ingreso por, Fecha
+- **Tipos de Proceso**: Selección dinámica entre Onboarding, Offboarding y Lateral Movement
+- **Formularios Específicos**: Campos adaptados según el tipo de proceso seleccionado
+- **Validación**: Verificación de campos obligatorios antes del guardado
 
-#### 1. Onboarding
-Campos específicos para nuevos empleados:
-- Fecha de Ingreso
-- Departamento Destino
-- Supervisor
-- Salario
-- Tipo de Contrato (Indefinido, Temporal, Prácticas, Otro)
-- Observaciones
+### 2. Edición y Búsqueda
+- **Búsqueda por SID**: Campo de entrada para buscar empleados específicos
+- **Resultados en Tabla**: Visualización organizada de registros encontrados
+- **Formulario de Edición**: Campos editables para modificar información
+- **Integración con Servicios**: Búsqueda real en base de datos JSON
 
-#### 2. Offboarding
-Campos específicos para empleados que salen:
-- Fecha de Salida
-- Motivo de Salida (Renuncia, Despido, Fin de contrato, Jubilación, Otro)
-- Tipo de Salida (Voluntaria, Involuntaria, Mutuo acuerdo)
-- Entrevista de Salida (Sí, No, Pendiente)
-- Equipos Devueltos (Completo, Pendiente, No aplica)
-- Observaciones
+### 3. Crear Persona
+- **Información Personal**: Nombre, apellido, email, teléfono
+- **Información Laboral**: Departamento, cargo, fecha de contratación, salario
+- **Estado del Empleado**: Control de estado laboral
+- **Validación Completa**: Verificación de campos obligatorios y formato
 
-#### 3. Lateral Movement
-Campos específicos para movimientos internos:
-- Fecha de Movimiento
-- Departamento Origen
-- Departamento Destino
-- Cargo Anterior
-- Cargo Nuevo
-- Motivo del Movimiento (Promoción, Reorganización, Desarrollo profesional, Necesidad del negocio, Otro)
-- Observaciones
+## Tecnologías Utilizadas
 
-## 🚀 Instalación y Uso
+- **Python 3.x**: Lenguaje de programación principal
+- **Tkinter**: Interfaz gráfica de usuario
+- **JSON**: Almacenamiento de datos
+- **POO**: Programación Orientada a Objetos
+- **Arquitectura en Capas**: Separación de responsabilidades
+
+## Instalación y Uso
 
 ### Requisitos
 - Python 3.6 o superior
-- Tkinter (incluido con Python)
+- Tkinter (incluido en la mayoría de instalaciones de Python)
 
 ### Ejecución
-
-#### Versión Refactorizada (Recomendada)
 ```bash
 python app_empleados_refactorizada.py
 ```
 
-#### Versión Original
-```bash
-python app_empleados.py
-```
+### Estructura de Datos
+Los datos se almacenan en archivos JSON en el directorio `data/`:
+- `headcount.json`: Personas del headcount
+- `datos_empleados_onboarding.json`: Procesos de onboarding
+- `datos_empleados_offboarding.json`: Procesos de offboarding
+- `datos_empleados_lateral.json`: Movimientos laterales
 
-### Instrucciones de Uso
+## Características Técnicas
 
-1. **Llenar información general**: Complete los campos ID, Área, Empleo, y opcionalmente "Quien hace el ingreso"
+### 🔒 Validación de Datos
+- Verificación de campos obligatorios
+- Validación de formatos
+- Manejo de errores con mensajes informativos
 
-2. **Seleccionar tipo de proceso**: 
-   - Vaya a la pestaña "Seleccionar Proceso"
-   - Elija entre Onboarding, Offboarding o Lateral Movement
+### 💾 Persistencia de Datos
+- Almacenamiento en archivos JSON
+- Estructura de datos consistente
+- Manejo de errores de archivo
 
-3. **Completar información específica**: 
-   - Se abrirá automáticamente una nueva pestaña con campos específicos según el tipo seleccionado
-   - Complete los campos requeridos
+### 🎨 Interfaz de Usuario
+- Diseño responsive y moderno
+- Pestañas organizadas por funcionalidad
+- Formularios intuitivos y fáciles de usar
+- Mensajes de confirmación y error
 
-4. **Guardar datos**: 
-   - Haga clic en "Guardar" para almacenar la información
-   - Los datos se guardan en archivos JSON separados por tipo de proceso
+### 🔍 Funcionalidades de Búsqueda
+- Búsqueda por SID en todos los tipos de proceso
+- Resultados presentados en tabla organizada
+- Selección de registros para edición
+- Carga automática de datos en formularios
 
-5. **Funciones adicionales**:
-   - **Limpiar**: Borra todos los campos y empieza un nuevo registro
-   - **Estadísticas**: Muestra el número de registros por tipo de proceso
+## Mejoras Implementadas
 
-## 🏛️ Arquitectura Detallada
+### ✅ Funcionalidades Agregadas
+- [x] Pestaña de Edición y Búsqueda por SID
+- [x] Pestaña de Creación de Personas en Headcount
+- [x] Sistema de búsqueda integrado
+- [x] Formularios de edición funcionales
+- [x] Validación de datos mejorada
+- [x] Interfaz de usuario expandida
 
-### Capa de Modelos (`models/`)
-- **Empleado**: Representa la entidad básica del empleado
-- **ProcesoBase**: Clase base para todos los tipos de proceso
-- **Onboarding/Offboarding/LateralMovement**: Clases específicas para cada tipo de proceso
+### 🔄 Funcionalidades Existentes Mejoradas
+- [x] Arquitectura en pestañas principales
+- [x] Sistema de estadísticas actualizado
+- [x] Manejo de errores mejorado
+- [x] Integración de servicios completa
 
-### Capa de Datos (`data/`)
-- **EmpleadoRepository**: Maneja el almacenamiento y recuperación de datos
-- Persistencia en archivos JSON separados por tipo de proceso
-- Manejo de errores y validación de datos
+## Próximas Mejoras Sugeridas
 
-### Capa de Servicios (`services/`)
-- **EmpleadoService**: Contiene toda la lógica de negocio
-- Validación de datos
-- Creación de objetos de dominio
-- Coordinación entre capas
+### 🚀 Funcionalidades Futuras
+- [ ] Sistema de autenticación y roles
+- [ ] Exportación de datos a Excel/CSV
+- [ ] Reportes y dashboards
+- [ ] Integración con bases de datos relacionales
+- [ ] Sistema de notificaciones
+- [ ] Historial de cambios y auditoría
+- [ ] Backup automático de datos
+- [ ] Interfaz web responsive
 
-### Capa de Presentación (`ui/`)
-- **Componentes reutilizables**: CamposGeneralesFrame, OnboardingFrame, etc.
-- Separación de responsabilidades de UI
-- Fácil mantenimiento y extensión
-
-## 💾 Almacenamiento de Datos
-
-Los datos se guardan en archivos JSON separados en el directorio `data/`:
-- `data/datos_empleados_onboarding.json` - Para procesos de onboarding
-- `data/datos_empleados_offboarding.json` - Para procesos de offboarding  
-- `data/datos_empleados_lateral.json` - Para movimientos laterales
-
-Cada archivo contiene un array de objetos con toda la información registrada.
-
-## ✨ Ventajas de la Arquitectura Refactorizada
-
-### 🔧 Mantenibilidad
-- **Código modular**: Cada componente tiene una responsabilidad específica
-- **Fácil extensión**: Agregar nuevos tipos de proceso es sencillo
-- **Reutilización**: Los componentes pueden ser reutilizados
-
-### 🧪 Testabilidad
-- **Separación de capas**: Cada capa puede ser testeada independientemente
-- **Inyección de dependencias**: Los servicios reciben sus dependencias como parámetros
-- **Lógica aislada**: La lógica de negocio está separada de la UI
-
-### 📈 Escalabilidad
-- **Arquitectura en capas**: Fácil agregar nuevas funcionalidades
-- **Patrones de diseño**: Uso de Repository y Service patterns
-- **Tipado estático**: Uso de type hints para mejor documentación
-
-### 🛡️ Robustez
-- **Manejo de errores**: Validación en múltiples capas
-- **Persistencia segura**: Manejo robusto de archivos JSON
-- **Validación de datos**: Verificación de integridad en cada capa
-
-## 🔄 Comparación de Versiones
-
-| Aspecto | Versión Original | Versión Refactorizada |
-|---------|------------------|----------------------|
-| **Estructura** | Monolítica | Arquitectura en capas |
-| **Mantenibilidad** | Baja | Alta |
-| **Testabilidad** | Difícil | Fácil |
-| **Extensibilidad** | Limitada | Alta |
-| **Reutilización** | Baja | Alta |
-| **Separación de responsabilidades** | No | Sí |
-
-## 🚀 Funcionalidades Adicionales
-
-- **Estadísticas**: Vista del número de registros por tipo
-- **Validación robusta**: Validación en múltiples capas
-- **Manejo de errores**: Mensajes informativos y manejo de excepciones
-- **Componentes reutilizables**: UI modular y extensible
-
-## 📝 Próximas Mejoras
-
-- [ ] Agregar base de datos SQLite
-- [ ] Implementar sistema de búsqueda y filtros
-- [ ] Agregar exportación a Excel/PDF
-- [ ] Implementar sistema de usuarios y permisos
-- [ ] Agregar logs de auditoría
+### 🧪 Testing y Calidad
 - [ ] Crear tests unitarios y de integración
+- [ ] Implementar CI/CD
+- [ ] Análisis de código estático
+- [ ] Cobertura de tests
+
+## Contribución
+
+Para contribuir al proyecto:
+1. Fork del repositorio
+2. Crear rama para nueva funcionalidad
+3. Implementar cambios siguiendo las convenciones del proyecto
+4. Crear pull request con descripción detallada
+
+## Licencia
+
+Este proyecto está bajo licencia MIT. Ver archivo LICENSE para más detalles.
+
+## Contacto
+
+Para preguntas o sugerencias, contactar al equipo de desarrollo.
+
+---
+
+**Versión**: 2.0.0  
+**Última Actualización**: Enero 2024  
+**Estado**: En desarrollo activo
