@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from models import Empleado, Onboarding, Offboarding, LateralMovement, PersonaHeadcount
 from data import EmpleadoRepository
 from tkinter import messagebox
@@ -9,18 +9,19 @@ class EmpleadoService:
     def __init__(self, repository: EmpleadoRepository):
         self.repository = repository
     
-    def validar_datos_generales(self, datos: dict) -> Tuple[bool, List[str]]:
+    def validar_datos_generales(self, datos: Dict[str, Any]) -> Tuple[bool, str]:
         """Valida los datos generales del empleado"""
-        errores = []
+        campos_obligatorios = ['sid', 'nueva_sub_unidad', 'nuevo_cargo', 'status']
+        campos_vacios = []
         
-        # Validar campos obligatorios
-        if not datos.get('sid', '').strip():
-            errores.append("SID es obligatorio")
+        for campo in campos_obligatorios:
+            if not datos.get(campo, '').strip():
+                campos_vacios.append(campo)
         
-        if not datos.get('area', '').strip():
-            errores.append("Área es obligatoria")
+        if campos_vacios:
+            return False, f"Campos obligatorios vacíos: {', '.join(campos_vacios)}"
         
-        return len(errores) == 0, errores
+        return True, "Datos válidos"
     
     def validar_datos_persona_headcount(self, datos: dict) -> Tuple[bool, List[str]]:
         """Valida los datos de una persona del headcount"""
@@ -56,19 +57,26 @@ class EmpleadoService:
         
         return True, ""
     
-    def crear_empleado(self, datos: dict) -> Optional[Empleado]:
-        """Crea un objeto Empleado desde los datos del formulario"""
+    def crear_empleado(self, datos: Dict[str, Any]) -> Tuple[bool, str]:
+        """Crea un nuevo empleado"""
+        exito, mensaje = self.validar_datos_generales(datos)
+        if not exito:
+            return False, mensaje
+        
         try:
-            return Empleado(
-                sid=datos.get('sid', ''),
-                area=datos.get('area', ''),
+            empleado = Empleado(
+                sid=datos['sid'],
+                nueva_sub_unidad=datos['nueva_sub_unidad'],
+                nuevo_cargo=datos['nuevo_cargo'],
                 ingreso_por=datos.get('ingreso_por', ''),
-                subarea=datos.get('subarea', ''),
-                fecha=datos.get('fecha', '')
+                request_date=datos.get('request_date'),
+                fecha=datos.get('fecha'),
+                status=datos.get('status', 'Pendiente')
             )
+            
+            return True, f"Empleado creado exitosamente. Número de caso: {empleado.numero_caso}"
         except Exception as e:
-            print(f"Error al crear empleado: {str(e)}")
-            return None
+            return False, f"Error al crear empleado: {str(e)}"
     
     def crear_persona_headcount(self, datos: dict) -> Optional[PersonaHeadcount]:
         """Crea un objeto PersonaHeadcount desde los datos del formulario"""
@@ -139,33 +147,54 @@ class EmpleadoService:
         """Guarda un proceso según su tipo"""
         try:
             # Validar datos generales
-            es_valido, errores = self.validar_datos_generales(datos_generales)
+            es_valido, mensaje = self.validar_datos_generales(datos_generales)
             if not es_valido:
-                return False, f"Errores en datos generales: {', '.join(errores)}"
+                return False, mensaje
             
             # Validar tipo de proceso
             es_valido, error = self.validar_tipo_proceso(tipo_proceso)
             if not es_valido:
                 return False, error
             
+            # Crear empleado para obtener el número de caso
+            empleado = Empleado(
+                sid=datos_generales['sid'],
+                nueva_sub_unidad=datos_generales['nueva_sub_unidad'],
+                nuevo_cargo=datos_generales['nuevo_cargo'],
+                ingreso_por=datos_generales.get('ingreso_por', ''),
+                request_date=datos_generales.get('request_date'),
+                fecha=datos_generales.get('fecha'),
+                status=datos_generales.get('status', 'Pendiente')
+            )
+            
             # Crear y guardar el proceso según el tipo
             if tipo_proceso == 'onboarding':
-                proceso = self.crear_onboarding(datos_generales, datos_especificos)
-                if proceso:
-                    exito = self.repository.guardar_onboarding(proceso)
-                    return exito, "Onboarding guardado exitosamente" if exito else "Error al guardar onboarding"
+                proceso = Onboarding(
+                    empleado=empleado,
+                    submenu_onboarding=datos_especificos.get('submenu_onboarding', '')
+                )
+                exito = self.repository.guardar_onboarding(proceso)
+                mensaje_exito = f"Onboarding guardado exitosamente. Número de caso: {empleado.numero_caso}"
+                return exito, mensaje_exito if exito else "Error al guardar onboarding"
             
             elif tipo_proceso == 'offboarding':
-                proceso = self.crear_offboarding(datos_generales, datos_especificos)
-                if proceso:
-                    exito = self.repository.guardar_offboarding(proceso)
-                    return exito, "Offboarding guardado exitosamente" if exito else "Error al guardar offboarding"
+                proceso = Offboarding(
+                    empleado=empleado,
+                    submenu_offboarding=datos_especificos.get('submenu_offboarding', '')
+                )
+                exito = self.repository.guardar_offboarding(proceso)
+                mensaje_exito = f"Offboarding guardado exitosamente. Número de caso: {empleado.numero_caso}"
+                return exito, mensaje_exito if exito else "Error al guardar offboarding"
             
             elif tipo_proceso == 'lateral':
-                proceso = self.crear_lateral_movement(datos_generales, datos_especificos)
-                if proceso:
-                    exito = self.repository.guardar_lateral_movement(proceso)
-                    return exito, "Lateral movement guardado exitosamente" if exito else "Error al guardar lateral movement"
+                proceso = LateralMovement(
+                    empleado=empleado,
+                    empleo_anterior=datos_especificos.get('empleo_anterior', ''),
+                    submenu_lateral=datos_especificos.get('submenu_lateral', '')
+                )
+                exito = self.repository.guardar_lateral_movement(proceso)
+                mensaje_exito = f"Lateral movement guardado exitosamente. Número de caso: {empleado.numero_caso}"
+                return exito, mensaje_exito if exito else "Error al guardar lateral movement"
             
             return False, "Tipo de proceso no soportado"
             
@@ -192,12 +221,13 @@ class EmpleadoService:
         except Exception as e:
             return False, f"Error inesperado: {str(e)}"
     
-    def buscar_por_sid(self, sid: str) -> List[dict]:
+    def buscar_por_sid(self, sid: str) -> List[Dict[str, Any]]:
         """Busca registros por SID"""
-        if not sid.strip():
-            return []
-        
-        return self.repository.buscar_por_sid(sid.strip())
+        return self.repository.buscar_por_sid(sid)
+    
+    def buscar_por_numero_caso(self, numero_caso: str) -> List[Dict[str, Any]]:
+        """Busca registros por número de caso"""
+        return self.repository.buscar_por_numero_caso(numero_caso)
     
     def obtener_estadisticas(self) -> dict:
         """Obtiene estadísticas de los procesos almacenados"""

@@ -1,39 +1,82 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+import uuid
 
 class Empleado:
     """Clase modelo para representar un empleado"""
     
-    def __init__(self, sid: str, area: str, 
-                 ingreso_por: str = "", subarea: str = "", fecha: Optional[str] = None):
+    def __init__(self, sid: str, nueva_sub_unidad: str, nuevo_cargo: str,
+                 ingreso_por: str = "", request_date: Optional[str] = None, 
+                 fecha: Optional[str] = None, status: str = "Pendiente"):
         self.sid = sid
-        self.area = area
+        self.nueva_sub_unidad = nueva_sub_unidad
+        self.nuevo_cargo = nuevo_cargo
         self.ingreso_por = ingreso_por
-        self.subarea = subarea
+        self.request_date = request_date or datetime.now().strftime("%Y-%m-%d")
         self.fecha = fecha or datetime.now().strftime("%Y-%m-%d")
         self.fecha_registro = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.status = status
+        
+        # Generar número de caso único
+        self.numero_caso = self._generar_numero_caso()
+        
+        # Campos adicionales para edición (inicialmente null)
+        self.mail = None
+        self.closing_date_app = None
+        self.app_quality = None
+        self.confirmation_by_user = None
+        self.comment = None
+    
+    def _generar_numero_caso(self) -> str:
+        """Genera un número de caso único basado en timestamp y SID"""
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        short_uuid = str(uuid.uuid4())[:8]
+        return f"CASE-{timestamp}-{short_uuid}"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convierte el empleado a un diccionario"""
         return {
+            "numero_caso": self.numero_caso,
             "sid": self.sid,
-            "area": self.area,
+            "nueva_sub_unidad": self.nueva_sub_unidad,
+            "nuevo_cargo": self.nuevo_cargo,
             "ingreso_por": self.ingreso_por,
-            "subarea": self.subarea,
+            "request_date": self.request_date,
             "fecha": self.fecha,
-            "fecha_registro": self.fecha_registro
+            "fecha_registro": self.fecha_registro,
+            "status": self.status,
+            "mail": self.mail,
+            "closing_date_app": self.closing_date_app,
+            "app_quality": self.app_quality,
+            "confirmation_by_user": self.confirmation_by_user,
+            "comment": self.comment
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Empleado':
         """Crea un empleado desde un diccionario"""
-        return cls(
+        empleado = cls(
             sid=data.get("sid", ""),
-            area=data.get("area", ""),
+            nueva_sub_unidad=data.get("nueva_sub_unidad", ""),
+            nuevo_cargo=data.get("nuevo_cargo", ""),
             ingreso_por=data.get("ingreso_por", ""),
-            subarea=data.get("subarea", ""),
-            fecha=data.get("fecha", "")
+            request_date=data.get("request_date", ""),
+            fecha=data.get("fecha", ""),
+            status=data.get("status", "Pendiente")
         )
+        
+        # Asignar número de caso si existe, sino generar uno nuevo
+        if data.get("numero_caso"):
+            empleado.numero_caso = data.get("numero_caso")
+        
+        # Asignar campos adicionales
+        empleado.mail = data.get("mail")
+        empleado.closing_date_app = data.get("closing_date_app")
+        empleado.app_quality = data.get("app_quality")
+        empleado.confirmation_by_user = data.get("confirmation_by_user")
+        empleado.comment = data.get("comment")
+        
+        return empleado
 
 class PersonaHeadcount:
     """Clase modelo para representar una persona en el headcount"""

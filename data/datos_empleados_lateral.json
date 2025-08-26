@@ -1,13 +1,42 @@
 [
   {
-    "sid": "EMP001",
-    "area": "Tecnología",
-    "ingreso_por": "Juan Pérez",
-    "subarea": "Desarrollo",
-    "fecha": "2024-01-20",
-    "fecha_registro": "2024-01-20 11:45:00",
-    "tipo_proceso": "lateral",
-    "empleo_anterior": "Desarrollador Junior",
-    "submenu_lateral": "Promoción"
+    "empleado": {
+      "numero_caso": "CASE-20240119120000-33333333",
+      "sid": "EMP005",
+      "nueva_sub_unidad": "Sub Unidad 5 - Diseño UX/UI",
+      "nuevo_cargo": "UX/UI Designer",
+      "ingreso_por": "Juan Pérez",
+      "request_date": "2024-01-19",
+      "fecha": "2024-01-19",
+      "fecha_registro": "2024-01-19 12:00:00",
+      "status": "Pendiente",
+      "mail": null,
+      "closing_date_app": null,
+      "app_quality": null,
+      "confirmation_by_user": null,
+      "comment": null
+    },
+    "empleo_anterior": "Desarrollador Frontend",
+    "tipo_lateral": "Movimiento Horizontal"
+  },
+  {
+    "empleado": {
+      "numero_caso": "CASE-20240120120000-44444444",
+      "sid": "EMP006",
+      "nueva_sub_unidad": "Sub Unidad 6 - Gestión de Proyectos",
+      "nuevo_cargo": "Project Manager",
+      "ingreso_por": "María García",
+      "request_date": "2024-01-20",
+      "fecha": "2024-01-20",
+      "fecha_registro": "2024-01-20 12:00:00",
+      "status": "En Proceso",
+      "mail": null,
+      "closing_date_app": null,
+      "app_quality": null,
+      "confirmation_by_user": null,
+      "comment": null
+    },
+    "empleo_anterior": "Team Lead",
+    "tipo_lateral": "Reasignación de Proyecto"
   }
 ]

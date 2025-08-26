@@ -83,40 +83,93 @@ class EmpleadoRepository:
     
     def buscar_por_sid(self, sid: str) -> List[Dict[str, Any]]:
         """Busca registros por SID en todos los tipos de procesos"""
+        if not sid.strip():
+            return []
+        
         resultados = []
+        sid_buscar = sid.strip()
         
         # Buscar en onboarding
         try:
-            onboardings = self.cargar_onboardings()
-            for onboarding in onboardings:
-                if onboarding.empleado.sid.lower() == sid.lower():
-                    datos = onboarding.to_dict()
-                    datos["tipo_proceso"] = "Onboarding"
-                    resultados.append(datos)
-        except Exception as e:
-            print(f"Error al buscar en onboarding: {str(e)}")
+            with open(self._get_file_path("onboarding"), 'r', encoding='utf-8') as f:
+                datos_onboarding = json.load(f)
+                for proceso in datos_onboarding:
+                    if proceso.get('empleado', {}).get('sid', '').strip() == sid_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Onboarding'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
         
         # Buscar en offboarding
         try:
-            offboardings = self.cargar_offboardings()
-            for offboarding in offboardings:
-                if offboarding.empleado.sid.lower() == sid.lower():
-                    datos = offboarding.to_dict()
-                    datos["tipo_proceso"] = "Offboarding"
-                    resultados.append(datos)
-        except Exception as e:
-            print(f"Error al buscar en offboarding: {str(e)}")
+            with open(self._get_file_path("offboarding"), 'r', encoding='utf-8') as f:
+                datos_offboarding = json.load(f)
+                for proceso in datos_offboarding:
+                    if proceso.get('empleado', {}).get('sid', '').strip() == sid_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Offboarding'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
         
         # Buscar en lateral movement
         try:
-            laterals = self.cargar_lateral_movements()
-            for lateral in laterals:
-                if lateral.empleado.sid.lower() == sid.lower():
-                    datos = lateral.to_dict()
-                    datos["tipo_proceso"] = "Lateral Movement"
-                    resultados.append(datos)
-        except Exception as e:
-            print(f"Error al buscar en lateral movement: {str(e)}")
+            with open(self._get_file_path("lateral"), 'r', encoding='utf-8') as f:
+                datos_lateral = json.load(f)
+                for proceso in datos_lateral:
+                    if proceso.get('empleado', {}).get('sid', '').strip() == sid_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Lateral Movement'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        
+        return resultados
+    
+    def buscar_por_numero_caso(self, numero_caso: str) -> List[Dict[str, Any]]:
+        """Busca registros por número de caso en todos los tipos de procesos"""
+        if not numero_caso.strip():
+            return []
+        
+        resultados = []
+        caso_buscar = numero_caso.strip()
+        
+        # Buscar en onboarding
+        try:
+            with open(self._get_file_path("onboarding"), 'r', encoding='utf-8') as f:
+                datos_onboarding = json.load(f)
+                for proceso in datos_onboarding:
+                    if proceso.get('empleado', {}).get('numero_caso', '').strip() == caso_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Onboarding'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        
+        # Buscar en offboarding
+        try:
+            with open(self._get_file_path("offboarding"), 'r', encoding='utf-8') as f:
+                datos_offboarding = json.load(f)
+                for proceso in datos_offboarding:
+                    if proceso.get('empleado', {}).get('numero_caso', '').strip() == caso_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Offboarding'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        
+        # Buscar en lateral movement
+        try:
+            with open(self._get_file_path("lateral"), 'r', encoding='utf-8') as f:
+                datos_lateral = json.load(f)
+                for proceso in datos_lateral:
+                    if proceso.get('empleado', {}).get('numero_caso', '').strip() == caso_buscar:
+                        resultado = proceso.copy()
+                        resultado['tipo_proceso'] = 'Lateral Movement'
+                        resultados.append(resultado)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
         
         return resultados
     

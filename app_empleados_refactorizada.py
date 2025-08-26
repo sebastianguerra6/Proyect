@@ -74,20 +74,50 @@ class AppEmpleadosRefactorizada:
         gestion_frame = ttk.Frame(self.notebook_principal)
         self.notebook_principal.add(gestion_frame, text="Gestión de Procesos")
         
-        # Configurar grid
+        # Configurar grid para que ocupe todo el espacio
         gestion_frame.columnconfigure(0, weight=1)
-        gestion_frame.rowconfigure(1, weight=1)
+        gestion_frame.rowconfigure(0, weight=1)
+        
+        # Crear canvas con scrollbar
+        canvas = tk.Canvas(gestion_frame)
+        scrollbar = ttk.Scrollbar(gestion_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Configurar grid del frame scrolleable para que ocupe todo el espacio
+        scrollable_frame.columnconfigure(0, weight=1)
+        scrollable_frame.rowconfigure(1, weight=1)
         
         # Campos generales
-        self.componentes['generales'] = CamposGeneralesFrame(gestion_frame)
+        self.componentes['generales'] = CamposGeneralesFrame(scrollable_frame)
         self.componentes['generales'].frame.grid(row=0, column=0, 
                                                sticky=(tk.W, tk.E), pady=(0, 10))
         
         # Pestañas de tipo de proceso
-        self.crear_pestanas_tipo_proceso(gestion_frame)
+        self.crear_pestanas_tipo_proceso(scrollable_frame)
         
         # Botones
-        self.crear_botones(gestion_frame)
+        self.crear_botones(scrollable_frame)
+        
+        # Empaquetar canvas y scrollbar para que ocupen todo el espacio
+        canvas.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Configurar el canvas para que se expanda
+        canvas.configure(width=800, height=600)
+        
+        # Binding para scroll con mouse
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
     def crear_pestanas_tipo_proceso(self, parent):
         """Crea el sistema de pestañas para tipos de proceso"""
@@ -220,6 +250,12 @@ class AppEmpleadosRefactorizada:
         datos_especificos = {}
         if tipo_proceso in self.componentes:
             datos_especificos = self.componentes[tipo_proceso].obtener_datos()
+        
+        # Crear empleado para obtener el número de caso
+        exito, mensaje = self.service.crear_empleado(datos_generales)
+        if not exito:
+            messagebox.showerror("Error", mensaje)
+            return
         
         # Guardar usando el servicio
         exito, mensaje = self.service.guardar_proceso(tipo_proceso, datos_generales, datos_especificos)
