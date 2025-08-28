@@ -29,11 +29,11 @@ class CamposGeneralesFrame:
         self.frame = ttk.LabelFrame(self.parent, text="Información de Gestión de Proyectos", padding="20")
         self.frame.columnconfigure(0, weight=1)
         self.frame.columnconfigure(2, weight=1)
-        self.frame.columnconfigure(1, weight=0)
+        self.frame.columnconfigure(1, weight=1)  # Cambiar a weight=1 para que se expanda
         
         # Centrar el contenido
         main_container = ttk.Frame(self.frame)
-        main_container.grid(row=0, column=1, sticky="ew", padx=20)
+        main_container.grid(row=0, column=1, sticky="ew", padx=20)  # Aumentar padx de 15 a 20
         main_container.columnconfigure(1, weight=1)
         
         # Campos
@@ -60,13 +60,13 @@ class CamposGeneralesFrame:
             ttk.Label(main_container, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=5, padx=(0, 15))
             
             if tipo == "entry":
-                ttk.Entry(main_container, textvariable=self.variables[var_name], width=35).grid(
+                ttk.Entry(main_container, textvariable=self.variables[var_name], width=50).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(main_container, textvariable=self.variables[var_name], 
-                            values=valores, width=32).grid(
+                            values=valores, width=47).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
         
@@ -124,7 +124,7 @@ class OnboardingFrame:
         
         # Centrar el contenido
         main_container = ttk.Frame(self.frame)
-        main_container.grid(row=0, column=0, sticky="nsew", padx=40, pady=20)
+        main_container.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)  # Aumentar padx de 15 a 20
         main_container.columnconfigure(0, weight=1)
         
         # Título
@@ -151,7 +151,7 @@ class OnboardingFrame:
                        value="other").pack(side=tk.LEFT)
         
         ttk.Entry(other_frame, textvariable=self.variables['other_onboarding'], 
-                 width=25).pack(side=tk.LEFT, padx=(5, 0))
+                 width=35).pack(side=tk.LEFT, padx=(5, 0))  # Aumentar width de 30 a 35
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
@@ -192,7 +192,7 @@ class OffboardingFrame:
         
         # Centrar el contenido
         main_container = ttk.Frame(self.frame)
-        main_container.grid(row=0, column=0, sticky="nsew", padx=40, pady=20)
+        main_container.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)  # Aumentar padx de 15 a 20
         main_container.columnconfigure(0, weight=1)
         
         # Título
@@ -219,7 +219,7 @@ class OffboardingFrame:
                        value="other").pack(side=tk.LEFT)
         
         ttk.Entry(other_frame, textvariable=self.variables['other_offboarding'], 
-                 width=25).pack(side=tk.LEFT, padx=(5, 0))
+                 width=35).pack(side=tk.LEFT, padx=(5, 0))  # Aumentar width de 30 a 35
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
@@ -261,7 +261,7 @@ class LateralMovementFrame:
         
         # Centrar el contenido
         main_container = ttk.Frame(self.frame)
-        main_container.grid(row=0, column=0, sticky="nsew", padx=40, pady=20)
+        main_container.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)  # Aumentar padx de 15 a 20
         main_container.columnconfigure(1, weight=1)
         
         # Título
@@ -275,7 +275,7 @@ class LateralMovementFrame:
         
         # Campo empleo anterior
         ttk.Label(campos_frame, text="Empleo Anterior:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 15))
-        ttk.Entry(campos_frame, textvariable=self.variables['empleo_anterior'], width=35).grid(
+        ttk.Entry(campos_frame, textvariable=self.variables['empleo_anterior'], width=50).grid(
             row=0, column=1, sticky=(tk.W, tk.E), pady=5
         )
         
@@ -288,19 +288,19 @@ class LateralMovementFrame:
         for i, opcion in enumerate(opciones_submenu):
             ttk.Radiobutton(campos_frame, text=opcion, 
                            variable=self.variables['submenu_lateral'], 
-                           value=opcion).grid(row=2+i, column=0, columnspan=2, sticky=tk.CENTER, pady=5)
+                           value=opcion).grid(row=2+i, column=0, columnspan=2, sticky="ew", pady=5)
         
         # Opción Other con campo de texto
         other_row = 2 + len(opciones_submenu)
         other_frame = ttk.Frame(campos_frame)
-        other_frame.grid(row=other_row, column=0, columnspan=2, sticky=tk.CENTER, pady=5)
+        other_frame.grid(row=other_row, column=0, columnspan=2, sticky="ew", pady=5)
         
         ttk.Radiobutton(other_frame, text="Other:", 
                        variable=self.variables['submenu_lateral'], 
                        value="other").pack(side=tk.LEFT)
         
         ttk.Entry(other_frame, textvariable=self.variables['other_lateral'], 
-                 width=25).pack(side=tk.LEFT, padx=(5, 0))
+                 width=35).pack(side=tk.LEFT, padx=(5, 0))  # Aumentar width de 30 a 35
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
@@ -378,7 +378,7 @@ class EdicionBusquedaFrame:
         
         # Frame principal
         main_frame = ttk.Frame(scrollable_frame)
-        main_frame.grid(row=1, column=0, sticky="nsew", padx=60, pady=20)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=20)
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(2, weight=1)  # La sección de resultados debe expandirse
         
@@ -389,7 +389,7 @@ class EdicionBusquedaFrame:
         
         # Búsqueda por número de caso
         ttk.Label(busqueda_frame, text="Número de Caso:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
-        ttk.Entry(busqueda_frame, textvariable=self.variables['numero_caso_busqueda'], width=35).grid(
+        ttk.Entry(busqueda_frame, textvariable=self.variables['numero_caso_busqueda'], width=50).grid(
             row=0, column=1, sticky=(tk.W, tk.E), pady=8
         )
         ttk.Button(busqueda_frame, text="Buscar por Caso", command=self.buscar_por_numero_caso).grid(
@@ -398,11 +398,17 @@ class EdicionBusquedaFrame:
         
         # Búsqueda por SID
         ttk.Label(busqueda_frame, text="SID:").grid(row=1, column=0, sticky=tk.W, pady=8, padx=(0, 15))
-        ttk.Entry(busqueda_frame, textvariable=self.variables['sid_busqueda'], width=35).grid(
+        ttk.Entry(busqueda_frame, textvariable=self.variables['sid_busqueda'], width=50).grid(
             row=1, column=1, sticky=(tk.W, tk.E), pady=8
         )
         ttk.Button(busqueda_frame, text="Buscar por SID", command=self.buscar_por_sid).grid(
             row=1, column=2, padx=(15, 0), pady=8
+        )
+        
+        # Botón para buscar todos los registros
+        ttk.Button(busqueda_frame, text="Mostrar Todos los Registros", 
+                  command=self.buscar_todos_los_registros).grid(
+            row=2, column=0, columnspan=3, pady=(15, 0)
         )
         
         # Sección de edición
@@ -444,13 +450,13 @@ class EdicionBusquedaFrame:
             ttk.Label(edicion_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=5, padx=(0, 15))
             
             if tipo == "entry":
-                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=35).grid(
+                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=32).grid(
+                            values=valores, width=47).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
         
@@ -466,13 +472,13 @@ class EdicionBusquedaFrame:
             ttk.Label(edicion_frame, text=label_text).grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 15))
             
             if tipo == "entry":
-                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=35).grid(
+                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
                     row=row, column=1, sticky=(tk.W, tk.E), pady=5
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=32).grid(
+                            values=valores, width=47).grid(
                     row=row, column=1, sticky=(tk.W, tk.E), pady=5
                 )
         
@@ -490,7 +496,7 @@ class EdicionBusquedaFrame:
         resultados_frame.rowconfigure(0, weight=1)
         
         # Treeview para mostrar resultados
-        self.tree = ttk.Treeview(resultados_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo"), show="headings")
+        self.tree = ttk.Treeview(resultados_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings")
         
         # Configurar columnas
         self.tree.heading("Número Caso", text="Número Caso")
@@ -501,16 +507,26 @@ class EdicionBusquedaFrame:
         self.tree.heading("Request Date", text="Request Date")
         self.tree.heading("Ingreso Por", text="Ingreso Por")
         self.tree.heading("Tipo", text="Tipo")
+        self.tree.heading("Mail", text="Mail")
+        self.tree.heading("Closing Date App", text="Closing Date App")
+        self.tree.heading("App Quality", text="App Quality")
+        self.tree.heading("Confirmation by User", text="Confirmation by User")
+        self.tree.heading("Comment", text="Comment")
         
         # Configurar anchos de columna
-        self.tree.column("Número Caso", width=150)
-        self.tree.column("SID", width=100)
-        self.tree.column("Sub Unidad", width=150)
-        self.tree.column("Cargo", width=120)
-        self.tree.column("Status", width=100)
-        self.tree.column("Request Date", width=100)
-        self.tree.column("Ingreso Por", width=120)
-        self.tree.column("Tipo", width=100)
+        self.tree.column("Número Caso", width=120)
+        self.tree.column("SID", width=80)
+        self.tree.column("Sub Unidad", width=120)
+        self.tree.column("Cargo", width=100)
+        self.tree.column("Status", width=80)
+        self.tree.column("Request Date", width=90)
+        self.tree.column("Ingreso Por", width=100)
+        self.tree.column("Tipo", width=80)
+        self.tree.column("Mail", width=120)
+        self.tree.column("Closing Date App", width=100)
+        self.tree.column("App Quality", width=90)
+        self.tree.column("Confirmation by User", width=120)
+        self.tree.column("Comment", width=100)
         
         # Scrollbar para treeview
         tree_scrollbar = ttk.Scrollbar(resultados_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -528,7 +544,7 @@ class EdicionBusquedaFrame:
         scrollbar.grid(row=0, column=1, sticky="ns")
         
         # Configurar el canvas para que se expanda
-        canvas.configure(width=800, height=600)
+        canvas.configure(width=1200, height=600)
         
         # Binding para scroll con mouse
         def _on_mousewheel(event):
@@ -537,66 +553,66 @@ class EdicionBusquedaFrame:
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
     
     def buscar_por_numero_caso(self):
-        """Busca registros por número de caso"""
+        """Busca registros por número de caso usando la base de datos"""
         numero_caso = self.variables['numero_caso_busqueda'].get().strip()
         if not numero_caso:
             messagebox.showwarning("Advertencia", "Por favor ingrese un número de caso para buscar")
             return
         
-        if self.service:
-            # Búsqueda real usando el servicio
-            resultados = self.service.buscar_por_numero_caso(numero_caso)
-            self.mostrar_resultados_busqueda(resultados, f"caso {numero_caso}")
-        else:
-            # Búsqueda simulada si no hay servicio
-            self.simular_busqueda_por_caso(numero_caso)
+        try:
+            if self.service and hasattr(self.service, 'buscar_procesos'):
+                # Buscar en la base de datos
+                filtros = {'numero_caso': numero_caso}
+                resultados = self.service.buscar_procesos(filtros)
+                self.mostrar_resultados_busqueda(resultados, f"número de caso: {numero_caso}")
+            else:
+                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+            print(f"Error en buscar_por_numero_caso: {e}")
     
     def buscar_por_sid(self):
-        """Busca registros por SID"""
+        """Busca registros por SID usando la base de datos"""
         sid = self.variables['sid_busqueda'].get().strip()
         if not sid:
             messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
             return
         
-        if self.service:
-            # Búsqueda real usando el servicio
-            resultados = self.service.buscar_por_sid(sid)
-            self.mostrar_resultados_busqueda(resultados, sid)
-        else:
-            # Búsqueda simulada si no hay servicio
-            self.simular_busqueda(sid)
+        try:
+            if self.service and hasattr(self.service, 'buscar_procesos'):
+                # Buscar en la base de datos
+                filtros = {'sid': sid}
+                resultados = self.service.buscar_procesos(filtros)
+                self.mostrar_resultados_busqueda(resultados, f"SID: {sid}")
+            else:
+                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+            print(f"Error en buscar_por_sid: {e}")
     
     def mostrar_resultados_busqueda(self, resultados, busqueda):
-        """Muestra los resultados reales de la búsqueda"""
+        """Muestra los resultados de búsqueda en el treeview"""
         # Limpiar resultados anteriores
         for item in self.tree.get_children():
             self.tree.delete(item)
         
         if resultados:
             for resultado in resultados:
-                # Los datos del empleado están anidados dentro de la clave 'empleado'
-                empleado = resultado.get('empleado', {})
-                
-                # Determinar el tipo de proceso basado en las claves disponibles
-                tipo_proceso = ""
-                if 'tipo_onboarding' in resultado:
-                    tipo_proceso = resultado['tipo_onboarding']
-                elif 'tipo_offboarding' in resultado:
-                    tipo_proceso = resultado['tipo_offboarding']
-                elif 'tipo_lateral' in resultado:
-                    tipo_proceso = resultado['tipo_lateral']
-                else:
-                    tipo_proceso = resultado.get('tipo_proceso', '')
-                
+                # Extraer valores del resultado de la base de datos
                 valores = (
-                    empleado.get('numero_caso', ''),
-                    empleado.get('sid', ''),
-                    empleado.get('nueva_sub_unidad', ''),
-                    empleado.get('nuevo_cargo', ''),
-                    empleado.get('status', ''),
-                    empleado.get('request_date', ''),
-                    empleado.get('ingreso_por', ''),
-                    tipo_proceso
+                    resultado.get('numero_caso', ''),
+                    resultado.get('sid', ''),
+                    resultado.get('nueva_sub_unidad', ''),
+                    resultado.get('nuevo_cargo', ''),
+                    resultado.get('status', ''),
+                    resultado.get('request_date', ''),
+                    resultado.get('ingreso_por', ''),
+                    resultado.get('tipo_proceso', ''),
+                    resultado.get('mail', ''),
+                    resultado.get('closing_date_app', ''),
+                    resultado.get('app_quality', ''),
+                    resultado.get('confirmation_by_user', ''),
+                    resultado.get('comment', '')
                 )
                 self.tree.insert("", "end", values=valores)
             
@@ -604,45 +620,26 @@ class EdicionBusquedaFrame:
         else:
             messagebox.showinfo("Búsqueda", f"No se encontraron registros para: {busqueda}")
     
+    def buscar_todos_los_registros(self):
+        """Busca todos los registros en la base de datos"""
+        try:
+            if self.service and hasattr(self.service, 'buscar_procesos'):
+                # Buscar todos los registros
+                resultados = self.service.buscar_procesos()
+                self.mostrar_resultados_busqueda(resultados, "todos los registros")
+            else:
+                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+            print(f"Error en buscar_todos_los_registros: {e}")
+    
     def simular_busqueda_por_caso(self, numero_caso):
-        """Simula la búsqueda de registros por número de caso (placeholder)"""
-        # Limpiar resultados anteriores
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
-        # Simular datos encontrados
-        datos_simulados = [
-            (numero_caso, "EMP001", "Sub Unidad 1 - Desarrollo Frontend", "Desarrollador Frontend", "En Proceso", "2024-01-15", "Juan Pérez", "Onboarding"),
-            (numero_caso, "EMP002", "Sub Unidad 2 - Desarrollo Backend", "Desarrollador Backend", "Completado", "2024-01-20", "Juan Pérez", "Lateral Movement")
-        ]
-        
-        for dato in datos_simulados:
-            self.tree.insert("", "end", values=dato)
-        
-        if datos_simulados:
-            messagebox.showinfo("Búsqueda", f"Se encontraron {len(datos_simulados)} registros para el caso: {numero_caso}")
-        else:
-            messagebox.showinfo("Búsqueda", f"No se encontraron registros para el caso: {numero_caso}")
+        """Método obsoleto - reemplazado por buscar_por_numero_caso"""
+        self.buscar_por_numero_caso()
     
     def simular_busqueda(self, sid):
-        """Simula la búsqueda de registros (placeholder)"""
-        # Limpiar resultados anteriores
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
-        # Simular datos encontrados
-        datos_simulados = [
-            ("CASE-20240115120000-12345678", sid, "Sub Unidad 1 - Desarrollo Frontend", "Desarrollador Frontend", "En Proceso", "2024-01-15", "Juan Pérez", "Onboarding"),
-            ("CASE-20240120120000-87654321", sid, "Sub Unidad 2 - Desarrollo Backend", "Desarrollador Backend", "Completado", "2024-01-20", "Juan Pérez", "Lateral Movement")
-        ]
-        
-        for dato in datos_simulados:
-            self.tree.insert("", "end", values=dato)
-        
-        if datos_simulados:
-            messagebox.showinfo("Búsqueda", f"Se encontraron {len(datos_simulados)} registros para el SID: {sid}")
-        else:
-            messagebox.showinfo("Búsqueda", f"No se encontraron registros para el SID: {sid}")
+        """Método obsoleto - reemplazado por buscar_por_sid"""
+        self.buscar_por_sid()
     
     def seleccionar_registro(self, event):
         """Maneja la selección de un registro en el treeview"""
@@ -652,7 +649,7 @@ class EdicionBusquedaFrame:
             valores = item['values']
             
             # Cargar valores en los campos de edición
-            if len(valores) >= 8:
+            if len(valores) >= 13:  # Ahora tenemos 13 columnas
                 # Campos básicos
                 self.variables['numero_caso_edicion'].set(valores[0])
                 self.variables['nueva_sub_unidad_edicion'].set(valores[2])
@@ -661,14 +658,75 @@ class EdicionBusquedaFrame:
                 self.variables['request_date_edicion'].set(valores[5])
                 self.variables['ingreso_por_edicion'].set(valores[6])
                 
-                # Los campos adicionales se mantienen vacíos para ser editados
-                # ya que no están en la tabla de resultados
+                # Campos adicionales
+                self.variables['mail_edicion'].set(valores[8] if valores[8] else '')
+                self.variables['closing_date_app_edicion'].set(valores[9] if valores[9] else '')
+                self.variables['app_quality_edicion'].set(valores[10] if valores[10] else '')
+                self.variables['confirmation_by_user_edicion'].set(valores[11] if valores[11] else '')
+                self.variables['comment_edicion'].set(valores[12] if valores[12] else '')
     
     def guardar_cambios(self):
         """Guarda los cambios realizados en los campos"""
-        # Aquí se implementaría la lógica para guardar los cambios
-        # Por ahora solo mostramos un mensaje
-        messagebox.showinfo("Éxito", "Cambios guardados exitosamente")
+        try:
+            numero_caso = self.variables['numero_caso_edicion'].get().strip()
+            if not numero_caso:
+                messagebox.showwarning("Advertencia", "Por favor seleccione un registro para editar")
+                return
+            
+            # Preparar datos para actualizar
+            datos_actualizados = {
+                'status': self.variables['status_edicion'].get(),
+                'mail': self.variables['mail_edicion'].get(),
+                'closing_date_app': self.variables['closing_date_app_edicion'].get(),
+                'app_quality': self.variables['app_quality_edicion'].get(),
+                'confirmation_by_user': self.variables['confirmation_by_user_edicion'].get(),
+                'comment': self.variables['comment_edicion'].get()
+            }
+            
+            # Filtrar campos vacíos
+            datos_actualizados = {k: v for k, v in datos_actualizados.items() if v.strip()}
+            
+            if not datos_actualizados:
+                messagebox.showwarning("Advertencia", "No hay cambios para guardar")
+                return
+            
+            # Guardar cambios usando el servicio
+            if self.service and hasattr(self.service, 'actualizar_proceso'):
+                exito, mensaje = self.service.actualizar_proceso(numero_caso, datos_actualizados)
+                if exito:
+                    messagebox.showinfo("Éxito", mensaje)
+                    # Limpiar campos de edición
+                    self.limpiar_campos_edicion()
+                    # Refrescar la búsqueda actual
+                    self.refrescar_busqueda_actual()
+                else:
+                    messagebox.showerror("Error", mensaje)
+            else:
+                messagebox.showerror("Error", "Servicio no disponible para actualizar")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error guardando cambios: {str(e)}")
+            print(f"Error en guardar_cambios: {e}")
+    
+    def limpiar_campos_edicion(self):
+        """Limpia solo los campos de edición"""
+        campos_edicion = [
+            'mail_edicion', 'closing_date_app_edicion', 'app_quality_edicion',
+            'confirmation_by_user_edicion', 'comment_edicion'
+        ]
+        for campo in campos_edicion:
+            if campo in self.variables:
+                self.variables[campo].set("")
+    
+    def refrescar_busqueda_actual(self):
+        """Refresca la búsqueda actual para mostrar los cambios"""
+        # Si hay un SID en búsqueda, refrescar esa búsqueda
+        sid = self.variables['sid_busqueda'].get().strip()
+        if sid:
+            self.buscar_por_sid()
+        else:
+            # Si no hay búsqueda específica, mostrar todos los registros
+            self.buscar_todos_los_registros()
     
     def obtener_datos(self):
         """Obtiene los datos de los campos de edición"""
@@ -738,7 +796,7 @@ class CreacionPersonaFrame:
         
         # Frame principal con scroll
         main_frame = ttk.Frame(scrollable_frame)
-        main_frame.grid(row=1, column=0, sticky="nsew", padx=60, pady=20)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=20)
         
         # Configurar grid
         main_frame.columnconfigure(1, weight=1)
@@ -772,13 +830,13 @@ class CreacionPersonaFrame:
             ttk.Label(main_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=5, padx=(0, 15))
             
             if tipo == "entry":
-                ttk.Entry(main_frame, textvariable=self.variables[var_name], width=35).grid(
+                ttk.Entry(main_frame, textvariable=self.variables[var_name], width=50).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(main_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=32).grid(
+                            values=valores, width=47).grid(
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
         
@@ -794,7 +852,7 @@ class CreacionPersonaFrame:
         scrollbar.grid(row=0, column=1, sticky="ns")
         
         # Configurar el canvas para que se expanda
-        canvas.configure(width=800, height=600)
+        canvas.configure(width=1000, height=600)
         
         # Binding para scroll con mouse
         def _on_mousewheel(event):
@@ -807,7 +865,7 @@ class CreacionPersonaFrame:
         if self.service:
             # Crear persona usando el servicio
             datos = self.obtener_datos()
-            exito, mensaje = self.service.guardar_persona_headcount(datos)
+            exito, mensaje = self.service.crear_empleado(datos)
             
             if exito:
                 messagebox.showinfo("Éxito", mensaje)
