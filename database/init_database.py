@@ -5,6 +5,7 @@ Script para inicializar la base de datos del Sistema de Gestión de Empleados
 
 import sqlite3
 import os
+import random
 from datetime import datetime
 
 def crear_base_datos():
@@ -23,6 +24,7 @@ def crear_base_datos():
             CREATE TABLE IF NOT EXISTS headcount (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 numero_caso TEXT UNIQUE,
+                sid TEXT NOT NULL,
                 nombre TEXT NOT NULL,
                 apellido TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
@@ -50,6 +52,7 @@ def crear_base_datos():
                 ingreso_por TEXT NOT NULL,
                 fecha DATE NOT NULL,
                 status TEXT DEFAULT 'Pendiente',
+                app_name TEXT NOT NULL,
                 mail TEXT,
                 closing_date_app DATE,
                 app_quality TEXT CHECK (app_quality IN ('Excelente', 'Buena', 'Regular', 'Mala', 'Pendiente')),
@@ -96,6 +99,7 @@ def crear_base_datos():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_numero_caso ON procesos(numero_caso)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_tipo ON procesos(tipo_proceso)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_status ON procesos(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_app_name ON procesos(app_name)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_email ON headcount(email)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_departamento ON headcount(departamento)')
         
@@ -144,50 +148,87 @@ def insertar_datos_ejemplo(cursor):
         print("ℹ️  La base de datos ya contiene datos, omitiendo inserción de ejemplos")
         return
     
+    # Lista de nombres de aplicaciones para asignar aleatoriamente
+    nombres_apps = [
+        "Sistema de Gestión de Empleados",
+        "Portal de Recursos Humanos",
+        "Aplicación de Nómina",
+        "Sistema de Control de Asistencia",
+        "Portal de Beneficios",
+        "Aplicación de Capacitación",
+        "Sistema de Evaluación de Desempeño",
+        "Portal de Comunicaciones Internas",
+        "Aplicación de Gestión de Proyectos",
+        "Sistema de Reportes Gerenciales",
+        "Portal de Autogestión",
+        "Aplicación de Gestión de Permisos",
+        "Sistema de Seguridad y Accesos",
+        "Portal de Documentación",
+        "Aplicación de Gestión de Inventarios"
+    ]
+    
     try:
-        # Insertar ejemplo en headcount
-        cursor.execute('''
-            INSERT INTO headcount (numero_caso, nombre, apellido, email, telefono, departamento, cargo, fecha_contratacion, salario, estado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'HC-2024-001',
-            'Juan',
-            'Pérez',
-            'juan.perez@empresa.com',
-            '+57 300 123 4567',
-            'Tecnología',
-            'Desarrollador Senior',
-            '2024-01-15',
-            5000000.00,
-            'Activo'
-        ))
+        # Insertar ejemplos en headcount
+        empleados_ejemplo = [
+            ('HC-2024-001', 'EMP001', 'Juan', 'Pérez', 'juan.perez@empresa.com', '+57 300 123 4567', 'Tecnología', 'Desarrollador Senior', '2024-01-15', 5000000.00, 'Activo'),
+            ('HC-2024-002', 'EMP002', 'María', 'García', 'maria.garcia@empresa.com', '+57 300 234 5678', 'Recursos Humanos', 'Analista Senior', '2024-02-01', 4500000.00, 'Activo'),
+            ('HC-2024-003', 'EMP003', 'Carlos', 'López', 'carlos.lopez@empresa.com', '+57 300 345 6789', 'Finanzas', 'Contador', '2024-01-20', 3800000.00, 'Activo'),
+            ('HC-2024-004', 'EMP004', 'Ana', 'Rodríguez', 'ana.rodriguez@empresa.com', '+57 300 456 7890', 'Marketing', 'Especialista Digital', '2024-02-15', 4200000.00, 'Activo'),
+            ('HC-2024-005', 'EMP005', 'Luis', 'Martínez', 'luis.martinez@empresa.com', '+57 300 567 8901', 'Operaciones', 'Coordinador', '2024-01-10', 3500000.00, 'Activo')
+        ]
         
-        # Insertar ejemplo en procesos (onboarding)
-        cursor.execute('''
-            INSERT INTO procesos (numero_caso, tipo_proceso, sid, nueva_sub_unidad, nuevo_cargo, request_date, ingreso_por, fecha, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'CASE-20240115120000-12345678',
-            'onboarding',
-            'EMP001',
-            'Sub Unidad 1 - Desarrollo Frontend',
-            'Desarrollador Frontend',
-            '2024-01-15',
-            'María García',
-            '2024-01-15',
-            'En Proceso'
-        ))
+        for empleado in empleados_ejemplo:
+            cursor.execute('''
+                INSERT INTO headcount (numero_caso, sid, nombre, apellido, email, telefono, departamento, cargo, fecha_contratacion, salario, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', empleado)
         
-        # Obtener el ID del proceso insertado
-        proceso_id = cursor.lastrowid
+        # Insertar ejemplos en procesos
+        procesos_ejemplo = [
+            ('CASE-20240115120000-12345678', 'onboarding', 'EMP001', 'Sub Unidad 1 - Desarrollo Frontend', 'Desarrollador Frontend', '2024-01-15', 'María García', '2024-01-15', 'En Proceso'),
+            ('CASE-20240201130000-23456789', 'onboarding', 'EMP002', 'Sub Unidad 6 - Gestión de Proyectos', 'Analista Senior', '2024-02-01', 'Juan Pérez', '2024-02-01', 'Completado'),
+            ('CASE-20240120140000-34567890', 'lateral_movement', 'EMP003', 'Sub Unidad 4 - QA y Testing', 'Analista de Calidad', '2024-01-20', 'Ana Rodríguez', '2024-01-20', 'Pendiente'),
+            ('CASE-20240215150000-45678901', 'offboarding', 'EMP004', 'Sub Unidad 5 - Diseño UX/UI', 'Diseñador UX', '2024-02-15', 'Luis Martínez', '2024-02-15', 'En Proceso'),
+            ('CASE-20240110160000-56789012', 'onboarding', 'EMP005', 'Sub Unidad 3 - DevOps e Infraestructura', 'DevOps Engineer', '2024-01-10', 'Carlos López', '2024-01-10', 'Completado')
+        ]
         
-        # Insertar detalle de onboarding
-        cursor.execute('''
-            INSERT INTO onboarding_detalles (proceso_id, tipo_onboarding)
-            VALUES (?, ?)
-        ''', (proceso_id, 'Nuevo Empleado'))
+        for proceso in procesos_ejemplo:
+            # Asignar nombre de aplicación aleatorio
+            app_name = random.choice(nombres_apps)
+            
+            cursor.execute('''
+                INSERT INTO procesos (numero_caso, tipo_proceso, sid, nueva_sub_unidad, nuevo_cargo, request_date, ingreso_por, fecha, status, app_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', proceso + (app_name,))
+            
+            proceso_id = cursor.lastrowid
+            
+            # Insertar detalles según el tipo de proceso
+            if proceso[1] == 'onboarding':
+                tipos_onboarding = ['Nuevo Empleado', 'Recontratación', 'Transferencia Interna', 'Promoción']
+                cursor.execute('''
+                    INSERT INTO onboarding_detalles (proceso_id, tipo_onboarding)
+                    VALUES (?, ?)
+                ''', (proceso_id, random.choice(tipos_onboarding)))
+                
+            elif proceso[1] == 'offboarding':
+                tipos_offboarding = ['Salida Definitiva', 'Reducción de Personal', 'Fin de Proyecto', 'Cambio de Empresa']
+                cursor.execute('''
+                    INSERT INTO offboarding_detalles (proceso_id, tipo_offboarding)
+                    VALUES (?, ?)
+                ''', (proceso_id, random.choice(tipos_offboarding)))
+                
+            elif proceso[1] == 'lateral_movement':
+                tipos_lateral = ['Movimiento Horizontal', 'Reasignación de Proyecto', 'Cambio de Equipo', 'Rotación de Funciones']
+                cursor.execute('''
+                    INSERT INTO lateral_movement_detalles (proceso_id, empleo_anterior, tipo_lateral)
+                    VALUES (?, ?, ?)
+                ''', (proceso_id, 'Contador', random.choice(tipos_lateral)))
         
         print("✅ Datos de ejemplo insertados correctamente")
+        print(f"   📊 {len(empleados_ejemplo)} empleados en headcount")
+        print(f"   📊 {len(procesos_ejemplo)} procesos creados")
+        print(f"   📱 Nombres de aplicaciones asignados aleatoriamente")
         
     except sqlite3.Error as e:
         print(f"⚠️  Error al insertar datos de ejemplo: {e}")
@@ -217,6 +258,15 @@ def mostrar_estructura_tablas(cursor):
             default = f"DEFAULT {columna[4]}" if columna[4] else ""
             
             print(f"   • {nombre}: {tipo} {not_null} {default}".strip())
+        
+        # Mostrar algunos datos de ejemplo si es la tabla procesos
+        if nombre_tabla == 'procesos':
+            cursor.execute("SELECT numero_caso, sid, app_name, status FROM procesos LIMIT 3")
+            ejemplos = cursor.fetchall()
+            if ejemplos:
+                print(f"   📱 Ejemplos de APP names:")
+                for ejemplo in ejemplos:
+                    print(f"      • {ejemplo[0]} - {ejemplo[1]} - {ejemplo[2]} - {ejemplo[3]}")
 
 def verificar_conexion():
     """Verifica que la base de datos se pueda conectar correctamente"""

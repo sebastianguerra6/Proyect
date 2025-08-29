@@ -22,6 +22,7 @@ class EmpleadoRepository:
                 CREATE TABLE IF NOT EXISTS headcount (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     numero_caso TEXT UNIQUE,
+                    sid TEXT NOT NULL,
                     nombre TEXT NOT NULL,
                     apellido TEXT NOT NULL,
                     email TEXT UNIQUE NOT NULL,
@@ -71,11 +72,34 @@ class EmpleadoRepository:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # Lista de nombres de aplicaciones para asignar aleatoriamente
+            nombres_apps = [
+                "Sistema de Gestión de Empleados",
+                "Portal de Recursos Humanos",
+                "Aplicación de Nómina",
+                "Sistema de Control de Asistencia",
+                "Portal de Beneficios",
+                "Aplicación de Capacitación",
+                "Sistema de Evaluación de Desempeño",
+                "Portal de Comunicaciones Internas",
+                "Aplicación de Gestión de Proyectos",
+                "Sistema de Reportes Gerenciales",
+                "Portal de Autogestión",
+                "Aplicación de Gestión de Permisos",
+                "Sistema de Seguridad y Accesos",
+                "Portal de Documentación",
+                "Aplicación de Gestión de Inventarios"
+            ]
+            
+            # Seleccionar nombre de aplicación aleatorio
+            import random
+            app_name = random.choice(nombres_apps)
+            
             cursor.execute('''
                 INSERT INTO procesos (
                     numero_caso, tipo_proceso, sid, nueva_sub_unidad, nuevo_cargo,
-                    request_date, ingreso_por, fecha, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    request_date, ingreso_por, fecha, status, app_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 empleado_data.get('numero_caso'),
                 tipo_proceso,
@@ -85,12 +109,13 @@ class EmpleadoRepository:
                 empleado_data.get('request_date'),
                 empleado_data.get('ingreso_por'),
                 empleado_data.get('fecha'),
-                empleado_data.get('status', 'Pendiente')
+                empleado_data.get('status', 'Pendiente'),
+                app_name
             ))
             
             conn.commit()
             conn.close()
-            return True, "Proceso guardado exitosamente"
+            return True, f"Proceso guardado exitosamente con APP: {app_name}"
             
         except sqlite3.Error as e:
             if 'conn' in locals():
@@ -106,11 +131,12 @@ class EmpleadoRepository:
             
             cursor.execute('''
                 INSERT INTO headcount (
-                    numero_caso, nombre, apellido, email, telefono, departamento,
+                    numero_caso, sid, nombre, apellido, email, telefono, departamento,
                     cargo, fecha_contratacion, salario, estado
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 empleado_data.get('numero_caso'),
+                empleado_data.get('sid'),
                 empleado_data.get('nombre'),
                 empleado_data.get('apellido'),
                 empleado_data.get('email'),
@@ -249,3 +275,60 @@ class EmpleadoRepository:
         except sqlite3.Error as e:
             print(f"Error obteniendo estadísticas: {e}")
             return {'onboarding': 0, 'offboarding': 0, 'lateral_movement': 0, 'headcount': 0}
+    
+    def buscar_headcount_por_sid(self, sid: str) -> List[Dict[str, Any]]:
+        """Busca personas en el headcount por SID"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT sid, nombre, apellido, email, telefono, departamento, cargo, estado
+                FROM headcount 
+                WHERE sid LIKE ?
+                ORDER BY fecha_creacion DESC
+            ''', (f"%{sid}%",))
+            
+            rows = cursor.fetchall()
+            
+            columnas = ['sid', 'nombre', 'apellido', 'email', 'telefono', 'departamento', 'cargo', 'estado']
+            resultados = []
+            
+            for row in rows:
+                resultado = dict(zip(columnas, row))
+                resultados.append(resultado)
+            
+            conn.close()
+            return resultados
+            
+        except sqlite3.Error as e:
+            print(f"Error buscando headcount por SID: {e}")
+            return []
+    
+    def obtener_todo_headcount(self) -> List[Dict[str, Any]]:
+        """Obtiene todos los registros del headcount"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT sid, nombre, apellido, email, telefono, departamento, cargo, estado
+                FROM headcount 
+                ORDER BY fecha_creacion DESC
+            ''')
+            
+            rows = cursor.fetchall()
+            
+            columnas = ['sid', 'nombre', 'apellido', 'email', 'telefono', 'departamento', 'cargo', 'estado']
+            resultados = []
+            
+            for row in rows:
+                resultado = dict(zip(columnas, row))
+                resultados.append(resultado)
+            
+            conn.close()
+            return resultados
+            
+        except sqlite3.Error as e:
+            print(f"Error obteniendo todo el headcount: {e}")
+            return []

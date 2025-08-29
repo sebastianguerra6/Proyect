@@ -14,10 +14,10 @@ class AppEmpleadosRefactorizada:
     def __init__(self, root):
         self.root = root
         self.root.title("Sistema de Gestión de Empleados - Refactorizado")
-        self.root.geometry("1200x700")  # Aumentar ancho para aprovechar mejor la pantalla
+        self.root.geometry("1400x700")  # Aumentar ancho para acomodar botones laterales
         
         # 🔹 Centrar la ventana (usando el tamaño que ya definiste)
-        self._centrar_ventana(1200, 700)
+        self._centrar_ventana(1400, 700)
         
         # Inicializar servicios y componentes
         self.repository = EmpleadoRepository()
@@ -44,138 +44,60 @@ class AppEmpleadosRefactorizada:
         y = (screen_h - h) // 2
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         
-        # Forzar el centrado después de un pequeño delay
-        self.root.after(100, self._forzar_centrado)
-    
-    def _forzar_centrado(self):
-        """Fuerza el centrado de la ventana"""
-        self.root.update_idletasks()
-        w = 1200
-        h = 700
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        x = (screen_w - w) // 2
-        y = (screen_h - h) // 2
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-        
     def crear_interfaz(self):
         """Crea la interfaz principal de la aplicación"""
-        # Frame principal con centrado
+        # Frame principal con nueva disposición
         main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)  # Reducir padx de 50 a 20
+        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         
-        # Configurar grid para centrado
+        # Configurar grid para nueva disposición
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.columnconfigure(0, weight=0)  # Botones laterales (sin peso)
+        main_frame.columnconfigure(1, weight=1)  # Contenido principal (se expande)
+        main_frame.rowconfigure(0, weight=0)  # Título (sin peso)
+        main_frame.rowconfigure(1, weight=1)  # Contenido (se expande)
         
-        # Título centrado
+        # Título centrado en la parte superior
         titulo = ttk.Label(main_frame, text="Sistema de Gestión de Empleados", 
                           font=("Arial", 18, "bold"))
-        titulo.grid(row=0, column=0, pady=(0, 30), sticky="ew")
+        titulo.grid(row=0, column=0, columnspan=2, pady=(0, 30), sticky="ew")
         
-        # Pestañas principales
-        self.crear_pestanas_principales(main_frame)
+        # Configurar el título para que se vea
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
         
+        # Botones laterales y contenido principal
+        self.crear_botones_laterales(main_frame)
+        self.crear_contenido_principal(main_frame)
+    
     def crear_pestanas_principales(self, parent):
-        """Crea el sistema de pestañas principales"""
-        # Frame para pestañas principales con centrado
-        pestanas_principales_frame = ttk.Frame(parent)
-        pestanas_principales_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)  # Reducir padx de 20 a 10
-        pestanas_principales_frame.columnconfigure(0, weight=1)
-        pestanas_principales_frame.rowconfigure(0, weight=1)
-        
-        # Notebook para pestañas principales
-        self.notebook_principal = ttk.Notebook(pestanas_principales_frame)
-        self.notebook_principal.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)  # Reducir padx de 10 a 5
-        
-        # Pestaña de Gestión de Procesos
-        self.crear_pestana_gestion_procesos()
-        
-        # Pestaña de Edición y Búsqueda
-        self.crear_pestana_edicion_busqueda()
-        
-        # Pestaña de Creación de Persona
-        self.crear_pestana_creacion_persona()
+        """Método obsoleto - reemplazado por botones laterales"""
+        pass
         
     def crear_pestana_gestion_procesos(self):
-        """Crea la pestaña de gestión de procesos (onboarding, offboarding, lateral)"""
-        gestion_frame = ttk.Frame(self.notebook_principal)
-        self.notebook_principal.add(gestion_frame, text="Gestión de Procesos")
+        """Método obsoleto - reemplazado por crear_componente_gestion"""
+        pass
         
-        # Configurar grid para centrado
-        gestion_frame.columnconfigure(0, weight=1)
-        gestion_frame.rowconfigure(0, weight=1)
+    def crear_pestana_edicion_busqueda(self):
+        """Método obsoleto - reemplazado por crear_componente_edicion"""
+        pass
         
-        # Crear canvas con scrollbar
-        canvas = tk.Canvas(gestion_frame, bg="white")
-        scrollbar = ttk.Scrollbar(gestion_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        # Centrar el contenido en el canvas
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Configurar grid del frame scrolleable para centrado
-        scrollable_frame.columnconfigure(0, weight=1)
-        scrollable_frame.columnconfigure(1, weight=1)  # Agregar columna para el lado derecho
-        scrollable_frame.rowconfigure(1, weight=1)
-        
-        # Frame para organizar los componentes lado a lado
-        contenido_frame = ttk.Frame(scrollable_frame)
-        contenido_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 20))
-        contenido_frame.columnconfigure(0, weight=1)
-        contenido_frame.columnconfigure(1, weight=1)
-        contenido_frame.columnconfigure(2, weight=0)  # Agregar columna para botones
-        
-        # Centrar el contenido en el frame
-        contenido_frame.columnconfigure(0, weight=0)  # Cambiar a weight=0 para centrar
-        contenido_frame.columnconfigure(1, weight=0)  # Cambiar a weight=0 para centrar
-        contenido_frame.columnconfigure(2, weight=0)  # Botones sin peso
-        
-        # Campos generales (centrado)
-        self.componentes['generales'] = CamposGeneralesFrame(contenido_frame)
-        self.componentes['generales'].frame.grid(row=0, column=0, 
-                                               sticky="ew", pady=(0, 20), padx=(20, 10))  # Aumentar padding izquierdo
-        
-        # Pestañas de tipo de proceso (centrado)
-        self.crear_pestanas_tipo_proceso(contenido_frame)
-        
-        # Botones (a la derecha del frame de tipo de proceso)
-        self.crear_botones(contenido_frame)
-        
-        # Empaquetar canvas y scrollbar con centrado
-        canvas.grid(row=0, column=0, sticky="nsew", padx=10, pady=20)  # Reducir padx de 20 a 10
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        # Configurar el canvas para que se expanda y centre
-        canvas.configure(width=1250, height=650)  # Aumentar ancho para mejor centrado
-        
-        # Binding para scroll con mouse - corregido
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Bind del scroll del mouse al canvas específico
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
-        
+    def crear_pestana_creacion_persona(self):
+        """Método obsoleto - reemplazado por crear_componente_creacion"""
+        pass
+    
     def crear_pestanas_tipo_proceso(self, parent):
         """Crea el sistema de pestañas para tipos de proceso"""
         # Frame para pestañas con centrado
         pestanas_frame = ttk.LabelFrame(parent, text="Tipo de Proceso", padding="20")
-        pestanas_frame.grid(row=0, column=1, sticky="ew", pady=(0, 20), padx=(10, 20))  # Aumentar padding derecho
+        pestanas_frame.grid(row=1, column=1, sticky="ew", pady=(0, 20), padx=(10, 20))  # Cambiar a row=1
         pestanas_frame.columnconfigure(0, weight=1)
         pestanas_frame.rowconfigure(1, weight=1)
         
         # Notebook para pestañas
         self.notebook = ttk.Notebook(pestanas_frame)
-        self.notebook.grid(row=1, column=0, sticky="ew", pady=(15, 0), padx=10)  # Reducir padx de 20 a 10
+        self.notebook.grid(row=1, column=0, sticky="ew", pady=(15, 0), padx=10)
         
         # Pestaña de selección
         self.crear_pestana_seleccion()
@@ -186,7 +108,7 @@ class AppEmpleadosRefactorizada:
             'offboarding': None,
             'lateral': None
         }
-        
+    
     def crear_pestana_seleccion(self):
         """Crea la pestaña de selección de tipo de proceso"""
         seleccion_frame = ttk.Frame(self.notebook)
@@ -216,7 +138,7 @@ class AppEmpleadosRefactorizada:
             ttk.Radiobutton(opciones_frame, text=texto, 
                            variable=self.tipo_proceso_var, value=valor,
                            command=self.cambiar_pestana).grid(row=i, column=0, pady=8, sticky="ew")
-        
+    
     def cambiar_pestana(self):
         """Cambia la pestaña según la selección del usuario"""
         # Ocultar todas las pestañas dinámicas
@@ -244,34 +166,60 @@ class AppEmpleadosRefactorizada:
     
     def crear_pestana_onboarding(self):
         """Crea la pestaña de onboarding"""
-        self.componentes['onboarding'] = OnboardingFrame(self.notebook)
-        self.pestanas_dinamicas['onboarding'] = self.componentes['onboarding'].frame
+        try:
+            self.componentes['onboarding'] = OnboardingFrame(self.notebook)
+            self.pestanas_dinamicas['onboarding'] = self.componentes['onboarding'].frame
+        except Exception as e:
+            print(f"Error creando pestaña onboarding: {e}")
+            # Crear un frame básico como fallback
+            fallback_frame = ttk.Frame(self.notebook)
+            ttk.Label(fallback_frame, text="Error cargando Onboarding", 
+                     font=("Arial", 12, "bold")).pack(pady=20)
+            self.componentes['onboarding'] = type('FallbackFrame', (), {
+                'frame': fallback_frame,
+                'obtener_datos': lambda: {}
+            })()
+            self.pestanas_dinamicas['onboarding'] = fallback_frame
     
     def crear_pestana_offboarding(self):
         """Crea la pestaña de offboarding"""
-        self.componentes['offboarding'] = OffboardingFrame(self.notebook)
-        self.pestanas_dinamicas['offboarding'] = self.componentes['offboarding'].frame
+        try:
+            self.componentes['offboarding'] = OffboardingFrame(self.notebook)
+            self.pestanas_dinamicas['offboarding'] = self.componentes['offboarding'].frame
+        except Exception as e:
+            print(f"Error creando pestaña offboarding: {e}")
+            # Crear un frame básico como fallback
+            fallback_frame = ttk.Frame(self.notebook)
+            ttk.Label(fallback_frame, text="Error cargando Offboarding", 
+                     font=("Arial", 12, "bold")).pack(pady=20)
+            self.componentes['offboarding'] = type('FallbackFrame', (), {
+                'frame': fallback_frame,
+                'obtener_datos': lambda: {}
+            })()
+            self.pestanas_dinamicas['offboarding'] = fallback_frame
     
     def crear_pestana_lateral(self):
         """Crea la pestaña de lateral movement"""
-        self.componentes['lateral'] = LateralMovementFrame(self.notebook)
-        self.pestanas_dinamicas['lateral'] = self.componentes['lateral'].frame
-    
-    def crear_pestana_edicion_busqueda(self):
-        """Crea la pestaña de edición y búsqueda"""
-        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.notebook_principal, self.service)
-        self.notebook_principal.add(self.componentes['edicion_busqueda'].frame, text="Edición y Búsqueda")
-        
-    def crear_pestana_creacion_persona(self):
-        """Crea la pestaña de creación de persona"""
-        self.componentes['creacion_persona'] = CreacionPersonaFrame(self.notebook_principal, self.service)
-        self.notebook_principal.add(self.componentes['creacion_persona'].frame, text="Crear Persona")
+        try:
+            self.componentes['lateral'] = LateralMovementFrame(self.notebook)
+            self.pestanas_dinamicas['lateral'] = self.componentes['lateral'].frame
+        except Exception as e:
+            print(f"Error creando pestaña lateral: {e}")
+            # Crear un frame básico como fallback
+            fallback_frame = ttk.Frame(self.notebook)
+            ttk.Label(fallback_frame, text="Error cargando Lateral Movement", 
+                     font=("Arial", 12, "bold")).pack(pady=20)
+            self.componentes['lateral'] = type('FallbackFrame', (), {
+                'frame': fallback_frame,
+                'obtener_datos': lambda: {}
+            })()
+            self.pestanas_dinamicas['lateral'] = fallback_frame
     
     def crear_botones(self, parent):
         """Crea los botones de acción"""
         # Frame para botones a la derecha
         botones_frame = ttk.Frame(parent)
-        botones_frame.grid(row=0, column=2, pady=30, padx=(20, 0), sticky="n")  # Aumentar padding izquierdo
+        botones_frame.grid(row=1, column=2, pady=30, padx=(20, 0), sticky="n")  # Cambiar a row=1
         botones_frame.columnconfigure(0, weight=1)
         
         # Botones apilados verticalmente
@@ -284,6 +232,10 @@ class AppEmpleadosRefactorizada:
         """Guarda los datos del formulario en la base de datos"""
         try:
             # Obtener datos generales
+            if 'generales' not in self.componentes:
+                messagebox.showerror("Error", "No se encontró el componente de campos generales")
+                return
+                
             datos_generales = self.componentes['generales'].obtener_datos()
             
             # Validar campos obligatorios
@@ -301,7 +253,15 @@ class AppEmpleadosRefactorizada:
             # Obtener datos específicos según el tipo
             datos_especificos = {}
             if tipo_proceso in self.componentes:
-                datos_especificos = self.componentes[tipo_proceso].obtener_datos()
+                try:
+                    if hasattr(self.componentes[tipo_proceso], 'obtener_datos'):
+                        datos_especificos = self.componentes[tipo_proceso].obtener_datos()
+                    else:
+                        print(f"Advertencia: {tipo_proceso} no tiene método obtener_datos")
+                        datos_especificos = {}
+                except Exception as e:
+                    print(f"Error obteniendo datos específicos de {tipo_proceso}: {e}")
+                    datos_especificos = {}
             
             # Generar número de caso único
             from models import Empleado
@@ -320,6 +280,8 @@ class AppEmpleadosRefactorizada:
             datos_completos['numero_caso'] = empleado_temp.numero_caso
             datos_completos['tipo_proceso'] = tipo_proceso
             
+            print(f"Datos a guardar: {datos_completos}")  # Debug
+            
             # Guardar en la base de datos usando el repository directamente
             exito, mensaje = self.repository.guardar_proceso(datos_completos, tipo_proceso)
             
@@ -332,6 +294,8 @@ class AppEmpleadosRefactorizada:
         except Exception as e:
             messagebox.showerror("Error", f"Error inesperado: {str(e)}")
             print(f"Error en guardar_datos: {e}")
+            import traceback
+            traceback.print_exc()
     
     def limpiar_campos(self):
         """Limpia todos los campos del formulario"""
@@ -374,6 +338,124 @@ class AppEmpleadosRefactorizada:
         except Exception as e:
             messagebox.showerror("Error", f"Error obteniendo estadísticas: {str(e)}")
             print(f"Error en mostrar_estadisticas: {e}")
+
+    def crear_botones_laterales(self, parent):
+        """Crea los botones laterales para navegación"""
+        # Frame para botones laterales
+        botones_frame = ttk.LabelFrame(parent, text="Navegación", padding="15")
+        botones_frame.grid(row=1, column=0, sticky="n", padx=(0, 20), pady=(0, 20))
+        botones_frame.columnconfigure(0, weight=1)
+        
+        # Botones de navegación
+        opciones = [
+            ("Gestión de Procesos", "gestion"),
+            ("Edición y Búsqueda", "edicion"),
+            ("Crear Persona", "creacion")
+        ]
+        
+        self.botones_navegacion = {}
+        for i, (texto, valor) in enumerate(opciones):
+            btn = ttk.Button(botones_frame, text=texto, width=20,
+                           command=lambda v=valor: self.cambiar_contenido(v))
+            btn.grid(row=i, column=0, pady=8, sticky="ew")
+            self.botones_navegacion[valor] = btn
+        
+        # Seleccionar gestión por defecto
+        self.cambiar_contenido("gestion")
+
+    def crear_contenido_principal(self, parent):
+        """Crea el frame principal para mostrar el contenido"""
+        # Frame para contenido principal
+        self.contenido_principal_frame = ttk.Frame(parent)
+        self.contenido_principal_frame.grid(row=1, column=1, sticky="nsew", padx=(0, 20), pady=(0, 20))
+        self.contenido_principal_frame.columnconfigure(0, weight=1)
+        self.contenido_principal_frame.rowconfigure(0, weight=1)
+        
+        # Inicializar componentes
+        self.componentes = {}
+        
+        # Crear todos los componentes pero no mostrarlos aún
+        self.crear_componente_gestion()
+        self.crear_componente_edicion()
+        self.crear_componente_creacion()
+    
+    def crear_componente_gestion(self):
+        """Crea el componente de gestión de procesos"""
+        gestion_frame = ttk.Frame(self.contenido_principal_frame)
+        gestion_frame.columnconfigure(0, weight=1)
+        gestion_frame.rowconfigure(0, weight=0)  # Título (sin peso)
+        gestion_frame.rowconfigure(1, weight=1)  # Contenido (se expande)
+        
+        # Título de la sección
+        titulo_gestion = ttk.Label(gestion_frame, text="Gestión de Procesos", 
+                                  font=("Arial", 16, "bold"))
+        titulo_gestion.grid(row=0, column=0, pady=(0, 20), sticky="ew")
+        
+        # Frame principal para el contenido (sin scroll)
+        contenido_frame = ttk.Frame(gestion_frame)
+        contenido_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 20))
+        contenido_frame.columnconfigure(0, weight=0)  # Campos generales
+        contenido_frame.columnconfigure(1, weight=1)  # Tipo de proceso
+        contenido_frame.columnconfigure(2, weight=0)  # Botones
+        
+        # Título interno para mejor organización
+        titulo_interno = ttk.Label(contenido_frame, text="Complete la información del proceso", 
+                                 font=("Arial", 12, "bold"), foreground="darkblue")
+        titulo_interno.grid(row=0, column=0, columnspan=3, pady=(0, 15), sticky="ew")
+        
+        # Campos generales
+        self.componentes['generales'] = CamposGeneralesFrame(contenido_frame)
+        self.componentes['generales'].frame.grid(row=1, column=0, 
+                                               sticky="ew", pady=(0, 15), padx=(20, 10))
+        
+        # Pestañas de tipo de proceso
+        self.crear_pestanas_tipo_proceso(contenido_frame)
+        
+        # Botones
+        self.crear_botones(contenido_frame)
+        
+        # Guardar referencia al frame
+        self.componentes['gestion_frame'] = gestion_frame
+    
+    def crear_componente_edicion(self):
+        """Crea el componente de edición y búsqueda"""
+        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, self.service)
+        self.componentes['edicion_busqueda'].frame.grid(row=0, column=0, sticky="nsew")
+        self.componentes['edicion_busqueda'].frame.grid_remove()  # Ocultar inicialmente
+    
+    def crear_componente_creacion(self):
+        """Crea el componente de creación de persona"""
+        self.componentes['creacion_persona'] = CreacionPersonaFrame(self.contenido_principal_frame, self.service)
+        self.componentes['creacion_persona'].frame.grid(row=0, column=0, sticky="nsew")
+        self.componentes['creacion_persona'].frame.grid_remove()  # Ocultar inicialmente
+
+    def cambiar_contenido(self, tipo_contenido):
+        """Cambia el contenido mostrado según el botón seleccionado"""
+        # Ocultar todos los componentes
+        if 'gestion_frame' in self.componentes:
+            self.componentes['gestion_frame'].grid_remove()
+        if 'edicion_busqueda' in self.componentes:
+            self.componentes['edicion_busqueda'].frame.grid_remove()
+        if 'creacion_persona' in self.componentes:
+            self.componentes['creacion_persona'].frame.grid_remove()
+        
+        # Mostrar el componente seleccionado
+        if tipo_contenido == "gestion":
+            if 'gestion_frame' in self.componentes:
+                self.componentes['gestion_frame'].grid()
+        elif tipo_contenido == "edicion":
+            if 'edicion_busqueda' in self.componentes:
+                self.componentes['edicion_busqueda'].frame.grid()
+        elif tipo_contenido == "creacion":
+            if 'creacion_persona' in self.componentes:
+                self.componentes['creacion_persona'].frame.grid()
+        
+        # Actualizar estado visual de los botones
+        for valor, btn in self.botones_navegacion.items():
+            if valor == tipo_contenido:
+                btn.state(['pressed'])
+            else:
+                btn.state(['!pressed'])
 
 def main():
     """Función principal para ejecutar la aplicación"""

@@ -88,3 +88,19 @@ class EmpleadoService:
         except Exception as e:
             print(f"Error obteniendo estadísticas: {e}")
             return {'onboarding': 0, 'offboarding': 0, 'lateral_movement': 0, 'headcount': 0}
+    
+    def buscar_headcount_por_sid(self, sid: str) -> List[Dict[str, Any]]:
+        """Busca personas en el headcount por SID"""
+        try:
+            return self.repository.buscar_headcount_por_sid(sid)
+        except Exception as e:
+            print(f"Error buscando headcount por SID: {e}")
+            return []
+    
+    def obtener_todo_headcount(self) -> List[Dict[str, Any]]:
+        """Obtiene todos los registros del headcount"""
+        try:
+            return self.repository.obtener_todo_headcount()
+        except Exception as e:
+            print(f"Error obteniendo todo el headcount: {e}")
+            return []

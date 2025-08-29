@@ -495,8 +495,14 @@ class EdicionBusquedaFrame:
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
+        # Frame para la tabla con scrollbars
+        tabla_frame = ttk.Frame(resultados_frame)
+        tabla_frame.grid(row=0, column=0, sticky="nsew")
+        tabla_frame.columnconfigure(0, weight=1)
+        tabla_frame.rowconfigure(0, weight=1)
+        
         # Treeview para mostrar resultados
-        self.tree = ttk.Treeview(resultados_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings")
+        self.tree = ttk.Treeview(tabla_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "APP Name", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings", height=8)
         
         # Configurar columnas
         self.tree.heading("Número Caso", text="Número Caso")
@@ -507,34 +513,41 @@ class EdicionBusquedaFrame:
         self.tree.heading("Request Date", text="Request Date")
         self.tree.heading("Ingreso Por", text="Ingreso Por")
         self.tree.heading("Tipo", text="Tipo")
+        self.tree.heading("APP Name", text="APP Name")
         self.tree.heading("Mail", text="Mail")
         self.tree.heading("Closing Date App", text="Closing Date App")
         self.tree.heading("App Quality", text="App Quality")
         self.tree.heading("Confirmation by User", text="Confirmation by User")
         self.tree.heading("Comment", text="Comment")
         
-        # Configurar anchos de columna
-        self.tree.column("Número Caso", width=120)
-        self.tree.column("SID", width=80)
-        self.tree.column("Sub Unidad", width=120)
-        self.tree.column("Cargo", width=100)
-        self.tree.column("Status", width=80)
-        self.tree.column("Request Date", width=90)
-        self.tree.column("Ingreso Por", width=100)
-        self.tree.column("Tipo", width=80)
-        self.tree.column("Mail", width=120)
-        self.tree.column("Closing Date App", width=100)
-        self.tree.column("App Quality", width=90)
-        self.tree.column("Confirmation by User", width=120)
-        self.tree.column("Comment", width=100)
+        # Configurar anchos de columna (más compactos para mejor visualización)
+        self.tree.column("Número Caso", width=100, minwidth=80)
+        self.tree.column("SID", width=70, minwidth=60)
+        self.tree.column("Sub Unidad", width=100, minwidth=80)
+        self.tree.column("Cargo", width=80, minwidth=70)
+        self.tree.column("Status", width=70, minwidth=60)
+        self.tree.column("Request Date", width=80, minwidth=70)
+        self.tree.column("Ingreso Por", width=80, minwidth=70)
+        self.tree.column("Tipo", width=70, minwidth=60)
+        self.tree.column("APP Name", width=120, minwidth=100)
+        self.tree.column("Mail", width=100, minwidth=80)
+        self.tree.column("Closing Date App", width=90, minwidth=80)
+        self.tree.column("App Quality", width=80, minwidth=70)
+        self.tree.column("Confirmation by User", width=100, minwidth=90)
+        self.tree.column("Comment", width=80, minwidth=70)
         
-        # Scrollbar para treeview
-        tree_scrollbar = ttk.Scrollbar(resultados_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+        # Scrollbar vertical para treeview
+        tree_scrollbar_y = ttk.Scrollbar(tabla_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scrollbar_y.set)
         
-        # Empaquetar treeview y scrollbar
+        # Scrollbar horizontal para treeview
+        tree_scrollbar_x = ttk.Scrollbar(tabla_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(xscrollcommand=tree_scrollbar_x.set)
+        
+        # Empaquetar treeview y scrollbars
         self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        tree_scrollbar_y.grid(row=0, column=1, sticky="ns")
+        tree_scrollbar_x.grid(row=1, column=0, sticky="ew")
         
         # Binding para selección
         self.tree.bind('<<TreeviewSelect>>', self.seleccionar_registro)
@@ -608,6 +621,7 @@ class EdicionBusquedaFrame:
                     resultado.get('request_date', ''),
                     resultado.get('ingreso_por', ''),
                     resultado.get('tipo_proceso', ''),
+                    resultado.get('app_name', ''),
                     resultado.get('mail', ''),
                     resultado.get('closing_date_app', ''),
                     resultado.get('app_quality', ''),
@@ -649,7 +663,7 @@ class EdicionBusquedaFrame:
             valores = item['values']
             
             # Cargar valores en los campos de edición
-            if len(valores) >= 13:  # Ahora tenemos 13 columnas
+            if len(valores) >= 14:  # Ahora tenemos 14 columnas
                 # Campos básicos
                 self.variables['numero_caso_edicion'].set(valores[0])
                 self.variables['nueva_sub_unidad_edicion'].set(valores[2])
@@ -659,11 +673,11 @@ class EdicionBusquedaFrame:
                 self.variables['ingreso_por_edicion'].set(valores[6])
                 
                 # Campos adicionales
-                self.variables['mail_edicion'].set(valores[8] if valores[8] else '')
-                self.variables['closing_date_app_edicion'].set(valores[9] if valores[9] else '')
-                self.variables['app_quality_edicion'].set(valores[10] if valores[10] else '')
-                self.variables['confirmation_by_user_edicion'].set(valores[11] if valores[11] else '')
-                self.variables['comment_edicion'].set(valores[12] if valores[12] else '')
+                self.variables['mail_edicion'].set(valores[9] if valores[9] else '')
+                self.variables['closing_date_app_edicion'].set(valores[10] if valores[10] else '')
+                self.variables['app_quality_edicion'].set(valores[11] if valores[11] else '')
+                self.variables['confirmation_by_user_edicion'].set(valores[12] if valores[12] else '')
+                self.variables['comment_edicion'].set(valores[13] if valores[13] else '')
     
     def guardar_cambios(self):
         """Guarda los cambios realizados en los campos"""
@@ -754,6 +768,7 @@ class CreacionPersonaFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
+            'sid': tk.StringVar(),
             'nombre': tk.StringVar(),
             'apellido': tk.StringVar(),
             'email': tk.StringVar(),
@@ -801,6 +816,7 @@ class CreacionPersonaFrame:
         # Configurar grid
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(len([
+            ("SID:", "sid", "entry"),
             ("Nombre:", "nombre", "entry"),
             ("Apellido:", "apellido", "entry"),
             ("Email:", "email", "entry"),
@@ -814,6 +830,7 @@ class CreacionPersonaFrame:
         
         # Campos del formulario
         campos = [
+            ("SID:", "sid", "entry"),
             ("Nombre:", "nombre", "entry"),
             ("Apellido:", "apellido", "entry"),
             ("Email:", "email", "entry"),
@@ -840,9 +857,65 @@ class CreacionPersonaFrame:
                     row=i, column=1, sticky=(tk.W, tk.E), pady=5
                 )
         
+        # Frame para búsqueda
+        busqueda_frame = ttk.LabelFrame(main_frame, text="Búsqueda de Personas", padding="15")
+        busqueda_frame.grid(row=len(campos), column=0, columnspan=2, pady=20, sticky="ew")
+        
+        # Campo de búsqueda por SID
+        ttk.Label(busqueda_frame, text="Buscar por SID:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.sid_busqueda = ttk.Entry(busqueda_frame, width=30)
+        self.sid_busqueda.grid(row=0, column=1, sticky=tk.W, pady=5, padx=(0, 10))
+        
+        # Botones de búsqueda
+        botones_busqueda_frame = ttk.Frame(busqueda_frame)
+        botones_busqueda_frame.grid(row=0, column=2, pady=5)
+        
+        ttk.Button(botones_busqueda_frame, text="Buscar por SID", 
+                  command=self.buscar_por_sid).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones_busqueda_frame, text="Mostrar Todos", 
+                  command=self.mostrar_todos).pack(side=tk.LEFT, padx=5)
+        
+        # Tabla de resultados
+        resultados_frame = ttk.Frame(busqueda_frame)
+        resultados_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        
+        # Crear Treeview para mostrar resultados
+        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
+                                show="headings", height=6)
+        
+        # Configurar columnas
+        self.tree.heading("SID", text="SID")
+        self.tree.heading("Nombre", text="Nombre")
+        self.tree.heading("Apellido", text="Apellido")
+        self.tree.heading("Email", text="Email")
+        self.tree.heading("Departamento", text="Departamento")
+        self.tree.heading("Cargo", text="Cargo")
+        self.tree.heading("Estado", text="Estado")
+        
+        # Configurar anchos de columna
+        self.tree.column("SID", width=100)
+        self.tree.column("Nombre", width=120)
+        self.tree.column("Apellido", width=120)
+        self.tree.column("Email", width=200)
+        self.tree.column("Departamento", width=150)
+        self.tree.column("Cargo", width=150)
+        self.tree.column("Estado", width=100)
+        
+        # Scrollbar para la tabla
+        tree_scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+        
+        # Empaquetar tabla y scrollbar
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Configurar grid para que la tabla se expanda
+        resultados_frame.columnconfigure(0, weight=1)
+        resultados_frame.rowconfigure(0, weight=1)
+        
         # Botones de acción
         botones_frame = ttk.Frame(main_frame)
-        botones_frame.grid(row=len(campos), column=0, columnspan=2, pady=20)
+        botones_frame.grid(row=len(campos) + 2, column=0, columnspan=2, pady=20)
         
         ttk.Button(botones_frame, text="Crear Persona", command=self.crear_persona).pack(side=tk.LEFT, padx=10)
         ttk.Button(botones_frame, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
@@ -852,13 +925,94 @@ class CreacionPersonaFrame:
         scrollbar.grid(row=0, column=1, sticky="ns")
         
         # Configurar el canvas para que se expanda
-        canvas.configure(width=1000, height=600)
+        canvas.configure(width=1000, height=700)  # Aumentar altura para acomodar la tabla
         
         # Binding para scroll con mouse
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    
+    def buscar_por_sid(self):
+        """Busca una persona por SID"""
+        sid = self.sid_busqueda.get().strip()
+        if not sid:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
+            return
+        
+        if self.service:
+            try:
+                # Buscar en la base de datos
+                resultados = self.service.buscar_headcount_por_sid(sid)
+                self.mostrar_resultados_busqueda(resultados)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+        else:
+            # Simulación de búsqueda
+            self.simular_busqueda_por_sid(sid)
+    
+    def mostrar_todos(self):
+        """Muestra todos los registros del headcount"""
+        if self.service:
+            try:
+                # Obtener todos los registros
+                resultados = self.service.obtener_todo_headcount()
+                self.mostrar_resultados_busqueda(resultados)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error obteniendo registros: {str(e)}")
+        else:
+            # Simulación de mostrar todos
+            self.simular_mostrar_todos()
+    
+    def mostrar_resultados_busqueda(self, resultados):
+        """Muestra los resultados de la búsqueda en la tabla"""
+        # Limpiar tabla anterior
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        if not resultados:
+            messagebox.showinfo("Información", "No se encontraron resultados")
+            return
+        
+        # Insertar resultados en la tabla
+        for resultado in resultados:
+            self.tree.insert("", "end", values=(
+                resultado.get('sid', ''),
+                resultado.get('nombre', ''),
+                resultado.get('apellido', ''),
+                resultado.get('email', ''),
+                resultado.get('departamento', ''),
+                resultado.get('cargo', ''),
+                resultado.get('estado', '')
+            ))
+    
+    def simular_busqueda_por_sid(self, sid):
+        """Simula una búsqueda por SID (para cuando no hay servicio)"""
+        # Datos de ejemplo
+        datos_ejemplo = [
+            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
+             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
+            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
+             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'}
+        ]
+        
+        # Filtrar por SID
+        resultados = [r for r in datos_ejemplo if r['sid'].lower() == sid.lower()]
+        self.mostrar_resultados_busqueda(resultados)
+    
+    def simular_mostrar_todos(self):
+        """Simula mostrar todos los registros (para cuando no hay servicio)"""
+        # Datos de ejemplo
+        datos_ejemplo = [
+            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
+             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
+            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
+             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'},
+            {'sid': 'EMP003', 'nombre': 'Carlos', 'apellido': 'López', 'email': 'carlos.lopez@empresa.com', 
+             'departamento': 'Finanzas', 'cargo': 'Contador', 'estado': 'Activo'}
+        ]
+        
+        self.mostrar_resultados_busqueda(datos_ejemplo)
     
     def crear_persona(self):
         """Crea una nueva persona en el headcount"""
@@ -870,6 +1024,8 @@ class CreacionPersonaFrame:
             if exito:
                 messagebox.showinfo("Éxito", mensaje)
                 self.limpiar()
+                # Actualizar la tabla después de crear
+                self.mostrar_todos()
             else:
                 messagebox.showerror("Error", mensaje)
         else:
@@ -885,7 +1041,7 @@ class CreacionPersonaFrame:
     
     def validar_campos_obligatorios(self):
         """Valida que los campos obligatorios estén completos"""
-        campos_obligatorios = ['nombre', 'apellido', 'email', 'departamento', 'cargo']
+        campos_obligatorios = ['sid', 'nombre', 'apellido', 'email', 'departamento', 'cargo']
         campos_vacios = []
         
         for campo in campos_obligatorios:
