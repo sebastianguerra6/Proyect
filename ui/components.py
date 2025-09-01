@@ -75,7 +75,7 @@ class CamposGeneralesFrame:
         info_frame.grid(row=len(campos), column=0, columnspan=2, pady=(15, 0), sticky="ew")
         
         ttk.Label(info_frame, text="Nota: El número de caso se generará automáticamente al guardar", 
-                  font=("Arial", 9, "italic"), foreground="gray").pack(anchor=tk.CENTER)
+                  style="Normal.TLabel", foreground="gray").pack(anchor=tk.CENTER)
     
     def obtener_datos(self):
         """Obtiene los datos de los campos"""
@@ -129,7 +129,7 @@ class OnboardingFrame:
         
         # Título
         ttk.Label(main_container, text="Tipo de Onboarding", 
-                  font=("Arial", 14, "bold")).pack(pady=(0, 20))
+                  style="Section.TLabel").pack(pady=(0, 20))
         
         # Frame para radio buttons
         radio_frame = ttk.Frame(main_container)
@@ -197,7 +197,7 @@ class OffboardingFrame:
         
         # Título
         ttk.Label(main_container, text="Tipo de Offboarding", 
-                  font=("Arial", 14, "bold")).pack(pady=(0, 20))
+                  style="Section.TLabel").pack(pady=(0, 20))
         
         # Frame para radio buttons
         radio_frame = ttk.Frame(main_container)
@@ -266,7 +266,7 @@ class LateralMovementFrame:
         
         # Título
         ttk.Label(main_container, text="Información de Lateral Movement", 
-                  font=("Arial", 14, "bold")).pack(pady=(0, 20))
+                  style="Section.TLabel").pack(pady=(0, 20))
         
         # Frame para campos
         campos_frame = ttk.Frame(main_container)
@@ -280,7 +280,7 @@ class LateralMovementFrame:
         )
         
         # Título para radio buttons
-        ttk.Label(campos_frame, text="Tipo de Movimiento:", font=("Arial", 12, "bold")).grid(
+        ttk.Label(campos_frame, text="Tipo de Movimiento:", style="Subsection.TLabel").grid(
             row=1, column=0, columnspan=2, sticky=tk.W, pady=(20, 10))
         
         # Submenú con radio buttons
@@ -344,7 +344,9 @@ class EdicionBusquedaFrame:
             'closing_date_app_edicion': tk.StringVar(),
             'app_quality_edicion': tk.StringVar(),
             'confirmation_by_user_edicion': tk.StringVar(),
-            'comment_edicion': tk.StringVar()
+            'comment_edicion': tk.StringVar(),
+            'filtro_texto': tk.StringVar(),
+            'columna_filtro': tk.StringVar(value="SID")
         }
     
     def _crear_widgets(self):
@@ -374,17 +376,17 @@ class EdicionBusquedaFrame:
         
         # Título
         ttk.Label(scrollable_frame, text="Edición y Búsqueda de Registros", 
-                  font=("Arial", 16, "bold")).grid(row=0, column=0, pady=20, sticky="ew")
+                  style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
         # Frame principal
         main_frame = ttk.Frame(scrollable_frame)
-        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=20)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=10)  # Reducir pady
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(2, weight=1)  # La sección de resultados debe expandirse
         
         # Sección de búsqueda
-        busqueda_frame = ttk.LabelFrame(main_frame, text="Búsqueda", padding="20")
-        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 30))
+        busqueda_frame = ttk.LabelFrame(main_frame, text="Búsqueda", padding="15")  # Reducir padding
+        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
         busqueda_frame.columnconfigure(1, weight=1)
         
         # Búsqueda por número de caso
@@ -411,9 +413,54 @@ class EdicionBusquedaFrame:
             row=2, column=0, columnspan=3, pady=(15, 0)
         )
         
+        # Sección de filtrado
+        filtro_frame = ttk.LabelFrame(main_frame, text="Filtrado Avanzado", padding="15")  # Reducir padding
+        filtro_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
+        filtro_frame.columnconfigure(1, weight=1)
+        
+        # Filtro por texto con selección de columna
+        ttk.Label(filtro_frame, text="Filtrar por:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
+        
+        # Combobox para seleccionar columna
+        columnas_filtro = [
+            "SID", "Sub Unidad", "Cargo", "Status", "Request Date", 
+            "Ingreso Por", "Tipo", "APP Name", "Mail", "App Quality", 
+            "Confirmation by User", "Comment"
+        ]
+        columna_combobox = ttk.Combobox(filtro_frame, textvariable=self.variables['columna_filtro'], 
+                                       values=columnas_filtro, width=20, state="readonly")
+        columna_combobox.grid(row=0, column=1, sticky=tk.W, pady=8, padx=(0, 15))
+        
+        # Input para el texto del filtro
+        filtro_entry = ttk.Entry(filtro_frame, textvariable=self.variables['filtro_texto'], 
+                 width=40)
+        filtro_entry.grid(row=0, column=2, sticky=(tk.W, tk.E), pady=8, padx=(0, 15))
+        
+        # Tooltip informativo
+        ttk.Label(filtro_frame, text="💡 Escriba para filtrar en tiempo real", 
+                 style="Normal.TLabel", foreground="gray").grid(
+            row=1, column=2, sticky=tk.W, pady=(2, 0)
+        )
+        
+        # Binding para filtrado en tiempo real (con delay)
+        self.filtro_delay_id = None
+        filtro_entry.bind('<KeyRelease>', self._on_filtro_change)
+        
+        # Botón para aplicar filtro
+        ttk.Button(filtro_frame, text="🔍 Aplicar Filtro", 
+                  command=self.aplicar_filtro).grid(
+            row=0, column=3, padx=(15, 0), pady=8
+        )
+        
+        # Botón para limpiar filtro
+        ttk.Button(filtro_frame, text="🧹 Limpiar Filtro", 
+                  command=self.limpiar_filtro).grid(
+            row=2, column=0, columnspan=4, pady=(15, 0)
+        )
+        
         # Sección de edición
-        edicion_frame = ttk.LabelFrame(main_frame, text="Edición de Campos", padding="20")
-        edicion_frame.grid(row=1, column=0, sticky="ew", pady=(0, 30))
+        edicion_frame = ttk.LabelFrame(main_frame, text="Edición de Campos", padding="15")  # Reducir padding
+        edicion_frame.grid(row=2, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
         edicion_frame.columnconfigure(1, weight=1)
         
         # Campos básicos
@@ -447,17 +494,17 @@ class EdicionBusquedaFrame:
         # Crear campos básicos
         for i, campo in enumerate(campos_basicos):
             label_text, var_name, tipo = campo[:3]
-            ttk.Label(edicion_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=5, padx=(0, 15))
+            ttk.Label(edicion_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=3, padx=(0, 15))  # Reducir pady
             
             if tipo == "entry":
                 ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=5
+                    row=i, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
                             values=valores, width=47).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=5
+                    row=i, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
                 )
         
         # Separador
@@ -469,29 +516,29 @@ class EdicionBusquedaFrame:
         for i, campo in enumerate(campos_adicionales):
             label_text, var_name, tipo = campo[:3]
             row = len(campos_basicos) + 1 + i
-            ttk.Label(edicion_frame, text=label_text).grid(row=row, column=0, sticky=tk.W, pady=5, padx=(0, 15))
+            ttk.Label(edicion_frame, text=label_text).grid(row=row, column=0, sticky=tk.W, pady=3, padx=(0, 15))  # Reducir pady
             
             if tipo == "entry":
                 ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
-                    row=row, column=1, sticky=(tk.W, tk.E), pady=5
+                    row=row, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
                             values=valores, width=47).grid(
-                    row=row, column=1, sticky=(tk.W, tk.E), pady=5
+                    row=row, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
                 )
         
         # Botones de acción
         botones_frame = ttk.Frame(edicion_frame)
-        botones_frame.grid(row=len(campos_basicos) + len(campos_adicionales) + 1, column=0, columnspan=2, pady=20)
+        botones_frame.grid(row=len(campos_basicos) + len(campos_adicionales) + 1, column=0, columnspan=2, pady=10)  # Reducir pady
         
         ttk.Button(botones_frame, text="Guardar Cambios", command=self.guardar_cambios).pack(side=tk.LEFT, padx=10)
         ttk.Button(botones_frame, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
         
         # Sección de resultados de búsqueda
-        resultados_frame = ttk.LabelFrame(main_frame, text="Resultados de Búsqueda", padding="20")
-        resultados_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 30))
+        resultados_frame = ttk.LabelFrame(main_frame, text="Resultados de Búsqueda", padding="15")  # Reducir padding
+        resultados_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 10))  # Reducir pady
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
@@ -501,8 +548,8 @@ class EdicionBusquedaFrame:
         tabla_frame.columnconfigure(0, weight=1)
         tabla_frame.rowconfigure(0, weight=1)
         
-        # Treeview para mostrar resultados
-        self.tree = ttk.Treeview(tabla_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "APP Name", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings", height=8)
+        # Treeview para mostrar resultados (aumentar altura para mejor visualización)
+        self.tree = ttk.Treeview(tabla_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "APP Name", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings", height=12)
         
         # Configurar columnas
         self.tree.heading("Número Caso", text="Número Caso")
@@ -556,8 +603,8 @@ class EdicionBusquedaFrame:
         canvas.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
         
-        # Configurar el canvas para que se expanda
-        canvas.configure(width=1200, height=600)
+        # Configurar el canvas para que se expanda (reducir altura para dar más espacio a la tabla)
+        canvas.configure(width=1200, height=400)
         
         # Binding para scroll con mouse
         def _on_mousewheel(event):
@@ -646,6 +693,148 @@ class EdicionBusquedaFrame:
         except Exception as e:
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
             print(f"Error en buscar_todos_los_registros: {e}")
+    
+    def aplicar_filtro(self):
+        """Aplica un filtro por texto en la columna seleccionada"""
+        texto_filtro = self.variables['filtro_texto'].get().strip()
+        columna = self.variables['columna_filtro'].get()
+        
+        if not texto_filtro:
+            messagebox.showwarning("Advertencia", "Por favor ingrese texto para filtrar")
+            return
+        
+        try:
+            if self.service and hasattr(self.service, 'buscar_procesos'):
+                # Mapear nombres de columnas a campos de la base de datos
+                mapeo_columnas = {
+                    "SID": "sid",
+                    "Sub Unidad": "nueva_sub_unidad",
+                    "Cargo": "nuevo_cargo",
+                    "Status": "status",
+                    "Request Date": "request_date",
+                    "Ingreso Por": "ingreso_por",
+                    "Tipo": "tipo_proceso",
+                    "APP Name": "app_name",
+                    "Mail": "mail",
+                    "App Quality": "app_quality",
+                    "Confirmation by User": "confirmation_by_user",
+                    "Comment": "comment"
+                }
+                
+                campo_bd = mapeo_columnas.get(columna, "sid")
+                
+                # Crear filtro para la búsqueda
+                filtros = {campo_bd: texto_filtro}
+                resultados = self.service.buscar_procesos(filtros)
+                
+                # Aplicar filtro adicional en memoria si es necesario
+                if resultados:
+                    resultados_filtrados = []
+                    for resultado in resultados:
+                        valor_campo = str(resultado.get(campo_bd, '')).lower()
+                        if texto_filtro.lower() in valor_campo:
+                            resultados_filtrados.append(resultado)
+                    resultados = resultados_filtrados
+                
+                # Mostrar resultados con mensaje de confirmación
+                self.mostrar_resultados_busqueda(resultados, f"filtro '{texto_filtro}' en columna '{columna}'")
+            else:
+                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error aplicando filtro: {str(e)}")
+            print(f"Error en aplicar_filtro: {e}")
+    
+    def limpiar_filtro(self):
+        """Limpia el filtro y muestra todos los registros"""
+        self.variables['filtro_texto'].set("")
+        self.variables['columna_filtro'].set("SID")
+        self.buscar_todos_los_registros()
+    
+    def _on_filtro_change(self, event):
+        """Maneja el cambio en el campo de filtro para filtrado en tiempo real"""
+        # Cancelar el delay anterior si existe
+        if self.filtro_delay_id:
+            self.parent.after_cancel(self.filtro_delay_id)
+        
+        # Programar nuevo filtrado con delay de 500ms
+        self.filtro_delay_id = self.parent.after(500, self._aplicar_filtro_tiempo_real)
+    
+    def _aplicar_filtro_tiempo_real(self):
+        """Aplica el filtro en tiempo real sin mostrar mensajes"""
+        texto_filtro = self.variables['filtro_texto'].get().strip()
+        columna = self.variables['columna_filtro'].get()
+        
+        if not texto_filtro:
+            # Si no hay texto, mostrar todos los registros
+            self.buscar_todos_los_registros()
+            return
+        
+        try:
+            if self.service and hasattr(self.service, 'buscar_procesos'):
+                # Mapear nombres de columnas a campos de la base de datos
+                mapeo_columnas = {
+                    "SID": "sid",
+                    "Sub Unidad": "nueva_sub_unidad",
+                    "Cargo": "nuevo_cargo",
+                    "Status": "status",
+                    "Request Date": "request_date",
+                    "Ingreso Por": "ingreso_por",
+                    "Tipo": "tipo_proceso",
+                    "APP Name": "app_name",
+                    "Mail": "mail",
+                    "App Quality": "app_quality",
+                    "Confirmation by User": "confirmation_by_user",
+                    "Comment": "comment"
+                }
+                
+                campo_bd = mapeo_columnas.get(columna, "sid")
+                
+                # Crear filtro para la búsqueda
+                filtros = {campo_bd: texto_filtro}
+                resultados = self.service.buscar_procesos(filtros)
+                
+                # Aplicar filtro adicional en memoria si es necesario
+                if resultados:
+                    resultados_filtrados = []
+                    for resultado in resultados:
+                        valor_campo = str(resultado.get(campo_bd, '')).lower()
+                        if texto_filtro.lower() in valor_campo:
+                            resultados_filtrados.append(resultado)
+                    resultados = resultados_filtrados
+                
+                # Mostrar resultados sin mensaje de confirmación
+                self._mostrar_resultados_sin_mensaje(resultados)
+            else:
+                print("Servicio no disponible para filtrado en tiempo real")
+        except Exception as e:
+            print(f"Error en filtrado en tiempo real: {e}")
+    
+    def _mostrar_resultados_sin_mensaje(self, resultados):
+        """Muestra los resultados sin mostrar mensajes de confirmación"""
+        # Limpiar resultados anteriores
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        if resultados:
+            for resultado in resultados:
+                # Extraer valores del resultado de la base de datos
+                valores = (
+                    resultado.get('numero_caso', ''),
+                    resultado.get('sid', ''),
+                    resultado.get('nueva_sub_unidad', ''),
+                    resultado.get('nuevo_cargo', ''),
+                    resultado.get('status', ''),
+                    resultado.get('request_date', ''),
+                    resultado.get('ingreso_por', ''),
+                    resultado.get('tipo_proceso', ''),
+                    resultado.get('app_name', ''),
+                    resultado.get('mail', ''),
+                    resultado.get('closing_date_app', ''),
+                    resultado.get('app_quality', ''),
+                    resultado.get('confirmation_by_user', ''),
+                    resultado.get('comment', '')
+                )
+                self.tree.insert("", "end", values=valores)
     
     def simular_busqueda_por_caso(self, numero_caso):
         """Método obsoleto - reemplazado por buscar_por_numero_caso"""
@@ -777,7 +966,9 @@ class CreacionPersonaFrame:
             'cargo': tk.StringVar(),
             'fecha_contratacion': tk.StringVar(),
             'salario': tk.StringVar(),
-            'estado': tk.StringVar(value="Activo")
+            'estado': tk.StringVar(value="Activo"),
+            'filtro_texto': tk.StringVar(),
+            'columna_filtro': tk.StringVar(value="SID")
         }
     
     def _crear_widgets(self):
@@ -807,7 +998,7 @@ class CreacionPersonaFrame:
         
         # Título
         ttk.Label(scrollable_frame, text="Crear Nueva Persona en Headcount", 
-                  font=("Arial", 16, "bold")).grid(row=0, column=0, pady=20, sticky="ew")
+                  style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
         # Frame principal con scroll
         main_frame = ttk.Frame(scrollable_frame)
@@ -875,9 +1066,52 @@ class CreacionPersonaFrame:
         ttk.Button(botones_busqueda_frame, text="Mostrar Todos", 
                   command=self.mostrar_todos).pack(side=tk.LEFT, padx=5)
         
+        # Sección de filtrado avanzado
+        filtro_frame = ttk.LabelFrame(busqueda_frame, text="Filtrado Avanzado", padding="15")
+        filtro_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        filtro_frame.columnconfigure(1, weight=1)
+        
+        # Filtro por texto con selección de columna
+        ttk.Label(filtro_frame, text="Filtrar por:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
+        
+        # Combobox para seleccionar columna
+        columnas_filtro = [
+            "SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"
+        ]
+        columna_combobox = ttk.Combobox(filtro_frame, textvariable=self.variables['columna_filtro'], 
+                                       values=columnas_filtro, width=20, state="readonly")
+        columna_combobox.grid(row=0, column=1, sticky=tk.W, pady=8, padx=(0, 15))
+        
+        # Input para el texto del filtro
+        filtro_entry = ttk.Entry(filtro_frame, textvariable=self.variables['filtro_texto'], 
+                 width=40)
+        filtro_entry.grid(row=0, column=2, sticky=(tk.W, tk.E), pady=8, padx=(0, 15))
+        
+        # Tooltip informativo
+        ttk.Label(filtro_frame, text="💡 Escriba para filtrar en tiempo real", 
+                 style="Normal.TLabel", foreground="gray").grid(
+            row=1, column=2, sticky=tk.W, pady=(2, 0)
+        )
+        
+        # Binding para filtrado en tiempo real (con delay)
+        self.filtro_delay_id = None
+        filtro_entry.bind('<KeyRelease>', self._on_filtro_change)
+        
+        # Botón para aplicar filtro
+        ttk.Button(filtro_frame, text="🔍 Aplicar Filtro", 
+                  command=self.aplicar_filtro).grid(
+            row=0, column=3, padx=(15, 0), pady=8
+        )
+        
+        # Botón para limpiar filtro
+        ttk.Button(filtro_frame, text="🧹 Limpiar Filtro", 
+                  command=self.limpiar_filtro).grid(
+            row=2, column=0, columnspan=4, pady=(15, 0)
+        )
+        
         # Tabla de resultados
         resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        resultados_frame.grid(row=2, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
         # Crear Treeview para mostrar resultados
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
@@ -964,27 +1198,162 @@ class CreacionPersonaFrame:
             # Simulación de mostrar todos
             self.simular_mostrar_todos()
     
-    def mostrar_resultados_busqueda(self, resultados):
-        """Muestra los resultados de la búsqueda en la tabla"""
+    def aplicar_filtro(self):
+        """Aplica un filtro por texto en la columna seleccionada"""
+        texto_filtro = self.variables['filtro_texto'].get().strip()
+        columna = self.variables['columna_filtro'].get()
+        
+        if not texto_filtro:
+            messagebox.showwarning("Advertencia", "Por favor ingrese texto para filtrar")
+            return
+        
+        try:
+            if self.service and hasattr(self.service, 'obtener_todo_headcount'):
+                # Obtener todos los registros primero
+                todos_resultados = self.service.obtener_todo_headcount()
+                
+                # Mapear nombres de columnas a campos de la base de datos
+                mapeo_columnas = {
+                    "SID": "sid",
+                    "Nombre": "nombre",
+                    "Apellido": "apellido",
+                    "Email": "email",
+                    "Departamento": "departamento",
+                    "Cargo": "cargo",
+                    "Estado": "estado"
+                }
+                
+                campo_bd = mapeo_columnas.get(columna, "sid")
+                
+                # Aplicar filtro en memoria
+                if todos_resultados:
+                    resultados_filtrados = []
+                    for resultado in todos_resultados:
+                        valor_campo = str(resultado.get(campo_bd, '')).lower()
+                        if texto_filtro.lower() in valor_campo:
+                            resultados_filtrados.append(resultado)
+                    todos_resultados = resultados_filtrados
+                
+                self.mostrar_resultados_busqueda(todos_resultados)
+                messagebox.showinfo("Filtro", f"Se encontraron {len(todos_resultados)} registros para: filtro '{texto_filtro}' en columna '{columna}'")
+            else:
+                # Si no hay servicio, usar simulación
+                self._aplicar_filtro_simulado(texto_filtro, columna)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error aplicando filtro: {str(e)}")
+            print(f"Error en aplicar_filtro: {e}")
+    
+    def limpiar_filtro(self):
+        """Limpia el filtro y muestra todos los registros"""
+        self.variables['filtro_texto'].set("")
+        self.variables['columna_filtro'].set("SID")
+        self.mostrar_todos()
+    
+    def _on_filtro_change(self, event):
+        """Maneja el cambio en el campo de filtro para filtrado en tiempo real"""
+        # Cancelar el delay anterior si existe
+        if self.filtro_delay_id:
+            self.parent.after_cancel(self.filtro_delay_id)
+        
+        # Programar nuevo filtrado con delay de 500ms
+        self.filtro_delay_id = self.parent.after(500, self._aplicar_filtro_tiempo_real)
+    
+    def _aplicar_filtro_tiempo_real(self):
+        """Aplica el filtro en tiempo real sin mostrar mensajes"""
+        texto_filtro = self.variables['filtro_texto'].get().strip()
+        columna = self.variables['columna_filtro'].get()
+        
+        if not texto_filtro:
+            # Si no hay texto, mostrar todos los registros
+            self.mostrar_todos()
+            return
+        
+        try:
+            if self.service and hasattr(self.service, 'obtener_todo_headcount'):
+                # Obtener todos los registros primero
+                todos_resultados = self.service.obtener_todo_headcount()
+                
+                # Mapear nombres de columnas a campos de la base de datos
+                mapeo_columnas = {
+                    "SID": "sid",
+                    "Nombre": "nombre",
+                    "Apellido": "apellido",
+                    "Email": "email",
+                    "Departamento": "departamento",
+                    "Cargo": "cargo",
+                    "Estado": "estado"
+                }
+                
+                campo_bd = mapeo_columnas.get(columna, "sid")
+                
+                # Aplicar filtro en memoria
+                if todos_resultados:
+                    resultados_filtrados = []
+                    for resultado in todos_resultados:
+                        valor_campo = str(resultado.get(campo_bd, '')).lower()
+                        if texto_filtro.lower() in valor_campo:
+                            resultados_filtrados.append(resultado)
+                    todos_resultados = resultados_filtrados
+                
+                # Mostrar resultados sin mensaje de confirmación
+                self._mostrar_resultados_sin_mensaje(todos_resultados)
+            else:
+                # Si no hay servicio, usar simulación
+                self._aplicar_filtro_simulado(texto_filtro, columna)
+        except Exception as e:
+            print(f"Error en filtrado en tiempo real: {e}")
+    
+    def _aplicar_filtro_simulado(self, texto_filtro, columna):
+        """Aplica filtro usando datos simulados cuando no hay servicio"""
+        # Datos de ejemplo
+        datos_ejemplo = [
+            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
+             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
+            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
+             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'},
+            {'sid': 'EMP003', 'nombre': 'Carlos', 'apellido': 'López', 'email': 'carlos.lopez@empresa.com', 
+             'departamento': 'Finanzas', 'cargo': 'Contador', 'estado': 'Activo'}
+        ]
+        
+        # Mapear nombres de columnas a campos de los datos simulados
+        mapeo_columnas = {
+            "SID": "sid",
+            "Nombre": "nombre",
+            "Apellido": "apellido",
+            "Email": "email",
+            "Departamento": "departamento",
+            "Cargo": "cargo",
+            "Estado": "estado"
+        }
+        
+        campo_bd = mapeo_columnas.get(columna, "sid")
+        
+        # Aplicar filtro
+        resultados_filtrados = []
+        for resultado in datos_ejemplo:
+            valor_campo = str(resultado.get(campo_bd, '')).lower()
+            if texto_filtro.lower() in valor_campo:
+                resultados_filtrados.append(resultado)
+        
+        self._mostrar_resultados_sin_mensaje(resultados_filtrados)
+    
+    def _mostrar_resultados_sin_mensaje(self, resultados):
+        """Muestra los resultados sin mostrar mensajes de confirmación"""
         # Limpiar tabla anterior
         for item in self.tree.get_children():
             self.tree.delete(item)
         
-        if not resultados:
-            messagebox.showinfo("Información", "No se encontraron resultados")
-            return
-        
-        # Insertar resultados en la tabla
-        for resultado in resultados:
-            self.tree.insert("", "end", values=(
-                resultado.get('sid', ''),
-                resultado.get('nombre', ''),
-                resultado.get('apellido', ''),
-                resultado.get('email', ''),
-                resultado.get('departamento', ''),
-                resultado.get('cargo', ''),
-                resultado.get('estado', '')
-            ))
+        if resultados:
+            for resultado in resultados:
+                self.tree.insert("", "end", values=(
+                    resultado.get('sid', ''),
+                    resultado.get('nombre', ''),
+                    resultado.get('email', ''),
+                    resultado.get('apellido', ''),
+                    resultado.get('departamento', ''),
+                    resultado.get('cargo', ''),
+                    resultado.get('estado', '')
+                ))
     
     def simular_busqueda_por_sid(self, sid):
         """Simula una búsqueda por SID (para cuando no hay servicio)"""
