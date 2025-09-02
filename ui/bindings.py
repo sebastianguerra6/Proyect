@@ -237,10 +237,10 @@ class ReconciliationBindings:
                     "Pendiente"
                 ), tags=("to_revoke",))
             
-            # Aplicar colores a las filas
-            self.tree.tag_configure("current", background="#e8f5e8")
-            self.tree.tag_configure("target", background="#e3f2fd")
-            self.tree.tag_configure("to_grant", background="#fff3e0")
+            # Aplicar colores a las filas - Cambiados a tonos de rojo
+            self.tree.tag_configure("current", background="#ffebee")
+            self.tree.tag_configure("target", background="#ffcdd2")
+            self.tree.tag_configure("to_grant", background="#ffcdd2")
             self.tree.tag_configure("to_revoke", background="#ffebee")
             
         except Exception as e:
@@ -325,11 +325,11 @@ class ReconciliationBindings:
                         new_values[5] = "Registrado"
                         self.tree.item(item, values=tuple(new_values))
                         
-                        # Cambiar color a verde
+                        # Cambiar color a rojo
                         self.tree.item(item, tags=("registered",))
             
             # Configurar color para tickets registrados
-            self.tree.tag_configure("registered", background="#c8e6c9")
+            self.tree.tag_configure("registered", background="#ffcdd2")
             
         except Exception as e:
             print(f"Error actualizando estado del Treeview: {e}")

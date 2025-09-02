@@ -21,7 +21,7 @@ def aplicar_estilos_personalizados():
                    borderwidth=2)
     
     style.map('Nav.TButton',
-              background=[('active', '#e0e0e0'), ('pressed', '#d0d0d0')],
+              background=[('active', '#ffcdd2'), ('pressed', '#ef9a9a')],
               relief=[('pressed', 'sunken'), ('active', 'raised')])
     
     # Estilos para botón de salida
@@ -36,12 +36,12 @@ def aplicar_estilos_personalizados():
               background=[('active', '#ffcdd2'), ('pressed', '#ef9a9a')],
               relief=[('pressed', 'sunken'), ('active', 'raised')])
     
-    # Estilos para botones de acción
+    # Estilos para botones de acción - Cambiados a tonos de rojo
     estilos_botones = {
-        'Success.TButton': {'background': '#e8f5e8', 'foreground': '#2e7d32'},
-        'Info.TButton': {'background': '#e3f2fd', 'foreground': '#1565c0'},
-        'Warning.TButton': {'background': '#fff3e0', 'foreground': '#ef6c00'},
-        'Danger.TButton': {'background': '#ffebee', 'foreground': '#d32f2f'}
+        'Success.TButton': {'background': '#ffebee', 'foreground': '#d32f2f'},
+        'Info.TButton': {'background': '#ffebee', 'foreground': '#c62828'},
+        'Warning.TButton': {'background': '#ffcdd2', 'foreground': '#b71c1c'},
+        'Danger.TButton': {'background': '#ffcdd2', 'foreground': '#d32f2f'}
     }
     
     for nombre, colores in estilos_botones.items():
@@ -52,11 +52,11 @@ def aplicar_estilos_personalizados():
                        borderwidth=2,
                        **colores)
     
-    # Estilos para labels
+    # Estilos para labels - Cambiados a tonos de rojo
     estilos_labels = {
-        'Title.TLabel': {'font': ('Arial', 20, 'bold'), 'foreground': '#1976d2'},
-        'Section.TLabel': {'font': ('Arial', 18, 'bold'), 'foreground': '#388e3c'},
-        'Subsection.TLabel': {'font': ('Arial', 14, 'bold'), 'foreground': '#1976d2'}
+        'Title.TLabel': {'font': ('Arial', 20, 'bold'), 'foreground': '#d32f2f'},
+        'Section.TLabel': {'font': ('Arial', 18, 'bold'), 'foreground': '#c62828'},
+        'Subsection.TLabel': {'font': ('Arial', 14, 'bold'), 'foreground': '#b71c1c'}
     }
     
     for nombre, config in estilos_labels.items():
@@ -66,11 +66,11 @@ def aplicar_estilos_personalizados():
     style.configure('Main.TFrame', relief='flat', borderwidth=0)
     style.configure('Nav.TLabelframe', relief='raised', borderwidth=2)
     
-    # Estilos para pestañas
+    # Estilos para pestañas - Cambiados a tonos de rojo
     style.configure('TNotebook.Tab',
                    font=('Arial', 10, 'bold'),
                    padding=(15, 8))
     
     style.map('TNotebook.Tab',
-              background=[('selected', '#e3f2fd'), ('active', '#f5f5f5')],
-              foreground=[('selected', '#1976d2'), ('active', '#333333')])
+              background=[('selected', '#ffebee'), ('active', '#ffcdd2')],
+              foreground=[('selected', '#d32f2f'), ('active', '#b71c1c')])

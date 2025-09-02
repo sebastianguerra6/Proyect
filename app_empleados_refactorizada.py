@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
+import os
+import sqlite3
 
 from models import Empleado
 from data import EmpleadoRepository
@@ -199,34 +201,6 @@ class AppEmpleadosRefactorizada:
         except Exception as e:
             print(f"Error ajustando para pantalla grande: {e}")
     
-    def _mostrar_info_responsive(self):
-        """Muestra información sobre el estado responsive de la aplicación"""
-        try:
-            width = self.root.winfo_width()
-            height = self.root.winfo_height()
-            screen_width = self.root.winfo_screenwidth()
-            screen_height = self.root.winfo_screenheight()
-            
-            info = f"📱 Información Responsive\n\n"
-            info += f"Tipo de pantalla: {getattr(self, 'tipo_pantalla', 'No detectado')}\n"
-            info += f"Resolución de pantalla: {screen_width}x{screen_height}\n"
-            info += f"Tamaño de ventana: {width}x{height}\n"
-            info += f"Tamaño mínimo: 800x500\n\n"
-            
-            if width < 1200:
-                info += "🎯 Modo: Pantalla pequeña (compacto)"
-            elif width < 1400:
-                info += "🎯 Modo: Pantalla mediana (balanceado)"
-            else:
-                info += "🎯 Modo: Pantalla grande (espacioso)"
-            
-            info += "\n\n💡 La aplicación se ajusta automáticamente al redimensionar la ventana"
-            
-            messagebox.showinfo("Información Responsive", info)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error mostrando información responsive: {str(e)}")
-    
     def _ajustar_espaciado_responsive(self, width, height):
         """Ajusta el espaciado según el tamaño de la ventana"""
         try:
@@ -286,7 +260,8 @@ class AppEmpleadosRefactorizada:
             ("📋 Gestión de Procesos", "gestion"),
             ("🔍 Edición y Búsqueda", "edicion"),
             ("👤 Crear Persona", "creacion"),
-            ("🔐 Conciliación de Accesos", "conciliacion")
+            ("🔐 Conciliación de Accesos", "conciliacion"),
+            ("📱 Gestión de Aplicaciones", "aplicaciones")
         ]
         
         self.botones_navegacion = {}
@@ -318,6 +293,7 @@ class AppEmpleadosRefactorizada:
         self.crear_componente_edicion()
         self.crear_componente_creacion()
         self.crear_componente_conciliacion()
+        self.crear_componente_aplicaciones()
         
         # Configurar contenido responsive
         self._configurar_contenido_responsive()
@@ -545,10 +521,16 @@ class AppEmpleadosRefactorizada:
         self.componentes['conciliacion'].frame.grid(row=0, column=0, sticky="nsew")
         self.componentes['conciliacion'].frame.grid_remove()
     
+    def crear_componente_aplicaciones(self):
+        """Crea el componente de gestión de aplicaciones"""
+        self.componentes['aplicaciones'] = AplicacionesFrame(self.contenido_principal_frame)
+        self.componentes['aplicaciones'].frame.grid(row=0, column=0, sticky="nsew")
+        self.componentes['aplicaciones'].frame.grid_remove()
+    
     def cambiar_contenido(self, tipo_contenido):
         """Cambia el contenido mostrado según el botón seleccionado"""
         # Ocultar todos los componentes
-        componentes_a_ocultar = ['gestion_frame', 'edicion_busqueda', 'creacion_persona', 'conciliacion']
+        componentes_a_ocultar = ['gestion_frame', 'edicion_busqueda', 'creacion_persona', 'conciliacion', 'aplicaciones']
         for comp in componentes_a_ocultar:
             if comp in self.componentes:
                 if comp == 'gestion_frame':
@@ -565,6 +547,8 @@ class AppEmpleadosRefactorizada:
             self.componentes['creacion_persona'].frame.grid()
         elif tipo_contenido == "conciliacion" and 'conciliacion' in self.componentes:
             self.componentes['conciliacion'].frame.grid()
+        elif tipo_contenido == "aplicaciones" and 'aplicaciones' in self.componentes:
+            self.componentes['aplicaciones'].frame.grid()
         
         # Actualizar estado visual de los botones
         for valor, btn in self.botones_navegacion.items():
@@ -894,6 +878,624 @@ class ConciliacionFrame:
                 '⚠️ Excesivo',
                 '🔴 Revocar'
             ))
+
+
+class AplicacionesFrame:
+    """Frame para la gestión de aplicaciones del sistema"""
+    
+    def __init__(self, parent):
+        self.parent = parent
+        self.frame = ttk.Frame(parent)
+        self.frame.columnconfigure(0, weight=1)
+        self.frame.rowconfigure(1, weight=1)
+        
+        # Inicializar gestor de aplicaciones
+        self.app_manager = ApplicationManager()
+        
+        # Variables
+        self.applications = []
+        self.filtered_applications = []
+        self.current_filter = ""
+        
+        self._crear_interfaz()
+        self._cargar_aplicaciones()
+    
+    def _crear_interfaz(self):
+        """Crea la interfaz de gestión de aplicaciones"""
+        # Título principal
+        ttk.Label(self.frame, text="📱 Gestión de Aplicaciones del Sistema", 
+                  style="Title.TLabel").grid(row=0, column=0, pady=(0, 25), sticky="ew")
+        
+        # Frame principal
+        main_content = ttk.Frame(self.frame)
+        main_content.grid(row=1, column=0, sticky="nsew", padx=20)
+        main_content.columnconfigure(0, weight=1)
+        main_content.rowconfigure(1, weight=1)
+        
+        # Barra de herramientas
+        self._crear_barra_herramientas(main_content)
+        
+        # Tabla de aplicaciones
+        self._crear_tabla_aplicaciones(main_content)
+        
+        # Barra de estado
+        self._crear_barra_estado(main_content)
+    
+    def _crear_barra_herramientas(self, parent):
+        """Crea la barra de herramientas"""
+        toolbar = ttk.Frame(parent)
+        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 15))
+        
+        # Botones principales
+        ttk.Button(toolbar, text="➕ Nueva Aplicación", command=self._agregar_aplicacion, 
+                  style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar, text="✏️ Editar", command=self._editar_aplicacion, 
+                  style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar, text="🗑️ Eliminar", command=self._eliminar_aplicacion, 
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Separador
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # Búsqueda
+        ttk.Label(toolbar, text="🔍 Buscar:").pack(side=tk.LEFT, padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace('w', self._on_busqueda_change)
+        search_entry = ttk.Entry(toolbar, textvariable=self.search_var, width=30)
+        search_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Botón de actualizar
+        ttk.Button(toolbar, text="🔄 Actualizar", command=self._actualizar_datos).pack(side=tk.LEFT)
+        
+        # Botón de exportar
+        ttk.Button(toolbar, text="📊 Exportar", command=self._exportar_datos).pack(side=tk.LEFT, padx=(10, 0))
+    
+    def _crear_tabla_aplicaciones(self, parent):
+        """Crea la tabla de aplicaciones"""
+        # Frame para la tabla
+        table_frame = ttk.Frame(parent)
+        table_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 15))
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+        
+        # Crear Treeview
+        columns = ('ID', 'Nombre', 'Descripción', 'Categoría', 'Propietario', 'Estado', 'Fecha Creación')
+        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
+        
+        # Configurar columnas
+        self.tree.heading('ID', text='ID')
+        self.tree.heading('Nombre', text='Nombre de la Aplicación')
+        self.tree.heading('Descripción', text='Descripción')
+        self.tree.heading('Categoría', text='Categoría')
+        self.tree.heading('Propietario', text='Propietario')
+        self.tree.heading('Estado', text='Estado')
+        self.tree.heading('Fecha Creación', text='Fecha de Creación')
+        
+        # Configurar anchos de columna
+        self.tree.column('ID', width=50, minwidth=50)
+        self.tree.column('Nombre', width=200, minwidth=150)
+        self.tree.column('Descripción', width=250, minwidth=200)
+        self.tree.column('Categoría', width=120, minwidth=100)
+        self.tree.column('Propietario', width=120, minwidth=100)
+        self.tree.column('Estado', width=100, minwidth=80)
+        self.tree.column('Fecha Creación', width=150, minwidth=120)
+        
+        # Scrollbars
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        
+        # Grid de la tabla
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        
+        # Eventos
+        self.tree.bind('<Double-1>', self._on_doble_clic)
+        self.tree.bind('<Delete>', lambda e: self._eliminar_aplicacion())
+    
+    def _crear_barra_estado(self, parent):
+        """Crea la barra de estado"""
+        status_frame = ttk.Frame(parent)
+        status_frame.grid(row=2, column=0, sticky="ew", pady=(15, 0))
+        
+        self.status_label = ttk.Label(status_frame, text="Listo", style="Success.TLabel")
+        self.status_label.pack(side=tk.LEFT)
+        
+        # Información de la base de datos
+        self.db_info_label = ttk.Label(status_frame, text="", style="Header.TLabel")
+        self.db_info_label.pack(side=tk.RIGHT)
+    
+    def _cargar_aplicaciones(self):
+        """Carga las aplicaciones desde la base de datos"""
+        try:
+            self.applications = self.app_manager.get_all_applications()
+            self.filtered_applications = self.applications.copy()
+            self._actualizar_tabla()
+            self._actualizar_estado(f"✅ Cargadas {len(self.applications)} aplicaciones")
+            self._actualizar_info_bd()
+        except Exception as e:
+            self._actualizar_estado(f"❌ Error al cargar aplicaciones: {str(e)}", error=True)
+    
+    def _actualizar_tabla(self):
+        """Actualiza la tabla con los datos actuales"""
+        # Limpiar tabla
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # Insertar datos filtrados
+        for app in self.filtered_applications:
+            # Formatear fecha
+            fecha = app.get('fecha_creacion', '')
+            try:
+                fecha_formatted = datetime.fromisoformat(fecha).strftime('%d/%m/%Y %H:%M') if fecha else 'N/A'
+            except:
+                fecha_formatted = fecha or 'N/A'
+            
+            # Determinar color del estado
+            status = app.get('status', 'Activo')
+            tags = ('active',) if status == 'Activo' else ('inactive',) if status == 'Inactivo' else ('maintenance',)
+            
+            self.tree.insert('', 'end', values=(
+                app.get('id', ''),
+                app.get('app_name', ''),
+                app.get('description', ''),
+                app.get('category', ''),
+                app.get('owner', ''),
+                status,
+                fecha_formatted
+            ), tags=tags)
+        
+        # Configurar colores de las filas
+        self.tree.tag_configure('active', background='#d4edda')
+        self.tree.tag_configure('inactive', background='#f8d7da')
+        self.tree.tag_configure('maintenance', background='#fff3cd')
+    
+    def _on_busqueda_change(self, *args):
+        """Maneja cambios en la búsqueda"""
+        search_term = self.search_var.get().lower()
+        self.current_filter = search_term
+        
+        if not search_term:
+            self.filtered_applications = self.applications.copy()
+        else:
+            self.filtered_applications = [
+                app for app in self.applications
+                if (search_term in app.get('app_name', '').lower() or
+                    search_term in app.get('description', '').lower() or
+                    search_term in app.get('category', '').lower() or
+                    search_term in app.get('owner', '').lower())
+            ]
+        
+        self._actualizar_tabla()
+        self._actualizar_estado(f"🔍 Mostrando {len(self.filtered_applications)} de {len(self.applications)} aplicaciones")
+    
+    def _agregar_aplicacion(self):
+        """Abre diálogo para agregar nueva aplicación"""
+        categories = self.app_manager.get_categories()
+        owners = self.app_manager.get_owners()
+        
+        dialog = ApplicationDialog(self.frame, "Nueva Aplicación", categories=categories, owners=owners)
+        self.frame.wait_window(dialog.dialog)
+        
+        if dialog.result:
+            success = self.app_manager.add_application(
+                dialog.result['app_name'],
+                dialog.result['description'],
+                dialog.result['category'],
+                dialog.result['owner']
+            )
+            
+            if success:
+                self._actualizar_estado("✅ Aplicación agregada correctamente")
+                self._cargar_aplicaciones()
+            else:
+                self._actualizar_estado("❌ Error al agregar aplicación", error=True)
+    
+    def _editar_aplicacion(self):
+        """Edita la aplicación seleccionada"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione una aplicación para editar")
+            return
+        
+        item = self.tree.item(selection[0])
+        app_id = item['values'][0]
+        
+        # Buscar la aplicación en la lista
+        app_data = None
+        for app in self.applications:
+            if app['id'] == app_id:
+                app_data = app
+                break
+        
+        if not app_data:
+            messagebox.showerror("Error", "No se pudo encontrar la aplicación seleccionada")
+            return
+        
+        categories = self.app_manager.get_categories()
+        owners = self.app_manager.get_owners()
+        
+        dialog = ApplicationDialog(self.frame, "Editar Aplicación", app_data, categories, owners)
+        self.frame.wait_window(dialog.dialog)
+        
+        if dialog.result:
+            success = self.app_manager.update_application(
+                app_id,
+                dialog.result['app_name'],
+                dialog.result['description'],
+                dialog.result['category'],
+                dialog.result['owner'],
+                dialog.result.get('status', 'Activo')
+            )
+            
+            if success:
+                self._actualizar_estado("✅ Aplicación actualizada correctamente")
+                self._cargar_aplicaciones()
+            else:
+                self._actualizar_estado("❌ Error al actualizar aplicación", error=True)
+    
+    def _eliminar_aplicacion(self):
+        """Elimina la aplicación seleccionada"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione una aplicación para eliminar")
+            return
+        
+        item = self.tree.item(selection[0])
+        app_name = item['values'][1]
+        app_id = item['values'][0]
+        
+        # Confirmar eliminación
+        result = messagebox.askyesno(
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar la aplicación '{app_name}'?\n\n"
+            "Esta acción no se puede deshacer."
+        )
+        
+        if result:
+            success = self.app_manager.delete_application(app_id)
+            if success:
+                self._actualizar_estado("✅ Aplicación eliminada correctamente")
+                self._cargar_aplicaciones()
+            else:
+                self._actualizar_estado("❌ Error al eliminar aplicación", error=True)
+    
+    def _on_doble_clic(self, event):
+        """Maneja doble clic en la tabla"""
+        self._editar_aplicacion()
+    
+    def _actualizar_datos(self):
+        """Actualiza los datos desde la base de datos"""
+        self._cargar_aplicaciones()
+        self._actualizar_estado("🔄 Datos actualizados")
+    
+    def _exportar_datos(self):
+        """Exporta los datos a un archivo CSV"""
+        try:
+            import csv
+            from tkinter import filedialog
+            
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                title="Guardar como CSV"
+            )
+            
+            if filename:
+                with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+                    fieldnames = ['ID', 'Nombre', 'Descripción', 'Categoría', 'Propietario', 'Estado', 'Fecha Creación']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    
+                    writer.writeheader()
+                    for app in self.filtered_applications:
+                        # Formatear fecha
+                        fecha = app.get('fecha_creacion', '')
+                        try:
+                            fecha_formatted = datetime.fromisoformat(fecha).strftime('%d/%m/%Y %H:%M') if fecha else 'N/A'
+                        except:
+                            fecha_formatted = fecha or 'N/A'
+                        
+                        writer.writerow({
+                            'ID': app.get('id', ''),
+                            'Nombre': app.get('app_name', ''),
+                            'Descripción': app.get('description', ''),
+                            'Categoría': app.get('category', ''),
+                            'Propietario': app.get('owner', ''),
+                            'Estado': app.get('status', ''),
+                            'Fecha Creación': fecha_formatted
+                        })
+                
+                self._actualizar_estado(f"📊 Datos exportados a {filename}")
+                messagebox.showinfo("Éxito", f"Los datos se exportaron correctamente a:\n{filename}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al exportar datos: {str(e)}")
+            self._actualizar_estado("❌ Error al exportar datos", error=True)
+    
+    def _actualizar_estado(self, message: str, error: bool = False):
+        """Actualiza el mensaje de estado"""
+        if error:
+            self.status_label.config(text=message, style="Error.TLabel")
+        else:
+            self.status_label.config(text=message, style="Success.TLabel")
+    
+    def _actualizar_info_bd(self):
+        """Actualiza la información de la base de datos"""
+        try:
+            conn = self.app_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM applications")
+            total_apps = cursor.fetchone()[0]
+            self.db_info_label.config(text=f"Total aplicaciones: {total_apps}")
+            conn.close()
+        except:
+            self.db_info_label.config(text="Base de datos no disponible")
+
+
+class ApplicationManager:
+    """Clase para gestionar las aplicaciones en la base de datos"""
+    
+    def __init__(self, db_path: str = "database/empleados.db"):
+        self.db_path = db_path
+    
+    def get_connection(self):
+        """Obtiene una conexión a la base de datos"""
+        if not os.path.exists(self.db_path):
+            raise FileNotFoundError(f"Base de datos no encontrada: {self.db_path}")
+        return sqlite3.connect(self.db_path)
+    
+    def get_all_applications(self) -> list:
+        """Obtiene todas las aplicaciones de la base de datos"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT id, app_name, description, category, owner, status, fecha_creacion
+                FROM applications
+                ORDER BY app_name
+            """)
+            
+            columns = [description[0] for description in cursor.description]
+            applications = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            conn.close()
+            return applications
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al obtener aplicaciones: {str(e)}")
+            return []
+    
+    def add_application(self, app_name: str, description: str, category: str, owner: str) -> bool:
+        """Agrega una nueva aplicación a la base de datos"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO applications (app_name, description, category, owner, status, fecha_creacion)
+                VALUES (?, ?, ?, ?, 'Activo', ?)
+            """, (app_name, description, category, owner, datetime.now().isoformat()))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Ya existe una aplicación con ese nombre")
+            return False
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al agregar aplicación: {str(e)}")
+            return False
+    
+    def update_application(self, app_id: int, app_name: str, description: str, category: str, owner: str, status: str) -> bool:
+        """Actualiza una aplicación existente"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE applications 
+                SET app_name = ?, description = ?, category = ?, owner = ?, status = ?
+                WHERE id = ?
+            """, (app_name, description, category, owner, status, app_id))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Ya existe una aplicación con ese nombre")
+            return False
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al actualizar aplicación: {str(e)}")
+            return False
+    
+    def delete_application(self, app_id: int) -> bool:
+        """Elimina una aplicación de la base de datos"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar dependencias
+            cursor.execute("SELECT COUNT(*) FROM roles WHERE app_name = (SELECT app_name FROM applications WHERE id = ?)", (app_id,))
+            roles_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM procesos WHERE app_name = (SELECT app_name FROM applications WHERE id = ?)", (app_id,))
+            procesos_count = cursor.fetchone()[0]
+            
+            if roles_count > 0 or procesos_count > 0:
+                messagebox.showwarning("Advertencia", 
+                    f"No se puede eliminar la aplicación porque tiene {roles_count} roles y {procesos_count} procesos asociados.\n"
+                    "Elimine las dependencias primero o cambie el estado a 'Inactivo'.")
+                conn.close()
+                return False
+            
+            cursor.execute("DELETE FROM applications WHERE id = ?", (app_id,))
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al eliminar aplicación: {str(e)}")
+            return False
+    
+    def get_categories(self) -> list:
+        """Obtiene las categorías únicas de aplicaciones"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT category FROM applications ORDER BY category")
+            categories = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return categories
+        except Exception:
+            return ["RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
+    
+    def get_owners(self) -> list:
+        """Obtiene los propietarios únicos de aplicaciones"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT owner FROM applications ORDER BY owner")
+            owners = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return owners
+        except Exception:
+            return ["Admin", "RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
+
+
+class ApplicationDialog:
+    """Diálogo para agregar/editar aplicaciones"""
+    
+    def __init__(self, parent, title: str, app_data: dict = None, categories: list = None, owners: list = None):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+        self.dialog.geometry("500x400")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Centrar el diálogo
+        self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
+        
+        self.app_data = app_data
+        self.categories = categories or []
+        self.owners = owners or []
+        self.result = None
+        
+        self._setup_ui()
+        self._load_data()
+    
+    def _setup_ui(self):
+        """Configura la interfaz del diálogo"""
+        # Frame principal
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        
+        # Configurar grid
+        self.dialog.columnconfigure(0, weight=1)
+        self.dialog.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        
+        # Título
+        title_label = ttk.Label(main_frame, text="Información de la Aplicación", font=("Arial", 14, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Nombre de la aplicación
+        ttk.Label(main_frame, text="Nombre:").grid(row=1, column=0, sticky="w", pady=5)
+        self.app_name_var = tk.StringVar()
+        self.app_name_entry = ttk.Entry(main_frame, textvariable=self.app_name_var, width=40)
+        self.app_name_entry.grid(row=1, column=1, sticky="ew", pady=5, padx=(10, 0))
+        
+        # Descripción
+        ttk.Label(main_frame, text="Descripción:").grid(row=2, column=0, sticky="w", pady=5)
+        self.description_text = tk.Text(main_frame, height=4, width=40)
+        self.description_text.grid(row=2, column=1, sticky="ew", pady=5, padx=(10, 0))
+        
+        # Categoría
+        ttk.Label(main_frame, text="Categoría:").grid(row=3, column=0, sticky="w", pady=5)
+        self.category_var = tk.StringVar()
+        self.category_combo = ttk.Combobox(main_frame, textvariable=self.category_var, values=self.categories, width=37)
+        self.category_combo.grid(row=3, column=1, sticky="ew", pady=5, padx=(10, 0))
+        
+        # Propietario
+        ttk.Label(main_frame, text="Propietario:").grid(row=4, column=0, sticky="w", pady=5)
+        self.owner_var = tk.StringVar()
+        self.owner_combo = ttk.Combobox(main_frame, textvariable=self.owner_var, values=self.owners, width=37)
+        self.owner_combo.grid(row=4, column=1, sticky="ew", pady=5, padx=(10, 0))
+        
+        # Estado (solo para edición)
+        if self.app_data:
+            ttk.Label(main_frame, text="Estado:").grid(row=5, column=0, sticky="w", pady=5)
+            self.status_var = tk.StringVar()
+            self.status_combo = ttk.Combobox(main_frame, textvariable=self.status_var, 
+                                           values=["Activo", "Inactivo", "Mantenimiento"], width=37)
+            self.status_combo.grid(row=5, column=1, sticky="ew", pady=5, padx=(10, 0))
+        
+        # Botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=(20, 0))
+        
+        ttk.Button(button_frame, text="Guardar", command=self._save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Configurar validación
+        self.app_name_entry.focus()
+        self.dialog.bind('<Return>', lambda e: self._save())
+        self.dialog.bind('<Escape>', lambda e: self._cancel())
+    
+    def _load_data(self):
+        """Carga los datos existentes si es una edición"""
+        if self.app_data:
+            self.app_name_var.set(self.app_data.get('app_name', ''))
+            self.description_text.delete('1.0', tk.END)
+            self.description_text.insert('1.0', self.app_data.get('description', ''))
+            self.category_var.set(self.app_data.get('category', ''))
+            self.owner_var.set(self.app_data.get('owner', ''))
+            if hasattr(self, 'status_var'):
+                self.status_var.set(self.app_data.get('status', 'Activo'))
+    
+    def _save(self):
+        """Guarda los datos del formulario"""
+        app_name = self.app_name_var.get().strip()
+        description = self.description_text.get('1.0', tk.END).strip()
+        category = self.category_var.get().strip()
+        owner = self.owner_var.get().strip()
+        
+        # Validaciones
+        if not app_name:
+            messagebox.showerror("Error", "El nombre de la aplicación es obligatorio")
+            self.app_name_entry.focus()
+            return
+        
+        if not category:
+            messagebox.showerror("Error", "La categoría es obligatoria")
+            self.category_combo.focus()
+            return
+        
+        if not owner:
+            messagebox.showerror("Error", "El propietario es obligatorio")
+            self.owner_var.focus()
+            return
+        
+        # Crear resultado
+        self.result = {
+            'app_name': app_name,
+            'description': description,
+            'category': category,
+            'owner': owner
+        }
+        
+        if self.app_data and hasattr(self, 'status_var'):
+            self.result['status'] = self.status_var.get()
+        
+        self.dialog.destroy()
+    
+    def _cancel(self):
+        """Cancela la operación"""
+        self.dialog.destroy()
 
 
 def main():
