@@ -3,8 +3,8 @@ Servicio de conciliación de accesos
 """
 from typing import Dict, List, Any, Tuple
 from datetime import datetime
-from db.queries import reconciliation_queries
-from db.connection import execute_update
+from db.reconciliation import reconciliation_queries
+from db.database import execute_update
 
 
 class ReconciliationService:

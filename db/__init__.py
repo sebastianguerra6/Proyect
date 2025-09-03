@@ -1,21 +1,39 @@
-"""
-Módulo de base de datos para el sistema de conciliación de accesos
-"""
+# Módulo de base de datos consolidado
 
-from .schema import init_database, create_tables, create_views
-from .connection import DatabaseConnection, get_connection, get_cursor, execute_query, execute_update
-from .queries import ReconciliationQueries, reconciliation_queries
+# Importar clases principales
+from .database import (
+    DatabaseConnection, 
+    DatabaseSchema, 
+    DatabaseQueries,
+    db_connection,
+    db_schema,
+    db_queries,
+    get_connection,
+    execute_query,
+    execute_update,
+    get_all_employees,
+    get_employee_accesses,
+    get_access_reconciliation
+)
+
+from .reconciliation import (
+    ReconciliationQueries,
+    reconciliation_queries
+)
 
 __all__ = [
-    'init_database',
-    'create_tables', 
-    'create_views',
     'DatabaseConnection',
+    'DatabaseSchema', 
+    'DatabaseQueries',
+    'ReconciliationQueries',
+    'db_connection',
+    'db_schema',
+    'db_queries',
+    'reconciliation_queries',
     'get_connection',
-    'get_cursor',
     'execute_query',
     'execute_update',
-    'ReconciliationQueries',
-    'reconciliation_queries'
+    'get_all_employees',
+    'get_employee_accesses',
+    'get_access_reconciliation'
 ]
-

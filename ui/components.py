@@ -1428,3 +1428,31 @@ class CreacionPersonaFrame:
         for var in self.variables.values():
             var.set("")
         self.variables['estado'].set("Activo")
+    
+    def mostrar_resultados_busqueda(self, resultados, busqueda=""):
+        """Muestra los resultados de búsqueda en la tabla"""
+        # Limpiar tabla anterior
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        if resultados:
+            for resultado in resultados:
+                self.tree.insert("", "end", values=(
+                    resultado.get('sid', ''),
+                    resultado.get('nombre', ''),
+                    resultado.get('apellido', ''),
+                    resultado.get('email', ''),
+                    resultado.get('departamento', ''),
+                    resultado.get('cargo', ''),
+                    resultado.get('estado', '')
+                ))
+            
+            # Mostrar mensaje de confirmación si se especifica
+            if busqueda:
+                messagebox.showinfo("Búsqueda", f"Se encontraron {len(resultados)} registros para: {busqueda}")
+        else:
+            # Mostrar mensaje si no hay resultados
+            if busqueda:
+                messagebox.showinfo("Búsqueda", f"No se encontraron registros para: {busqueda}")
+            else:
+                messagebox.showinfo("Búsqueda", "No se encontraron registros")

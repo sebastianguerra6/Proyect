@@ -3,8 +3,8 @@ Servicio de historial para registrar tickets de conciliación
 """
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
-from db.connection import execute_update, execute_query
-from db.queries import reconciliation_queries
+from db.database import execute_update, execute_query
+from db.reconciliation import reconciliation_queries
 
 
 class HistoryService:

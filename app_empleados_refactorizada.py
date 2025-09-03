@@ -32,8 +32,7 @@ class AppEmpleadosRefactorizada:
         self.tipo_proceso_var = tk.StringVar()
         self.componentes = {}
         
-        # Configurar eventos de redimensionamiento
-        self.root.bind('<Configure>', self._on_window_resize)
+
         
         self.crear_interfaz()
     
@@ -43,19 +42,9 @@ class AppEmpleadosRefactorizada:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         
-        # Detectar tipo de pantalla
-        self._detectar_tipo_pantalla(screen_width, screen_height)
-        
-        # Calcular dimensiones óptimas según el tipo de pantalla
-        if self.tipo_pantalla == "pequena":
-            window_width = min(int(screen_width * 0.95), 1200)
-            window_height = min(int(screen_height * 0.9), 700)
-        elif self.tipo_pantalla == "mediana":
-            window_width = min(int(screen_width * 0.85), 1400)
-            window_height = min(int(screen_height * 0.85), 800)
-        else:  # grande
-            window_width = min(int(screen_width * 0.8), 1600)
-            window_height = min(int(screen_height * 0.8), 900)
+        # Configurar dimensiones estándar
+        window_width = min(int(screen_width * 0.8), 1400)
+        window_height = min(int(screen_height * 0.8), 800)
         
         # Asegurar tamaño mínimo
         window_width = max(window_width, 800)
@@ -72,159 +61,8 @@ class AppEmpleadosRefactorizada:
         
         # Permitir redimensionamiento
         self.root.resizable(True, True)
-        
-        print(f"Pantalla detectada: {self.tipo_pantalla} ({screen_width}x{screen_height})")
-        print(f"Ventana configurada: {window_width}x{window_height}")
     
-    def _detectar_tipo_pantalla(self, width, height):
-        """Detecta el tipo de pantalla basado en las dimensiones"""
-        if width < 1366 or height < 768:
-            self.tipo_pantalla = "pequena"
-        elif width < 1920 or height < 1080:
-            self.tipo_pantalla = "mediana"
-        else:
-            self.tipo_pantalla = "grande"
-    
-    def _centrar_ventana(self, w, h):
-        """Centra la ventana en la pantalla (método legacy)"""
-        self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() - w) // 2
-        y = (self.root.winfo_screenheight() - h) // 2
-        self.root.geometry(f"{w}x{h}+{x}+{y}")
-    
-    def _on_window_resize(self, event):
-        """Maneja el redimensionamiento de la ventana"""
-        # Solo procesar eventos de la ventana principal
-        if event.widget == self.root:
-            # Ajustar tamaños de fuente y widgets según el tamaño de la ventana
-            self._ajustar_tamanos_responsive()
-    
-    def _ajustar_tamanos_responsive(self):
-        """Ajusta tamaños de widgets según el tamaño de la ventana"""
-        try:
-            width = self.root.winfo_width()
-            height = self.root.winfo_height()
-            
-            # Ajustar tamaños de botones según el ancho de la ventana
-            if width < 1200:
-                # Pantalla pequeña
-                button_width = 20
-                font_size = 9
-            elif width < 1400:
-                # Pantalla mediana
-                button_width = 22
-                font_size = 10
-            else:
-                # Pantalla grande
-                button_width = 25
-                font_size = 11
-            
-            # Aplicar ajustes a los botones de navegación
-            for btn in self.botones_navegacion.values():
-                btn.configure(width=button_width)
-            
-            # Ajustar padding y márgenes
-            self._ajustar_espaciado_responsive(width, height)
-            
-            # Ajustar grid weights si está disponible
-            if hasattr(self, '_ajustar_grid_weights'):
-                self._ajustar_grid_weights()
-            
-            # Ajustar componentes individuales
-            self._ajustar_componentes_responsive(width, height)
-            
-        except Exception as e:
-            print(f"Error ajustando tamaños responsive: {e}")
-    
-    def _ajustar_componentes_responsive(self, width, height):
-        """Ajusta todos los componentes para ser responsive"""
-        try:
-            # Ajustar componente de gestión si existe
-            if 'gestion_frame' in self.componentes:
-                gestion_frame = self.componentes['gestion_frame']
-                if hasattr(gestion_frame, '_ajustar_layout'):
-                    gestion_frame._ajustar_layout()
-            
-            # Ajustar otros componentes según sea necesario
-            if width < 1200:
-                # Pantalla pequeña: ajustar tamaños de fuente y espaciado
-                self._ajustar_para_pantalla_pequena()
-            elif width < 1400:
-                # Pantalla mediana: ajustes moderados
-                self._ajustar_para_pantalla_mediana()
-            else:
-                # Pantalla grande: ajustes estándar
-                self._ajustar_para_pantalla_grande()
-                
-        except Exception as e:
-            print(f"Error ajustando componentes responsive: {e}")
-    
-    def _ajustar_para_pantalla_pequena(self):
-        """Ajusta la interfaz para pantallas pequeñas"""
-        try:
-            # Reducir padding y márgenes
-            if hasattr(self, 'main_frame'):
-                self.main_frame.configure(padding="15")
-            
-            # Ajustar tamaños de botones
-            for btn in self.botones_navegacion.values():
-                btn.configure(width=18)
-                
-        except Exception as e:
-            print(f"Error ajustando para pantalla pequeña: {e}")
-    
-    def _ajustar_para_pantalla_mediana(self):
-        """Ajusta la interfaz para pantallas medianas"""
-        try:
-            # Padding moderado
-            if hasattr(self, 'main_frame'):
-                self.main_frame.configure(padding="20")
-            
-            # Tamaños de botones estándar
-            for btn in self.botones_navegacion.values():
-                btn.configure(width=22)
-                
-        except Exception as e:
-            print(f"Error ajustando para pantalla mediana: {e}")
-    
-    def _ajustar_para_pantalla_grande(self):
-        """Ajusta la interfaz para pantallas grandes"""
-        try:
-            # Padding generoso
-            if hasattr(self, 'main_frame'):
-                self.main_frame.configure(padding="25")
-            
-            # Tamaños de botones grandes
-            for btn in self.botones_navegacion.values():
-                btn.configure(width=25)
-                
-        except Exception as e:
-            print(f"Error ajustando para pantalla grande: {e}")
-    
-    def _ajustar_espaciado_responsive(self, width, height):
-        """Ajusta el espaciado según el tamaño de la ventana"""
-        try:
-            # Ajustar padding del frame principal
-            if width < 1200:
-                main_padding = "15"
-                nav_padding = "15"
-            elif width < 1400:
-                main_padding = "20"
-                nav_padding = "20"
-            else:
-                main_padding = "25"
-                nav_padding = "25"
-            
-            # Aplicar padding al frame principal si existe
-            if hasattr(self, 'main_frame'):
-                self.main_frame.configure(padding=main_padding)
-            
-            # Ajustar padding de navegación si existe
-            if hasattr(self, 'nav_frame'):
-                self.nav_frame.configure(padding=nav_padding)
-                
-        except Exception as e:
-            print(f"Error ajustando espaciado responsive: {e}")
+
         
     def crear_interfaz(self):
         """Crea la interfaz principal"""
@@ -295,36 +133,9 @@ class AppEmpleadosRefactorizada:
         self.crear_componente_conciliacion()
         self.crear_componente_aplicaciones()
         
-        # Configurar contenido responsive
-        self._configurar_contenido_responsive()
+
     
-    def _configurar_contenido_responsive(self):
-        """Configura el contenido principal para ser responsive"""
-        # Configurar grid weights para diferentes tamaños de pantalla
-        def ajustar_grid_weights():
-            width = self.root.winfo_width()
-            
-            if width < 1200:
-                # Pantalla pequeña: navegación más compacta
-                self.main_frame.columnconfigure(0, weight=0)  # Navegación fija
-                self.main_frame.columnconfigure(1, weight=1)  # Contenido expandible
-                self.nav_frame.configure(padding="15")
-            elif width < 1400:
-                # Pantalla mediana: balance entre navegación y contenido
-                self.main_frame.columnconfigure(0, weight=0)
-                self.main_frame.columnconfigure(1, weight=1)
-                self.nav_frame.configure(padding="20")
-            else:
-                # Pantalla grande: navegación cómoda
-                self.main_frame.columnconfigure(0, weight=0)
-                self.main_frame.columnconfigure(1, weight=1)
-                self.nav_frame.configure(padding="25")
-        
-        # Aplicar configuración inicial
-        ajustar_grid_weights()
-        
-        # Guardar función para uso posterior
-        self._ajustar_grid_weights = ajustar_grid_weights
+
         
 
     
@@ -361,47 +172,9 @@ class AppEmpleadosRefactorizada:
         
         self.componentes['gestion_frame'] = gestion_frame
         
-        # Configurar responsive para este componente
-        self._configurar_componente_responsive(gestion_frame, contenido_frame)
+
     
-    def _configurar_componente_responsive(self, gestion_frame, contenido_frame):
-        """Configura un componente para ser responsive"""
-        def ajustar_layout():
-            width = self.root.winfo_width()
-            
-            if width < 1200:
-                # Pantalla pequeña: layout más compacto
-                contenido_frame.columnconfigure(0, weight=0)  # Campos generales
-                contenido_frame.columnconfigure(1, weight=1)  # Pestañas
-                contenido_frame.columnconfigure(2, weight=0)  # Botones
-                
-                # Ajustar padding
-                gestion_frame.configure(padding="15")
-                contenido_frame.configure(padding="10")
-                
-            elif width < 1400:
-                # Pantalla mediana: layout balanceado
-                contenido_frame.columnconfigure(0, weight=0)
-                contenido_frame.columnconfigure(1, weight=1)
-                contenido_frame.columnconfigure(2, weight=0)
-                
-                gestion_frame.configure(padding="20")
-                contenido_frame.configure(padding="15")
-                
-            else:
-                # Pantalla grande: layout espacioso
-                contenido_frame.columnconfigure(0, weight=0)
-                contenido_frame.columnconfigure(1, weight=1)
-                contenido_frame.columnconfigure(2, weight=0)
-                
-                gestion_frame.configure(padding="25")
-                contenido_frame.configure(padding="20")
-        
-        # Aplicar configuración inicial
-        ajustar_layout()
-        
-        # Guardar función para ajustes posteriores
-        gestion_frame._ajustar_layout = ajustar_layout
+
     
     def crear_pestanas_proceso(self, parent):
         """Crea el sistema de pestañas para tipos de proceso"""
@@ -465,18 +238,7 @@ class AppEmpleadosRefactorizada:
             print(f"Error creando pestaña {tipo}: {e}")
             self._crear_pestana_fallback(f"Error cargando {tipo}")
     
-    def _crear_pestana_fallback(self, mensaje):
-        """Crea una pestaña de fallback en caso de error"""
-        fallback_frame = ttk.Frame(self.notebook)
-        ttk.Label(fallback_frame, text=mensaje, style="Subsection.TLabel").pack(pady=20)
-        
-        # Crear objeto fallback con método obtener_datos
-        fallback_obj = type('FallbackFrame', (), {
-            'frame': fallback_frame,
-            'obtener_datos': lambda: {}
-        })()
-        
-        return fallback_obj
+
     
     def crear_botones_accion(self, parent):
         """Crea los botones de acción"""
@@ -1236,8 +998,12 @@ class AplicacionesFrame:
 class ApplicationManager:
     """Clase para gestionar las aplicaciones en la base de datos"""
     
-    def __init__(self, db_path: str = "database/empleados.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
+        from config import get_db_path
+        self.db_path = db_path or get_db_path()
     
     def get_connection(self):
         """Obtiene una conexión a la base de datos"""
@@ -1507,3 +1273,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
