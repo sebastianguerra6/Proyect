@@ -10,7 +10,11 @@ from datetime import datetime
 from services.reconcile_service import reconciliation_service
 from services.export_service import export_service
 from services.history_service import history_service
-from db.schema import init_database
+# Importación actualizada para usar la nueva estructura
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
+from database_manager import init_database
 
 
 class ReconciliationBindings:

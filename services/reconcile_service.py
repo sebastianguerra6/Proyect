@@ -3,15 +3,18 @@ Servicio de conciliación de accesos
 """
 from typing import Dict, List, Any, Tuple
 from datetime import datetime
-from db.reconciliation import reconciliation_queries
-from db.database import execute_update
+# Importaciones actualizadas para usar la nueva estructura
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
+from database_manager import DatabaseManager
 
 
 class ReconciliationService:
     """Servicio para conciliar accesos de usuarios"""
     
     def __init__(self):
-        self.queries = reconciliation_queries
+        self.db_manager = DatabaseManager()
     
     def reconcile_person(self, sid: str) -> Dict[str, Any]:
         """

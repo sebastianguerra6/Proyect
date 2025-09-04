@@ -4,9 +4,7 @@ from datetime import datetime
 import os
 import sqlite3
 
-from models import Empleado
-from data import EmpleadoRepository
-from services import EmpleadoService, reconciliation_service, export_service, history_service
+from services import reconciliation_service, export_service, history_service, access_service
 from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
                 LateralMovementFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
 from ui.styles import aplicar_estilos_personalizados
@@ -24,9 +22,7 @@ class AppEmpleadosRefactorizada:
         
         aplicar_estilos_personalizados()
         
-        # Inicializar servicios
-        self.repository = EmpleadoRepository()
-        self.service = EmpleadoService(self.repository)
+        # Inicializar servicios (ya no se usa EmpleadoService)
         
         # Variables de control
         self.tipo_proceso_var = tk.StringVar()
@@ -260,7 +256,7 @@ class AppEmpleadosRefactorizada:
     
     def crear_componente_edicion(self):
         """Crea el componente de edición y búsqueda"""
-        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, self.service)
+        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, None)
         self.componentes['edicion_busqueda'].frame.grid(row=0, column=0, sticky="nsew")
         self.componentes['edicion_busqueda'].frame.grid_remove()
     
@@ -268,7 +264,7 @@ class AppEmpleadosRefactorizada:
         """Crea el componente de creación de persona"""
         try:
             print("Creando componente de creación...")
-            self.componentes['creacion_persona'] = CreacionPersonaFrame(self.contenido_principal_frame, self.service)
+            self.componentes['creacion_persona'] = CreacionPersonaFrame(self.contenido_principal_frame, None)
             self.componentes['creacion_persona'].frame.grid(row=0, column=0, sticky="nsew")
             self.componentes['creacion_persona'].frame.grid_remove()
             print("Componente de creación creado exitosamente")
@@ -317,7 +313,7 @@ class AppEmpleadosRefactorizada:
             btn.state(['pressed'] if valor == tipo_contenido else ['!pressed'])
     
     def guardar_datos(self):
-        """Guarda los datos del formulario en la base de datos"""
+        """Guarda los datos del formulario en la nueva estructura de base de datos"""
         try:
             # Obtener datos generales
             if 'generales' not in self.componentes:
@@ -347,29 +343,63 @@ class AppEmpleadosRefactorizada:
                 except Exception as e:
                     print(f"Error obteniendo datos específicos de {tipo_proceso}: {e}")
             
-            # Generar número de caso único
-            empleado_temp = Empleado(
-                sid=datos_generales.get('sid', ''),
-                nueva_sub_unidad=datos_generales.get('nueva_sub_unidad', ''),
-                nuevo_cargo=datos_generales.get('nuevo_cargo', ''),
-                ingreso_por=datos_generales.get('ingreso_por', ''),
-                request_date=datos_generales.get('request_date'),
-                fecha=datos_generales.get('fecha'),
-                status=datos_generales.get('status', 'Pendiente')
-            )
+            # Obtener SID del empleado
+            scotia_id = datos_generales.get('sid', '')
+            if not scotia_id:
+                messagebox.showerror("Error", "El SID es obligatorio")
+                return
             
-            # Combinar datos y guardar
-            datos_completos = {**datos_generales, **datos_especificos}
-            datos_completos['numero_caso'] = empleado_temp.numero_caso
-            datos_completos['tipo_proceso'] = tipo_proceso
-            
-            exito, mensaje = self.repository.guardar_proceso(datos_completos, tipo_proceso)
-            
-            if exito:
-                messagebox.showinfo("Éxito", f"{mensaje}\nNúmero de caso: {empleado_temp.numero_caso}")
-                self.limpiar_campos()
+            # Procesar según el tipo de proceso usando la nueva estructura
+            if tipo_proceso == 'onboarding':
+                # Para onboarding, solo procesamos los accesos (el empleado debe existir previamente)
+                # o se debe crear desde la sección "Crear Persona"
+                
+                # Verificar si el empleado existe
+                empleado_existente = access_service.get_employee_by_id(scotia_id)
+                if not empleado_existente:
+                    messagebox.showerror("Error", 
+                        f"El empleado {scotia_id} no existe en el headcount.\n"
+                        "Por favor, cree primero el empleado en la sección 'Crear Persona'.")
+                    return
+                
+                # Procesar onboarding
+                success, message, records = access_service.process_employee_onboarding(
+                    scotia_id, 
+                    datos_generales.get('nuevo_cargo', ''), 
+                    datos_generales.get('nueva_sub_unidad', '')
+                )
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Onboarding procesado exitosamente.\n{message}")
+                    self.limpiar_campos()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+            elif tipo_proceso == 'offboarding':
+                # Procesar offboarding
+                success, message, records = access_service.process_employee_offboarding(scotia_id)
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Offboarding procesado exitosamente.\n{message}")
+                    self.limpiar_campos()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+            elif tipo_proceso == 'lateral':
+                # Procesar movimiento lateral
+                success, message, records = access_service.process_lateral_movement(
+                    scotia_id,
+                    datos_generales.get('nuevo_cargo', ''),
+                    datos_generales.get('nueva_sub_unidad', '')
+                )
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Movimiento lateral procesado exitosamente.\n{message}")
+                    self.limpiar_campos()
+                else:
+                    messagebox.showerror("Error", message)
             else:
-                messagebox.showerror("Error", mensaje)
+                messagebox.showerror("Error", f"Tipo de proceso no soportado: {tipo_proceso}")
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error inesperado: {str(e)}")
@@ -400,16 +430,16 @@ class AppEmpleadosRefactorizada:
             print(f"Error en limpiar_campos: {e}")
     
     def mostrar_estadisticas(self):
-        """Muestra estadísticas de los datos almacenados"""
+        """Muestra estadísticas de los datos almacenados usando la nueva estructura"""
         try:
-            estadisticas = self.repository.obtener_estadisticas()
+            estadisticas = access_service.db_manager.get_database_stats()
             
-            mensaje = "Estadísticas de la aplicación:\n\n"
-            mensaje += f"Onboardings: {estadisticas.get('onboarding', 0)}\n"
-            mensaje += f"Offboardings: {estadisticas.get('offboarding', 0)}\n"
-            mensaje += f"Lateral Movements: {estadisticas.get('lateral_movement', 0)}\n"
-            mensaje += f"Personas en Headcount: {estadisticas.get('headcount', 0)}\n"
-            mensaje += f"Total: {sum(estadisticas.values())}"
+            mensaje = "Estadísticas del Sistema (Nueva Estructura):\n\n"
+            mensaje += f"Empleados en Headcount: {estadisticas.get('headcount', 0)}\n"
+            mensaje += f"Empleados Activos: {estadisticas.get('empleados_activos', 0)}\n"
+            mensaje += f"Aplicaciones Registradas: {estadisticas.get('applications', 0)}\n"
+            mensaje += f"Aplicaciones Activas: {estadisticas.get('aplicaciones_activas', 0)}\n"
+            mensaje += f"Registros en Histórico: {estadisticas.get('historico', 0)}\n"
             
             messagebox.showinfo("Estadísticas", mensaje)
             
@@ -525,21 +555,22 @@ class ConciliacionFrame:
         self.tree_resultados.insert('', 'end', values=('', '', 'Sin datos', ''))
     
     def _conciliar_accesos(self):
-        """Ejecuta la conciliación de accesos para un SID específico"""
+        """Ejecuta la conciliación de accesos para un SID específico usando la nueva estructura"""
         sid = self.sid_var.get().strip()
         if not sid:
             messagebox.showerror("Error", "Por favor ingrese un SID válido")
             return
         
         try:
-            resultado = reconciliation_service.reconcile_person(sid)
+            # Usar el nuevo servicio de conciliación
+            reporte = access_service.get_access_reconciliation_report(sid)
             
-            if "error" in resultado:
-                messagebox.showerror("Error", resultado["error"])
+            if "error" in reporte:
+                messagebox.showerror("Error", reporte["error"])
                 return
             
-            self.resultado_conciliacion = resultado
-            self._mostrar_resultados(resultado)
+            self.resultado_conciliacion = reporte
+            self._mostrar_resultados_nuevos(reporte)
             messagebox.showinfo("Éxito", f"Conciliación completada para {sid}")
             
         except Exception as e:
@@ -640,6 +671,41 @@ class ConciliacionFrame:
                 '⚠️ Excesivo',
                 '🔴 Revocar'
             ))
+    
+    def _mostrar_resultados_nuevos(self, reporte):
+        """Muestra los resultados de conciliación usando la nueva estructura"""
+        # Limpiar treeview
+        self.tree_resultados.delete(*self.tree_resultados.get_children())
+        
+        # Mostrar accesos actuales
+        current_access = reporte.get('current_access', [])
+        for acceso in current_access:
+            self.tree_resultados.insert('', 'end', values=(
+                acceso.get('app_name', ''),
+                acceso.get('role_name', 'Sin rol'),
+                '✅ Activo',
+                'Mantener'
+            ))
+        
+        # Mostrar accesos a otorgar
+        to_grant = reporte.get('to_grant', [])
+        for acceso in to_grant:
+            self.tree_resultados.insert('', 'end', values=(
+                acceso.get('app_name', ''),
+                acceso.get('role_name', 'Sin rol'),
+                '❌ Faltante',
+                '🟢 Otorgar'
+            ))
+        
+        # Mostrar accesos a revocar
+        to_revoke = reporte.get('to_revoke', [])
+        for acceso in to_revoke:
+            self.tree_resultados.insert('', 'end', values=(
+                acceso.get('app_name', ''),
+                acceso.get('role_name', 'Sin rol'),
+                '⚠️ Excesivo',
+                '🔴 Revocar'
+            ))
 
 
 class AplicacionesFrame:
@@ -651,8 +717,8 @@ class AplicacionesFrame:
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(1, weight=1)
         
-        # Inicializar gestor de aplicaciones
-        self.app_manager = ApplicationManager()
+        # Usar el nuevo servicio de gestión de accesos
+        # self.app_manager = ApplicationManager()  # Comentado para usar el nuevo servicio
         
         # Variables
         self.applications = []
@@ -720,27 +786,27 @@ class AplicacionesFrame:
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
-        # Crear Treeview
-        columns = ('ID', 'Nombre', 'Descripción', 'Categoría', 'Propietario', 'Estado', 'Fecha Creación')
+        # Crear Treeview - Actualizado para coincidir con tabla applications
+        columns = ('ID', 'Logical Access Name', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category')
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         # Configurar columnas
         self.tree.heading('ID', text='ID')
-        self.tree.heading('Nombre', text='Nombre de la Aplicación')
-        self.tree.heading('Descripción', text='Descripción')
-        self.tree.heading('Categoría', text='Categoría')
-        self.tree.heading('Propietario', text='Propietario')
-        self.tree.heading('Estado', text='Estado')
-        self.tree.heading('Fecha Creación', text='Fecha de Creación')
+        self.tree.heading('Logical Access Name', text='Logical Access Name')
+        self.tree.heading('Unit', text='Unit')
+        self.tree.heading('Position Role', text='Position Role')
+        self.tree.heading('System Owner', text='System Owner')
+        self.tree.heading('Access Status', text='Access Status')
+        self.tree.heading('Category', text='Category')
         
         # Configurar anchos de columna
         self.tree.column('ID', width=50, minwidth=50)
-        self.tree.column('Nombre', width=200, minwidth=150)
-        self.tree.column('Descripción', width=250, minwidth=200)
-        self.tree.column('Categoría', width=120, minwidth=100)
-        self.tree.column('Propietario', width=120, minwidth=100)
-        self.tree.column('Estado', width=100, minwidth=80)
-        self.tree.column('Fecha Creación', width=150, minwidth=120)
+        self.tree.column('Logical Access Name', width=200, minwidth=150)
+        self.tree.column('Unit', width=120, minwidth=100)
+        self.tree.column('Position Role', width=150, minwidth=120)
+        self.tree.column('System Owner', width=120, minwidth=100)
+        self.tree.column('Access Status', width=100, minwidth=80)
+        self.tree.column('Category', width=120, minwidth=100)
         
         # Scrollbars
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
@@ -769,9 +835,9 @@ class AplicacionesFrame:
         self.db_info_label.pack(side=tk.RIGHT)
     
     def _cargar_aplicaciones(self):
-        """Carga las aplicaciones desde la base de datos"""
+        """Carga las aplicaciones desde la nueva estructura de base de datos"""
         try:
-            self.applications = self.app_manager.get_all_applications()
+            self.applications = access_service.get_all_applications()
             self.filtered_applications = self.applications.copy()
             self._actualizar_tabla()
             self._actualizar_estado(f"✅ Cargadas {len(self.applications)} aplicaciones")
@@ -800,12 +866,12 @@ class AplicacionesFrame:
             
             self.tree.insert('', 'end', values=(
                 app.get('id', ''),
-                app.get('app_name', ''),
-                app.get('description', ''),
-                app.get('category', ''),
-                app.get('owner', ''),
-                status,
-                fecha_formatted
+                app.get('logical_access_name', ''),
+                app.get('unit', ''),
+                app.get('position_role', ''),
+                app.get('system_owner', ''),
+                app.get('access_status', ''),
+                app.get('category', '')
             ), tags=tags)
         
         # Configurar colores de las filas
@@ -823,36 +889,33 @@ class AplicacionesFrame:
         else:
             self.filtered_applications = [
                 app for app in self.applications
-                if (search_term in app.get('app_name', '').lower() or
-                    search_term in app.get('description', '').lower() or
-                    search_term in app.get('category', '').lower() or
-                    search_term in app.get('owner', '').lower())
+                if (search_term in app.get('logical_access_name', '').lower() or
+                    search_term in app.get('unit', '').lower() or
+                    search_term in app.get('position_role', '').lower() or
+                    search_term in app.get('system_owner', '').lower() or
+                    search_term in app.get('category', '').lower())
             ]
         
         self._actualizar_tabla()
         self._actualizar_estado(f"🔍 Mostrando {len(self.filtered_applications)} de {len(self.applications)} aplicaciones")
     
     def _agregar_aplicacion(self):
-        """Abre diálogo para agregar nueva aplicación"""
-        categories = self.app_manager.get_categories()
-        owners = self.app_manager.get_owners()
+        """Abre diálogo para agregar nueva aplicación usando la nueva estructura"""
+        # Usar valores por defecto para categorías y propietarios
+        categories = ["RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
+        owners = ["Admin", "RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
         
         dialog = ApplicationDialog(self.frame, "Nueva Aplicación", categories=categories, owners=owners)
         self.frame.wait_window(dialog.dialog)
         
         if dialog.result:
-            success = self.app_manager.add_application(
-                dialog.result['app_name'],
-                dialog.result['description'],
-                dialog.result['category'],
-                dialog.result['owner']
-            )
+            success, message = access_service.create_application(dialog.result)
             
             if success:
                 self._actualizar_estado("✅ Aplicación agregada correctamente")
                 self._cargar_aplicaciones()
             else:
-                self._actualizar_estado("❌ Error al agregar aplicación", error=True)
+                self._actualizar_estado(f"❌ Error al agregar aplicación: {message}", error=True)
     
     def _editar_aplicacion(self):
         """Edita la aplicación seleccionada"""
@@ -983,14 +1046,11 @@ class AplicacionesFrame:
             self.status_label.config(text=message, style="Success.TLabel")
     
     def _actualizar_info_bd(self):
-        """Actualiza la información de la base de datos"""
+        """Actualiza la información de la base de datos usando la nueva estructura"""
         try:
-            conn = self.app_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM applications")
-            total_apps = cursor.fetchone()[0]
+            stats = access_service.db_manager.get_database_stats()
+            total_apps = stats.get('applications', 0)
             self.db_info_label.config(text=f"Total aplicaciones: {total_apps}")
-            conn.close()
         except:
             self.db_info_label.config(text="Base de datos no disponible")
 
@@ -1169,40 +1229,53 @@ class ApplicationDialog:
         title_label = ttk.Label(main_frame, text="Información de la Aplicación", font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
-        # Nombre de la aplicación
-        ttk.Label(main_frame, text="Nombre:").grid(row=1, column=0, sticky="w", pady=5)
-        self.app_name_var = tk.StringVar()
-        self.app_name_entry = ttk.Entry(main_frame, textvariable=self.app_name_var, width=40)
-        self.app_name_entry.grid(row=1, column=1, sticky="ew", pady=5, padx=(10, 0))
+        # Campos actualizados para coincidir con tabla applications
+        campos = [
+            ("Jurisdiction:", "jurisdiction", "entry"),
+            ("Unit:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
+            ("Subunit:", "subunit", "entry"),
+            ("Logical Access Name:", "logical_access_name", "entry"),
+            ("Path/Email/URL:", "path_email_url", "entry"),
+            ("Position Role:", "position_role", "entry"),
+            ("Exception Tracking:", "exception_tracking", "entry"),
+            ("Fulfillment Action:", "fulfillment_action", "entry"),
+            ("System Owner:", "system_owner", "entry"),
+            ("Role Name:", "role_name", "entry"),
+            ("Access Type:", "access_type", "combobox", ["Aplicación", "Sistema", "Base de Datos", "Red", "Hardware"]),
+            ("Category:", "category", "combobox", ["Sistemas", "Desarrollo", "RRHH", "ERP", "Analytics", "DevOps", "Recursos"]),
+            ("Additional Data:", "additional_data", "entry"),
+            ("AD Code:", "ad_code", "entry"),
+            ("Access Status:", "access_status", "combobox", ["Activo", "Inactivo", "Mantenimiento"]),
+            ("Requirement Licensing:", "requirement_licensing", "entry"),
+            ("Description:", "description", "text"),
+            ("Authentication Method:", "authentication_method", "combobox", ["LDAP", "SSO", "Local", "OAuth", "SAML"])
+        ]
         
-        # Descripción
-        ttk.Label(main_frame, text="Descripción:").grid(row=2, column=0, sticky="w", pady=5)
-        self.description_text = tk.Text(main_frame, height=4, width=40)
-        self.description_text.grid(row=2, column=1, sticky="ew", pady=5, padx=(10, 0))
+        # Crear campos dinámicamente
+        self.variables = {}
+        for i, campo in enumerate(campos):
+            label_text, var_name, tipo = campo[:3]
+            ttk.Label(main_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
+            
+            if tipo == "entry":
+                self.variables[var_name] = tk.StringVar()
+                entry = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
+                entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+            elif tipo == "combobox":
+                valores = campo[3] if len(campo) > 3 else []
+                self.variables[var_name] = tk.StringVar()
+                combo = ttk.Combobox(main_frame, textvariable=self.variables[var_name], values=valores, width=37)
+                combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+            elif tipo == "text":
+                self.variables[var_name] = tk.Text(main_frame, height=3, width=40)
+                self.variables[var_name].grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
         
-        # Categoría
-        ttk.Label(main_frame, text="Categoría:").grid(row=3, column=0, sticky="w", pady=5)
-        self.category_var = tk.StringVar()
-        self.category_combo = ttk.Combobox(main_frame, textvariable=self.category_var, values=self.categories, width=37)
-        self.category_combo.grid(row=3, column=1, sticky="ew", pady=5, padx=(10, 0))
-        
-        # Propietario
-        ttk.Label(main_frame, text="Propietario:").grid(row=4, column=0, sticky="w", pady=5)
-        self.owner_var = tk.StringVar()
-        self.owner_combo = ttk.Combobox(main_frame, textvariable=self.owner_var, values=self.owners, width=37)
-        self.owner_combo.grid(row=4, column=1, sticky="ew", pady=5, padx=(10, 0))
-        
-        # Estado (solo para edición)
-        if self.app_data:
-            ttk.Label(main_frame, text="Estado:").grid(row=5, column=0, sticky="w", pady=5)
-            self.status_var = tk.StringVar()
-            self.status_combo = ttk.Combobox(main_frame, textvariable=self.status_var, 
-                                           values=["Activo", "Inactivo", "Mantenimiento"], width=37)
-            self.status_combo.grid(row=5, column=1, sticky="ew", pady=5, padx=(10, 0))
+        # Ajustar el número de fila para los botones
+        button_row = len(campos) + 1
         
         # Botones
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=(20, 0))
+        button_frame.grid(row=button_row, column=0, columnspan=2, pady=(20, 0))
         
         ttk.Button(button_frame, text="Guardar", command=self._save).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
@@ -1215,44 +1288,37 @@ class ApplicationDialog:
     def _load_data(self):
         """Carga los datos existentes si es una edición"""
         if self.app_data:
-            self.app_name_var.set(self.app_data.get('app_name', ''))
-            self.description_text.delete('1.0', tk.END)
-            self.description_text.insert('1.0', self.app_data.get('description', ''))
-            self.category_var.set(self.app_data.get('category', ''))
-            self.owner_var.set(self.app_data.get('owner', ''))
-            if hasattr(self, 'status_var'):
-                self.status_var.set(self.app_data.get('status', 'Activo'))
+            for var_name, var in self.variables.items():
+                if isinstance(var, tk.StringVar):
+                    var.set(self.app_data.get(var_name, ''))
+                elif isinstance(var, tk.Text):
+                    var.delete('1.0', tk.END)
+                    var.insert('1.0', self.app_data.get(var_name, ''))
     
     def _save(self):
         """Guarda los datos del formulario"""
-        app_name = self.app_name_var.get().strip()
-        description = self.description_text.get('1.0', tk.END).strip()
-        category = self.category_var.get().strip()
-        owner = self.owner_var.get().strip()
-        
         # Validaciones
-        if not app_name:
-            messagebox.showerror("Error", "El nombre de la aplicación es obligatorio")
-            self.app_name_entry.focus()
+        if not self.variables['logical_access_name'].get().strip():
+            messagebox.showerror("Error", "El Logical Access Name es obligatorio")
             return
         
-        if not category:
-            messagebox.showerror("Error", "La categoría es obligatoria")
-            self.category_combo.focus()
+        if not self.variables['unit'].get().strip():
+            messagebox.showerror("Error", "La Unit es obligatoria")
             return
         
-        if not owner:
-            messagebox.showerror("Error", "El propietario es obligatorio")
-            self.owner_var.focus()
-            return
+        # Preparar datos
+        self.result = {}
+        for var_name, var in self.variables.items():
+            if isinstance(var, tk.StringVar):
+                self.result[var_name] = var.get().strip()
+            elif isinstance(var, tk.Text):
+                self.result[var_name] = var.get('1.0', tk.END).strip()
         
-        # Crear resultado
-        self.result = {
-            'app_name': app_name,
-            'description': description,
-            'category': category,
-            'owner': owner
-        }
+        # Establecer valores por defecto si están vacíos
+        if not self.result.get('access_status'):
+            self.result['access_status'] = 'Activo'
+        if not self.result.get('jurisdiction'):
+            self.result['jurisdiction'] = 'Global'
         
         if self.app_data and hasattr(self, 'status_var'):
             self.result['status'] = self.status_var.get()

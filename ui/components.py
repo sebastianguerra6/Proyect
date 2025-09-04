@@ -957,18 +957,28 @@ class CreacionPersonaFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'sid': tk.StringVar(),
-            'nombre': tk.StringVar(),
-            'apellido': tk.StringVar(),
+            # Campos básicos
+            'scotia_id': tk.StringVar(),
+            'employee': tk.StringVar(),
+            'full_name': tk.StringVar(),
             'email': tk.StringVar(),
-            'telefono': tk.StringVar(),
-            'departamento': tk.StringVar(),
-            'cargo': tk.StringVar(),
-            'fecha_contratacion': tk.StringVar(),
-            'salario': tk.StringVar(),
-            'estado': tk.StringVar(value="Activo"),
+            'position': tk.StringVar(),
+            'manager': tk.StringVar(),
+            'senior_manager': tk.StringVar(),
+            'unit': tk.StringVar(),
+            'start_date': tk.StringVar(),
+            'coca': tk.StringVar(),
+            'skip_level': tk.StringVar(),
+            'coleadores': tk.StringVar(),
+            'parents': tk.StringVar(),
+            'personal_email': tk.StringVar(),
+            'size': tk.StringVar(),
+            'birthday': tk.StringVar(),
+            'ubicacion': tk.StringVar(),
+            'activo': tk.StringVar(value="Activo"),
+            # Campos para filtros
             'filtro_texto': tk.StringVar(),
-            'columna_filtro': tk.StringVar(value="SID")
+            'columna_filtro': tk.StringVar(value="scotia_id")
         }
     
     def _crear_widgets(self):
@@ -1019,18 +1029,31 @@ class CreacionPersonaFrame:
             ("Estado:", "estado", "combobox", ["Activo", "Inactivo", "Vacaciones", "Licencia"])
         ]), weight=1)
         
-        # Campos del formulario
+        # Campos del formulario - Actualizados para coincidir con tabla headcount
         campos = [
-            ("SID:", "sid", "entry"),
-            ("Nombre:", "nombre", "entry"),
-            ("Apellido:", "apellido", "entry"),
+            # Campos obligatorios
+            ("Scotia ID:", "scotia_id", "entry"),
+            ("Employee:", "employee", "entry"),
+            ("Full Name:", "full_name", "entry"),
             ("Email:", "email", "entry"),
-            ("Teléfono:", "telefono", "entry"),
-            ("Departamento:", "departamento", "combobox", ["Recursos Humanos", "Tecnología", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
-            ("Cargo:", "cargo", "entry"),
-            ("Fecha de Contratación:", "fecha_contratacion", "entry"),
-            ("Salario:", "salario", "entry"),
-            ("Estado:", "estado", "combobox", ["Activo", "Inactivo", "Vacaciones", "Licencia"])
+            
+            # Campos de posición y organización
+            ("Position:", "position", "entry"),
+            ("Manager:", "manager", "entry"),
+            ("Senior Manager:", "senior_manager", "entry"),
+            ("Unit:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
+            ("Start Date:", "start_date", "entry"),
+            
+            # Campos adicionales
+            ("COCA:", "coca", "entry"),
+            ("Skip Level:", "skip_level", "entry"),
+            ("Coleadores:", "coleadores", "entry"),
+            ("Parents:", "parents", "entry"),
+            ("Personal Email:", "personal_email", "entry"),
+            ("Size:", "size", "combobox", ["XS", "S", "M", "L", "XL"]),
+            ("Birthday:", "birthday", "entry"),
+            ("Ubicación:", "ubicacion", "entry"),
+            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"])
         ]
         
         for i, campo in enumerate(campos):
@@ -1384,33 +1407,61 @@ class CreacionPersonaFrame:
         self.mostrar_resultados_busqueda(datos_ejemplo)
     
     def crear_persona(self):
-        """Crea una nueva persona en el headcount"""
-        if self.service:
-            # Crear persona usando el servicio
-            datos = self.obtener_datos()
-            exito, mensaje = self.service.crear_empleado(datos)
+        """Crea una nueva persona en el headcount usando el nuevo servicio"""
+        # Validación local
+        campos_vacios = self.validar_campos_obligatorios()
+        if campos_vacios:
+            messagebox.showerror("Error", f"Por favor complete los campos obligatorios: {', '.join(campos_vacios)}")
+            return
+        
+        # Obtener datos del formulario
+        datos = self.obtener_datos()
+        
+        # Preparar datos para el nuevo servicio
+        empleado_data = {
+            'scotia_id': datos.get('scotia_id', ''),
+            'employee': datos.get('employee', ''),
+            'full_name': datos.get('full_name', ''),
+            'email': datos.get('email', ''),
+            'position': datos.get('position', ''),
+            'manager': datos.get('manager', ''),
+            'senior_manager': datos.get('senior_manager', ''),
+            'unit': datos.get('unit', ''),
+            'start_date': datos.get('start_date', ''),
+            'coca': datos.get('coca', ''),
+            'skip_level': datos.get('skip_level', ''),
+            'coleadores': datos.get('coleadores', ''),
+            'parents': datos.get('parents', ''),
+            'personal_email': datos.get('personal_email', ''),
+            'size': datos.get('size', ''),
+            'birthday': datos.get('birthday', ''),
+            'ubicacion': datos.get('ubicacion', ''),
+            'activo': datos.get('activo', 'Activo') == 'Activo'
+        }
+        
+        # Usar el nuevo servicio de gestión de accesos
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
             
-            if exito:
-                messagebox.showinfo("Éxito", mensaje)
+            success, message = access_service.create_employee(empleado_data)
+            
+            if success:
+                messagebox.showinfo("Éxito", message)
                 self.limpiar()
                 # Actualizar la tabla después de crear
                 self.mostrar_todos()
             else:
-                messagebox.showerror("Error", mensaje)
-        else:
-            # Validación local si no hay servicio
-            campos_vacios = self.validar_campos_obligatorios()
-            if campos_vacios:
-                messagebox.showerror("Error", f"Por favor complete los campos obligatorios: {', '.join(campos_vacios)}")
-                return
-            
-            # Simular creación exitosa
-            messagebox.showinfo("Éxito", "Persona creada exitosamente en el headcount")
-            self.limpiar()
+                messagebox.showerror("Error", message)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error creando empleado: {str(e)}")
     
     def validar_campos_obligatorios(self):
         """Valida que los campos obligatorios estén completos"""
-        campos_obligatorios = ['sid', 'nombre', 'apellido', 'email', 'departamento', 'cargo']
+        campos_obligatorios = ['scotia_id', 'employee', 'full_name', 'email']
         campos_vacios = []
         
         for campo in campos_obligatorios:
@@ -1427,7 +1478,7 @@ class CreacionPersonaFrame:
         """Limpia todos los campos"""
         for var in self.variables.values():
             var.set("")
-        self.variables['estado'].set("Activo")
+        self.variables['activo'].set("Activo")
     
     def mostrar_resultados_busqueda(self, resultados, busqueda=""):
         """Muestra los resultados de búsqueda en la tabla"""
