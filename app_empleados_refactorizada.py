@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 import sqlite3
 
-from services import reconciliation_service, export_service, history_service, access_service
+from services import reconciliation_service, export_service, history_service, access_service, search_service
 from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
                 LateralMovementFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
 from ui.styles import aplicar_estilos_personalizados
@@ -256,7 +256,7 @@ class AppEmpleadosRefactorizada:
     
     def crear_componente_edicion(self):
         """Crea el componente de edición y búsqueda"""
-        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, None)
+        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, search_service)
         self.componentes['edicion_busqueda'].frame.grid(row=0, column=0, sticky="nsew")
         self.componentes['edicion_busqueda'].frame.grid_remove()
     
@@ -264,7 +264,7 @@ class AppEmpleadosRefactorizada:
         """Crea el componente de creación de persona"""
         try:
             print("Creando componente de creación...")
-            self.componentes['creacion_persona'] = CreacionPersonaFrame(self.contenido_principal_frame, None)
+            self.componentes['creacion_persona'] = CreacionPersonaFrame(self.contenido_principal_frame, search_service)
             self.componentes['creacion_persona'].frame.grid(row=0, column=0, sticky="nsew")
             self.componentes['creacion_persona'].frame.grid_remove()
             print("Componente de creación creado exitosamente")
@@ -938,27 +938,22 @@ class AplicacionesFrame:
             messagebox.showerror("Error", "No se pudo encontrar la aplicación seleccionada")
             return
         
-        categories = self.app_manager.get_categories()
-        owners = self.app_manager.get_owners()
+        # Usar valores por defecto para categorías y propietarios
+        categories = ["RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
+        owners = ["Admin", "RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
         
         dialog = ApplicationDialog(self.frame, "Editar Aplicación", app_data, categories, owners)
         self.frame.wait_window(dialog.dialog)
         
         if dialog.result:
-            success = self.app_manager.update_application(
-                app_id,
-                dialog.result['app_name'],
-                dialog.result['description'],
-                dialog.result['category'],
-                dialog.result['owner'],
-                dialog.result.get('status', 'Activo')
-            )
+            # Usar el access_service para actualizar la aplicación
+            success, message = access_service.update_application(app_id, dialog.result)
             
             if success:
                 self._actualizar_estado("✅ Aplicación actualizada correctamente")
                 self._cargar_aplicaciones()
             else:
-                self._actualizar_estado("❌ Error al actualizar aplicación", error=True)
+                self._actualizar_estado(f"❌ Error al actualizar aplicación: {message}", error=True)
     
     def _eliminar_aplicacion(self):
         """Elimina la aplicación seleccionada"""
@@ -979,12 +974,13 @@ class AplicacionesFrame:
         )
         
         if result:
-            success = self.app_manager.delete_application(app_id)
+            # Usar el access_service para eliminar la aplicación
+            success, message = access_service.delete_application(app_id)
             if success:
                 self._actualizar_estado("✅ Aplicación eliminada correctamente")
                 self._cargar_aplicaciones()
             else:
-                self._actualizar_estado("❌ Error al eliminar aplicación", error=True)
+                self._actualizar_estado(f"❌ Error al eliminar aplicación: {message}", error=True)
     
     def _on_doble_clic(self, event):
         """Maneja doble clic en la tabla"""
@@ -1009,26 +1005,19 @@ class AplicacionesFrame:
             
             if filename:
                 with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['ID', 'Nombre', 'Descripción', 'Categoría', 'Propietario', 'Estado', 'Fecha Creación']
+                    fieldnames = ['ID', 'Logical Access Name', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category']
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     
                     writer.writeheader()
                     for app in self.filtered_applications:
-                        # Formatear fecha
-                        fecha = app.get('fecha_creacion', '')
-                        try:
-                            fecha_formatted = datetime.fromisoformat(fecha).strftime('%d/%m/%Y %H:%M') if fecha else 'N/A'
-                        except:
-                            fecha_formatted = fecha or 'N/A'
-                        
                         writer.writerow({
                             'ID': app.get('id', ''),
-                            'Nombre': app.get('app_name', ''),
-                            'Descripción': app.get('description', ''),
-                            'Categoría': app.get('category', ''),
-                            'Propietario': app.get('owner', ''),
-                            'Estado': app.get('status', ''),
-                            'Fecha Creación': fecha_formatted
+                            'Logical Access Name': app.get('logical_access_name', ''),
+                            'Unit': app.get('unit', ''),
+                            'Position Role': app.get('position_role', ''),
+                            'System Owner': app.get('system_owner', ''),
+                            'Access Status': app.get('access_status', ''),
+                            'Category': app.get('category', '')
                         })
                 
                 self._actualizar_estado(f"📊 Datos exportados a {filename}")
@@ -1281,7 +1270,8 @@ class ApplicationDialog:
         ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
         
         # Configurar validación
-        self.app_name_entry.focus()
+        if 'logical_access_name' in self.variables:
+            self.variables['logical_access_name'].get().focus()
         self.dialog.bind('<Return>', lambda e: self._save())
         self.dialog.bind('<Escape>', lambda e: self._cancel())
     

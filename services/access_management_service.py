@@ -239,6 +239,82 @@ class AccessManagementService:
         except Exception as e:
             return False, f"Error creando aplicación: {str(e)}"
     
+    def update_application(self, app_id: int, app_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Actualiza una aplicación existente"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar que la aplicación existe
+            cursor.execute('SELECT id FROM applications WHERE id = ?', (app_id,))
+            if not cursor.fetchone():
+                return False, f"Aplicación con ID {app_id} no encontrada"
+            
+            # Construir la consulta de actualización
+            set_clauses = []
+            params = []
+            
+            for field, value in app_data.items():
+                if field in ['jurisdiction', 'unit', 'subunit', 'logical_access_name', 'path_email_url', 
+                           'position_role', 'exception_tracking', 'fulfillment_action', 'system_owner', 
+                           'role_name', 'access_type', 'category', 'additional_data', 'ad_code', 
+                           'access_status', 'requirement_licensing', 'description', 'authentication_method']:
+                    set_clauses.append(f"{field} = ?")
+                    params.append(value)
+            
+            if not set_clauses:
+                return False, "No hay campos válidos para actualizar"
+            
+            # Agregar fecha de actualización
+            set_clauses.append("last_update_date = ?")
+            params.append(datetime.now().isoformat())
+            
+            # Agregar el ID al final
+            params.append(app_id)
+            
+            query = f"UPDATE applications SET {', '.join(set_clauses)} WHERE id = ?"
+            cursor.execute(query, params)
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Aplicación {app_id} actualizada exitosamente"
+            
+        except Exception as e:
+            return False, f"Error actualizando aplicación: {str(e)}"
+    
+    def delete_application(self, app_id: int) -> Tuple[bool, str]:
+        """Elimina una aplicación"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar que la aplicación existe
+            cursor.execute('SELECT logical_access_name FROM applications WHERE id = ?', (app_id,))
+            result = cursor.fetchone()
+            if not result:
+                return False, f"Aplicación con ID {app_id} no encontrada"
+            
+            app_name = result[0]
+            
+            # Verificar dependencias en historico
+            cursor.execute('SELECT COUNT(*) FROM historico WHERE app_access_name = ?', (app_name,))
+            historico_count = cursor.fetchone()[0]
+            
+            if historico_count > 0:
+                return False, f"No se puede eliminar la aplicación porque tiene {historico_count} registros en el historial"
+            
+            # Eliminar la aplicación
+            cursor.execute('DELETE FROM applications WHERE id = ?', (app_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Aplicación {app_name} eliminada exitosamente"
+            
+        except Exception as e:
+            return False, f"Error eliminando aplicación: {str(e)}"
+    
     # ==============================
     # MÉTODOS PARA HISTORICO
     # ==============================

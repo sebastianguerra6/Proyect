@@ -10,6 +10,9 @@ from .history_service import HistoryService, history_service
 # Nuevo servicio de gestión de accesos
 from .access_management_service import AccessManagementService, access_service
 
+# Servicio de búsqueda
+from .search_service import SearchService, search_service
+
 __all__ = [
     # Servicios de conciliación
     'ReconciliationService', 'reconciliation_service',
@@ -17,5 +20,8 @@ __all__ = [
     'HistoryService', 'history_service',
     
     # Nuevo servicio de gestión de accesos
-    'AccessManagementService', 'access_service'
+    'AccessManagementService', 'access_service',
+    
+    # Servicio de búsqueda
+    'SearchService', 'search_service'
 ]

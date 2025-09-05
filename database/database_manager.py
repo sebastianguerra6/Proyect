@@ -133,6 +133,30 @@ class DatabaseManager:
                 )
             ''')
             
+            # ==============================
+            # Tabla 4: Procesos (para gestión de procesos)
+            # ==============================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS procesos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sid VARCHAR(20) NOT NULL,
+                    nueva_sub_unidad VARCHAR(100),
+                    nuevo_cargo VARCHAR(100),
+                    status VARCHAR(50) DEFAULT 'Pendiente',
+                    request_date DATE,
+                    ingreso_por VARCHAR(100),
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_actualizacion TIMESTAMP,
+                    tipo_proceso VARCHAR(50),
+                    app_name VARCHAR(150),
+                    mail VARCHAR(150),
+                    closing_date_app DATE,
+                    app_quality VARCHAR(50),
+                    confirmation_by_user VARCHAR(50),
+                    comment TEXT
+                )
+            ''')
+            
             # Crear índices para mejor rendimiento
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_scotia_id ON headcount (scotia_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_position ON headcount (position)')
@@ -142,11 +166,14 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_scotia_id ON historico (scotia_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_process_access ON historico (process_access)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_app_access_name ON historico (app_access_name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_sid ON procesos (sid)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_status ON procesos (status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_procesos_tipo ON procesos (tipo_proceso)')
             
             conn.commit()
             conn.close()
             
-            print("✅ Base de datos inicializada correctamente con las 3 tablas requeridas")
+            print("✅ Base de datos inicializada correctamente con las 4 tablas requeridas")
             return True
             
         except Exception as e:
@@ -262,10 +289,35 @@ class DatabaseManager:
                 except sqlite3.IntegrityError:
                     pass  # Ya existe
             
+            # Insertar datos de ejemplo en procesos
+            procesos_ejemplo = [
+                ('EMP001', 'Sub Unidad 1 - Desarrollo Frontend', 'Desarrollador Frontend', 'Pendiente', '2024-01-15', 'Juan Pérez', 'onboarding', 'Sistema de Gestión', 'juan.perez@empresa.com', '2024-01-20', 'Excelente', 'Sí', 'Proceso de onboarding completado exitosamente'),
+                ('EMP002', 'Sub Unidad 2 - Desarrollo Backend', 'Desarrollador Backend', 'Completado', '2024-01-10', 'María García', 'onboarding', 'GitLab', 'maria.garcia@empresa.com', '2024-01-15', 'Buena', 'Sí', 'Onboarding procesado correctamente'),
+                ('EMP003', 'Sub Unidad 3 - DevOps e Infraestructura', 'DevOps Engineer', 'En Proceso', '2024-01-12', 'Carlos López', 'lateral', 'Docker Registry', 'carlos.lopez@empresa.com', None, 'Pendiente', 'No', 'Movimiento lateral en proceso'),
+                ('EMP004', 'Sub Unidad 4 - QA y Testing', 'QA Engineer', 'Pendiente', '2024-01-18', 'Ana Rodríguez', 'onboarding', 'Jira', 'ana.rodriguez@empresa.com', None, 'Pendiente', 'No', 'Pendiente de aprobación'),
+                ('EMP005', 'Sub Unidad 5 - Diseño UX/UI', 'UX Designer', 'Completado', '2024-01-08', 'Luis Martínez', 'onboarding', 'Figma', 'luis.martinez@empresa.com', '2024-01-12', 'Excelente', 'Sí', 'Diseñador UX incorporado exitosamente'),
+                ('EMP006', 'Sub Unidad 6 - Gestión de Proyectos', 'Project Manager', 'Cancelado', '2024-01-05', 'Carmen Silva', 'offboarding', 'Microsoft Project', 'carmen.silva@empresa.com', '2024-01-10', 'Regular', 'Sí', 'Proceso cancelado por cambio de planes'),
+                ('EMP007', 'Sub Unidad 1 - Desarrollo Frontend', 'Desarrollador Frontend Senior', 'Pendiente', '2024-01-20', 'Pedro González', 'lateral', 'React', 'pedro.gonzalez@empresa.com', None, 'Pendiente', 'No', 'Promoción a desarrollador senior'),
+                ('EMP008', 'Sub Unidad 2 - Desarrollo Backend', 'Backend Developer', 'En Proceso', '2024-01-22', 'Sofia Herrera', 'onboarding', 'Node.js', 'sofia.herrera@empresa.com', None, 'Pendiente', 'No', 'Nuevo desarrollador backend'),
+                ('EMP009', 'Sub Unidad 3 - DevOps e Infraestructura', 'Infrastructure Engineer', 'Completado', '2024-01-14', 'Miguel Torres', 'onboarding', 'Kubernetes', 'miguel.torres@empresa.com', '2024-01-18', 'Buena', 'Sí', 'Ingeniero de infraestructura incorporado'),
+                ('EMP010', 'Sub Unidad 4 - QA y Testing', 'Senior QA Engineer', 'Pendiente', '2024-01-25', 'Laura Morales', 'lateral', 'Selenium', 'laura.morales@empresa.com', None, 'Pendiente', 'No', 'Promoción a QA senior')
+            ]
+            
+            for row in procesos_ejemplo:
+                try:
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO procesos 
+                        (sid, nueva_sub_unidad, nuevo_cargo, status, request_date, ingreso_por, tipo_proceso, 
+                         app_name, mail, closing_date_app, app_quality, confirmation_by_user, comment)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', row)
+                except sqlite3.IntegrityError:
+                    pass  # Ya existe
+            
             conn.commit()
             conn.close()
             
-            print("✅ Datos de ejemplo insertados correctamente en las 3 tablas")
+            print("✅ Datos de ejemplo insertados correctamente en las 4 tablas")
             return True
             
         except Exception as e:
@@ -291,6 +343,10 @@ class DatabaseManager:
             # Contar registros en historico
             cursor.execute('SELECT COUNT(*) FROM historico')
             stats['historico'] = cursor.fetchone()[0]
+            
+            # Contar registros en procesos
+            cursor.execute('SELECT COUNT(*) FROM procesos')
+            stats['procesos'] = cursor.fetchone()[0]
             
             # Contar empleados activos
             cursor.execute('SELECT COUNT(*) FROM headcount WHERE activo = 1')
@@ -383,7 +439,7 @@ db_manager = DatabaseManager()
 
 if __name__ == "__main__":
     """Script principal para inicializar la base de datos"""
-    print("🚀 Inicializando base de datos con las 3 tablas requeridas...")
+    print("🚀 Inicializando base de datos con las 4 tablas requeridas...")
     
     if init_database():
         if insert_sample_data():
