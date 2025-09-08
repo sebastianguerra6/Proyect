@@ -658,18 +658,20 @@ class EdicionBusquedaFrame:
         
         if resultados:
             for resultado in resultados:
-                # Extraer valores del resultado de la base de datos
+                # Extraer valores del resultado de la base de datos real
                 valores = (
-                    resultado.get('numero_caso', ''),
+                    resultado.get('case_id', ''),
                     resultado.get('sid', ''),
-                    resultado.get('nueva_sub_unidad', ''),
-                    resultado.get('nuevo_cargo', ''),
+                    resultado.get('scotia_id', ''),
+                    resultado.get('process_access', ''),
                     resultado.get('status', ''),
-                    resultado.get('request_date', ''),
-                    resultado.get('ingreso_por', ''),
-                    resultado.get('tipo_proceso', ''),
-                    resultado.get('app_name', ''),
-                    resultado.get('mail', ''),
+                    resultado.get('record_date', ''),
+                    resultado.get('responsible', ''),
+                    resultado.get('area', ''),
+                    resultado.get('subunit', ''),
+                    resultado.get('event_description', ''),
+                    resultado.get('ticket_email', ''),
+                    resultado.get('app_access_name', ''),
                     resultado.get('closing_date_app', ''),
                     resultado.get('app_quality', ''),
                     resultado.get('confirmation_by_user', ''),
@@ -836,13 +838,6 @@ class EdicionBusquedaFrame:
                 )
                 self.tree.insert("", "end", values=valores)
     
-    def simular_busqueda_por_caso(self, numero_caso):
-        """Método obsoleto - reemplazado por buscar_por_numero_caso"""
-        self.buscar_por_numero_caso()
-    
-    def simular_busqueda(self, sid):
-        """Método obsoleto - reemplazado por buscar_por_sid"""
-        self.buscar_por_sid()
     
     def seleccionar_registro(self, event):
         """Maneja la selección de un registro en el treeview"""
@@ -1197,29 +1192,21 @@ class CreacionPersonaFrame:
             messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
             return
         
-        if self.service:
-            try:
-                # Buscar en la base de datos
-                resultados = self.service.buscar_headcount_por_sid(sid)
-                self.mostrar_resultados_busqueda(resultados)
-            except Exception as e:
-                messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
-        else:
-            # Simulación de búsqueda
-            self.simular_busqueda_por_sid(sid)
+        try:
+            # Buscar en la base de datos real
+            resultados = self.service.buscar_headcount_por_sid(sid)
+            self.mostrar_resultados_busqueda(resultados)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
     
     def mostrar_todos(self):
         """Muestra todos los registros del headcount"""
-        if self.service:
-            try:
-                # Obtener todos los registros
-                resultados = self.service.obtener_todo_headcount()
-                self.mostrar_resultados_busqueda(resultados)
-            except Exception as e:
-                messagebox.showerror("Error", f"Error obteniendo registros: {str(e)}")
-        else:
-            # Simulación de mostrar todos
-            self.simular_mostrar_todos()
+        try:
+            # Obtener todos los registros de la base de datos real
+            resultados = self.service.obtener_todo_headcount()
+            self.mostrar_resultados_busqueda(resultados)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error obteniendo registros: {str(e)}")
     
     def aplicar_filtro(self):
         """Aplica un filtro por texto en la columna seleccionada"""
@@ -1231,37 +1218,33 @@ class CreacionPersonaFrame:
             return
         
         try:
-            if self.service and hasattr(self.service, 'obtener_todo_headcount'):
-                # Obtener todos los registros primero
-                todos_resultados = self.service.obtener_todo_headcount()
-                
-                # Mapear nombres de columnas a campos de la base de datos
-                mapeo_columnas = {
-                    "SID": "sid",
-                    "Nombre": "nombre",
-                    "Apellido": "apellido",
-                    "Email": "email",
-                    "Departamento": "departamento",
-                    "Cargo": "cargo",
-                    "Estado": "estado"
-                }
-                
-                campo_bd = mapeo_columnas.get(columna, "sid")
-                
-                # Aplicar filtro en memoria
-                if todos_resultados:
-                    resultados_filtrados = []
-                    for resultado in todos_resultados:
-                        valor_campo = str(resultado.get(campo_bd, '')).lower()
-                        if texto_filtro.lower() in valor_campo:
-                            resultados_filtrados.append(resultado)
-                    todos_resultados = resultados_filtrados
-                
-                self.mostrar_resultados_busqueda(todos_resultados)
-                messagebox.showinfo("Filtro", f"Se encontraron {len(todos_resultados)} registros para: filtro '{texto_filtro}' en columna '{columna}'")
-            else:
-                # Si no hay servicio, usar simulación
-                self._aplicar_filtro_simulado(texto_filtro, columna)
+            # Obtener todos los registros de la base de datos real
+            todos_resultados = self.service.obtener_todo_headcount()
+            
+            # Mapear nombres de columnas a campos de la base de datos real
+            mapeo_columnas = {
+                "SID": "employee",
+                "Nombre": "full_name",
+                "Email": "email",
+                "Posición": "position",
+                "Manager": "manager",
+                "Unidad": "unit",
+                "Estado": "activo"
+            }
+            
+            campo_bd = mapeo_columnas.get(columna, "employee")
+            
+            # Aplicar filtro en memoria
+            if todos_resultados:
+                resultados_filtrados = []
+                for resultado in todos_resultados:
+                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    if texto_filtro.lower() in valor_campo:
+                        resultados_filtrados.append(resultado)
+                todos_resultados = resultados_filtrados
+            
+            self.mostrar_resultados_busqueda(todos_resultados)
+            messagebox.showinfo("Filtro", f"Se encontraron {len(todos_resultados)} registros para: filtro '{texto_filtro}' en columna '{columna}'")
         except Exception as e:
             messagebox.showerror("Error", f"Error aplicando filtro: {str(e)}")
             print(f"Error en aplicar_filtro: {e}")
@@ -1292,73 +1275,36 @@ class CreacionPersonaFrame:
             return
         
         try:
-            if self.service and hasattr(self.service, 'obtener_todo_headcount'):
-                # Obtener todos los registros primero
-                todos_resultados = self.service.obtener_todo_headcount()
-                
-                # Mapear nombres de columnas a campos de la base de datos
-                mapeo_columnas = {
-                    "SID": "sid",
-                    "Nombre": "nombre",
-                    "Apellido": "apellido",
-                    "Email": "email",
-                    "Departamento": "departamento",
-                    "Cargo": "cargo",
-                    "Estado": "estado"
-                }
-                
-                campo_bd = mapeo_columnas.get(columna, "sid")
-                
-                # Aplicar filtro en memoria
-                if todos_resultados:
-                    resultados_filtrados = []
-                    for resultado in todos_resultados:
-                        valor_campo = str(resultado.get(campo_bd, '')).lower()
-                        if texto_filtro.lower() in valor_campo:
-                            resultados_filtrados.append(resultado)
-                    todos_resultados = resultados_filtrados
-                
-                # Mostrar resultados sin mensaje de confirmación
-                self._mostrar_resultados_sin_mensaje(todos_resultados)
-            else:
-                # Si no hay servicio, usar simulación
-                self._aplicar_filtro_simulado(texto_filtro, columna)
+            # Obtener todos los registros de la base de datos real
+            todos_resultados = self.service.obtener_todo_headcount()
+            
+            # Mapear nombres de columnas a campos de la base de datos real
+            mapeo_columnas = {
+                "SID": "employee",
+                "Nombre": "full_name",
+                "Email": "email",
+                "Posición": "position",
+                "Manager": "manager",
+                "Unidad": "unit",
+                "Estado": "activo"
+            }
+            
+            campo_bd = mapeo_columnas.get(columna, "employee")
+            
+            # Aplicar filtro en memoria
+            if todos_resultados:
+                resultados_filtrados = []
+                for resultado in todos_resultados:
+                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    if texto_filtro.lower() in valor_campo:
+                        resultados_filtrados.append(resultado)
+                todos_resultados = resultados_filtrados
+            
+            # Mostrar resultados sin mensaje de confirmación
+            self._mostrar_resultados_sin_mensaje(todos_resultados)
         except Exception as e:
             print(f"Error en filtrado en tiempo real: {e}")
     
-    def _aplicar_filtro_simulado(self, texto_filtro, columna):
-        """Aplica filtro usando datos simulados cuando no hay servicio"""
-        # Datos de ejemplo
-        datos_ejemplo = [
-            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
-             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
-            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
-             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'},
-            {'sid': 'EMP003', 'nombre': 'Carlos', 'apellido': 'López', 'email': 'carlos.lopez@empresa.com', 
-             'departamento': 'Finanzas', 'cargo': 'Contador', 'estado': 'Activo'}
-        ]
-        
-        # Mapear nombres de columnas a campos de los datos simulados
-        mapeo_columnas = {
-            "SID": "sid",
-            "Nombre": "nombre",
-            "Apellido": "apellido",
-            "Email": "email",
-            "Departamento": "departamento",
-            "Cargo": "cargo",
-            "Estado": "estado"
-        }
-        
-        campo_bd = mapeo_columnas.get(columna, "sid")
-        
-        # Aplicar filtro
-        resultados_filtrados = []
-        for resultado in datos_ejemplo:
-            valor_campo = str(resultado.get(campo_bd, '')).lower()
-            if texto_filtro.lower() in valor_campo:
-                resultados_filtrados.append(resultado)
-        
-        self._mostrar_resultados_sin_mensaje(resultados_filtrados)
     
     def _mostrar_resultados_sin_mensaje(self, resultados):
         """Muestra los resultados sin mostrar mensajes de confirmación"""
@@ -1369,42 +1315,16 @@ class CreacionPersonaFrame:
         if resultados:
             for resultado in resultados:
                 self.tree.insert("", "end", values=(
-                    resultado.get('sid', ''),
-                    resultado.get('nombre', ''),
+                    resultado.get('employee', ''),
+                    resultado.get('full_name', ''),
                     resultado.get('email', ''),
-                    resultado.get('apellido', ''),
-                    resultado.get('departamento', ''),
-                    resultado.get('cargo', ''),
-                    resultado.get('estado', '')
+                    resultado.get('position', ''),
+                    resultado.get('manager', ''),
+                    resultado.get('unit', ''),
+                    'Activo' if resultado.get('activo', True) else 'Inactivo'
                 ))
     
-    def simular_busqueda_por_sid(self, sid):
-        """Simula una búsqueda por SID (para cuando no hay servicio)"""
-        # Datos de ejemplo
-        datos_ejemplo = [
-            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
-             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
-            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
-             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'}
-        ]
-        
-        # Filtrar por SID
-        resultados = [r for r in datos_ejemplo if r['sid'].lower() == sid.lower()]
-        self.mostrar_resultados_busqueda(resultados)
     
-    def simular_mostrar_todos(self):
-        """Simula mostrar todos los registros (para cuando no hay servicio)"""
-        # Datos de ejemplo
-        datos_ejemplo = [
-            {'sid': 'EMP001', 'nombre': 'Juan', 'apellido': 'Pérez', 'email': 'juan.perez@empresa.com', 
-             'departamento': 'Tecnología', 'cargo': 'Desarrollador', 'estado': 'Activo'},
-            {'sid': 'EMP002', 'nombre': 'María', 'apellido': 'García', 'email': 'maria.garcia@empresa.com', 
-             'departamento': 'Recursos Humanos', 'cargo': 'Analista', 'estado': 'Activo'},
-            {'sid': 'EMP003', 'nombre': 'Carlos', 'apellido': 'López', 'email': 'carlos.lopez@empresa.com', 
-             'departamento': 'Finanzas', 'cargo': 'Contador', 'estado': 'Activo'}
-        ]
-        
-        self.mostrar_resultados_busqueda(datos_ejemplo)
     
     def crear_persona(self):
         """Crea una nueva persona en el headcount usando el nuevo servicio"""
@@ -1489,13 +1409,13 @@ class CreacionPersonaFrame:
         if resultados:
             for resultado in resultados:
                 self.tree.insert("", "end", values=(
-                    resultado.get('sid', ''),
-                    resultado.get('nombre', ''),
-                    resultado.get('apellido', ''),
+                    resultado.get('employee', ''),
+                    resultado.get('full_name', ''),
                     resultado.get('email', ''),
-                    resultado.get('departamento', ''),
-                    resultado.get('cargo', ''),
-                    resultado.get('estado', '')
+                    resultado.get('position', ''),
+                    resultado.get('manager', ''),
+                    resultado.get('unit', ''),
+                    'Activo' if resultado.get('activo', True) else 'Inactivo'
                 ))
             
             # Mostrar mensaje de confirmación si se especifica

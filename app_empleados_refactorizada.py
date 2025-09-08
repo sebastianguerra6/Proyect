@@ -1242,6 +1242,7 @@ class ApplicationDialog:
         
         # Crear campos dinámicamente
         self.variables = {}
+        self.widgets = {}  # Referencias a los widgets
         for i, campo in enumerate(campos):
             label_text, var_name, tipo = campo[:3]
             ttk.Label(main_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
@@ -1250,14 +1251,18 @@ class ApplicationDialog:
                 self.variables[var_name] = tk.StringVar()
                 entry = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
                 entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = entry
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 self.variables[var_name] = tk.StringVar()
                 combo = ttk.Combobox(main_frame, textvariable=self.variables[var_name], values=valores, width=37)
                 combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = combo
             elif tipo == "text":
-                self.variables[var_name] = tk.Text(main_frame, height=3, width=40)
-                self.variables[var_name].grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                text_widget = tk.Text(main_frame, height=3, width=40)
+                text_widget.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.variables[var_name] = text_widget  # Para Text widgets, guardamos el widget directamente
+                self.widgets[var_name] = text_widget
         
         # Ajustar el número de fila para los botones
         button_row = len(campos) + 1
@@ -1270,8 +1275,15 @@ class ApplicationDialog:
         ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
         
         # Configurar validación
-        if 'logical_access_name' in self.variables:
-            self.variables['logical_access_name'].get().focus()
+        if 'logical_access_name' in self.widgets:
+            widget = self.widgets['logical_access_name']
+            if hasattr(widget, 'focus'):
+                try:
+                    widget.focus()
+                except Exception as e:
+                    print(f"Error al hacer focus en logical_access_name: {e}")
+        else:
+            print("Warning: logical_access_name widget not found")
         self.dialog.bind('<Return>', lambda e: self._save())
         self.dialog.bind('<Escape>', lambda e: self._cancel())
     
@@ -1329,4 +1341,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
