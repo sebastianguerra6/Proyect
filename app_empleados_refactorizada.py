@@ -1048,11 +1048,9 @@ class ApplicationManager:
     """Clase para gestionar las aplicaciones en la base de datos"""
     
     def __init__(self, db_path: str = None):
-        import sys
         import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), 'database'))
-        from config import get_db_path
-        self.db_path = db_path or get_db_path()
+        # Use the database file directly
+        self.db_path = db_path or os.path.join(os.path.dirname(__file__), 'database', 'empleados.db')
     
     def get_connection(self):
         """Obtiene una conexión a la base de datos"""
