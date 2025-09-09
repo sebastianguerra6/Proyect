@@ -144,6 +144,74 @@ class AccessManagementService:
         except Exception as e:
             return False, f"Error actualizando posición: {str(e)}"
     
+    def update_employee(self, scotia_id: str, employee_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Actualiza todos los datos de un empleado"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Construir query de actualización dinámicamente
+            set_clauses = []
+            params = []
+            
+            for campo, valor in employee_data.items():
+                if campo != 'scotia_id':  # No actualizar el SID
+                    set_clauses.append(f"{campo} = ?")
+                    params.append(valor)
+            
+            if not set_clauses:
+                return False, "No hay datos para actualizar"
+            
+            query = f"""
+                UPDATE headcount 
+                SET {', '.join(set_clauses)}
+                WHERE scotia_id = ?
+            """
+            params.append(scotia_id)
+            
+            cursor.execute(query, params)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return False, f"Empleado {scotia_id} no encontrado"
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Empleado {scotia_id} actualizado exitosamente"
+            
+        except Exception as e:
+            return False, f"Error actualizando empleado: {str(e)}"
+    
+    def delete_employee(self, scotia_id: str) -> Tuple[bool, str]:
+        """Elimina un empleado del headcount"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar si el empleado existe
+            cursor.execute('SELECT full_name FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            empleado = cursor.fetchone()
+            
+            if not empleado:
+                conn.close()
+                return False, f"Empleado {scotia_id} no encontrado"
+            
+            # Eliminar el empleado
+            cursor.execute('DELETE FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return False, f"No se pudo eliminar el empleado {scotia_id}"
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Empleado {scotia_id} eliminado exitosamente"
+            
+        except Exception as e:
+            return False, f"Error eliminando empleado: {str(e)}"
+    
     # ==============================
     # MÉTODOS PARA APPLICATIONS
     # ==============================

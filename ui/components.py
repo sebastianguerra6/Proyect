@@ -350,267 +350,278 @@ class EdicionBusquedaFrame:
         }
     
     def _crear_widgets(self):
-        """Crea los widgets de la interfaz"""
+        """Crea los widgets de la interfaz simplificada"""
         self.frame = ttk.Frame(self.parent)
         
         # Configurar grid del frame principal
         self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(0, weight=1)
-        
-        # Crear canvas con scrollbar
-        canvas = tk.Canvas(self.frame)
-        scrollbar = ttk.Scrollbar(self.frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Configurar grid del frame scrolleable
-        scrollable_frame.columnconfigure(0, weight=1)
-        scrollable_frame.rowconfigure(2, weight=1)  # La sección de resultados debe expandirse
+        self.frame.rowconfigure(1, weight=1)
         
         # Título
-        ttk.Label(scrollable_frame, text="Edición y Búsqueda de Registros", 
+        ttk.Label(self.frame, text="Edición y Búsqueda de Registros - Historial de Procesos", 
                   style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
-        # Frame principal
-        main_frame = ttk.Frame(scrollable_frame)
-        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=10)  # Reducir pady
+        # Frame principal simplificado
+        main_frame = ttk.Frame(self.frame)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(2, weight=1)  # La sección de resultados debe expandirse
+        main_frame.rowconfigure(1, weight=1)
         
-        # Sección de búsqueda
-        busqueda_frame = ttk.LabelFrame(main_frame, text="Búsqueda", padding="15")  # Reducir padding
-        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
+        # Frame para búsqueda y herramientas
+        busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Historial de Procesos", padding="15")
+        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         busqueda_frame.columnconfigure(1, weight=1)
         
-        # Búsqueda por número de caso
-        ttk.Label(busqueda_frame, text="Número de Caso:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
-        ttk.Entry(busqueda_frame, textvariable=self.variables['numero_caso_busqueda'], width=50).grid(
-            row=0, column=1, sticky=(tk.W, tk.E), pady=8
-        )
-        ttk.Button(busqueda_frame, text="Buscar por Caso", command=self.buscar_por_numero_caso).grid(
-            row=0, column=2, padx=(15, 0), pady=8
-        )
+        # Campo de búsqueda por SID
+        ttk.Label(busqueda_frame, text="Buscar por SID:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
+        self.sid_busqueda = ttk.Entry(busqueda_frame, width=30)
+        self.sid_busqueda.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=(0, 10))
         
-        # Búsqueda por SID
-        ttk.Label(busqueda_frame, text="SID:").grid(row=1, column=0, sticky=tk.W, pady=8, padx=(0, 15))
-        ttk.Entry(busqueda_frame, textvariable=self.variables['sid_busqueda'], width=50).grid(
-            row=1, column=1, sticky=(tk.W, tk.E), pady=8
-        )
-        ttk.Button(busqueda_frame, text="Buscar por SID", command=self.buscar_por_sid).grid(
-            row=1, column=2, padx=(15, 0), pady=8
-        )
+        # Botones de búsqueda
+        botones_busqueda_frame = ttk.Frame(busqueda_frame)
+        botones_busqueda_frame.grid(row=0, column=2, pady=5)
         
-        # Botón para buscar todos los registros
-        ttk.Button(busqueda_frame, text="Mostrar Todos los Registros", 
-                  command=self.buscar_todos_los_registros).grid(
-            row=2, column=0, columnspan=3, pady=(15, 0)
-        )
+        ttk.Button(botones_busqueda_frame, text="🔍 Buscar Historial", 
+                  command=self.buscar_historial_por_sid).pack(side=tk.LEFT, padx=5)
+        ttk.Button(botones_busqueda_frame, text="📋 Mostrar Todo el Historial", 
+                  command=self.mostrar_todo_el_historial).pack(side=tk.LEFT, padx=5)
         
-        # Sección de filtrado
-        filtro_frame = ttk.LabelFrame(main_frame, text="Filtrado Avanzado", padding="15")  # Reducir padding
-        filtro_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
-        filtro_frame.columnconfigure(1, weight=1)
+        # Barra de herramientas para la tabla
+        toolbar_frame = ttk.Frame(busqueda_frame)
+        toolbar_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
-        # Filtro por texto con selección de columna
-        ttk.Label(filtro_frame, text="Filtrar por:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
-        
-        # Combobox para seleccionar columna
-        columnas_filtro = [
-            "SID", "Sub Unidad", "Cargo", "Status", "Request Date", 
-            "Ingreso Por", "Tipo", "APP Name", "Mail", "App Quality", 
-            "Confirmation by User", "Comment"
-        ]
-        columna_combobox = ttk.Combobox(filtro_frame, textvariable=self.variables['columna_filtro'], 
-                                       values=columnas_filtro, width=20, state="readonly")
-        columna_combobox.grid(row=0, column=1, sticky=tk.W, pady=8, padx=(0, 15))
-        
-        # Input para el texto del filtro
-        filtro_entry = ttk.Entry(filtro_frame, textvariable=self.variables['filtro_texto'], 
-                 width=40)
-        filtro_entry.grid(row=0, column=2, sticky=(tk.W, tk.E), pady=8, padx=(0, 15))
-        
-        # Tooltip informativo
-        ttk.Label(filtro_frame, text="💡 Escriba para filtrar en tiempo real", 
-                 style="Normal.TLabel", foreground="gray").grid(
-            row=1, column=2, sticky=tk.W, pady=(2, 0)
-        )
-        
-        # Binding para filtrado en tiempo real (con delay)
-        self.filtro_delay_id = None
-        filtro_entry.bind('<KeyRelease>', self._on_filtro_change)
-        
-        # Botón para aplicar filtro
-        ttk.Button(filtro_frame, text="🔍 Aplicar Filtro", 
-                  command=self.aplicar_filtro).grid(
-            row=0, column=3, padx=(15, 0), pady=8
-        )
-        
-        # Botón para limpiar filtro
-        ttk.Button(filtro_frame, text="🧹 Limpiar Filtro", 
-                  command=self.limpiar_filtro).grid(
-            row=2, column=0, columnspan=4, pady=(15, 0)
-        )
-        
-        # Sección de edición
-        edicion_frame = ttk.LabelFrame(main_frame, text="Edición de Campos", padding="15")  # Reducir padding
-        edicion_frame.grid(row=2, column=0, sticky="ew", pady=(0, 15))  # Reducir pady
-        edicion_frame.columnconfigure(1, weight=1)
-        
-        # Campos básicos
-        campos_basicos = [
-            ("Número de Caso:", "numero_caso_edicion", "entry"),
-            ("Nueva Sub Unidad:", "nueva_sub_unidad_edicion", "combobox", [
-                "Sub Unidad 1 - Desarrollo Frontend",
-                "Sub Unidad 2 - Desarrollo Backend", 
-                "Sub Unidad 3 - DevOps e Infraestructura",
-                "Sub Unidad 4 - QA y Testing",
-                "Sub Unidad 5 - Diseño UX/UI",
-                "Sub Unidad 6 - Gestión de Proyectos",
-                "Sub Unidad 7 - Soporte Técnico"
-            ]),
-            ("Nuevo Cargo:", "nuevo_cargo_edicion", "entry"),
-            ("Request Date:", "request_date_edicion", "entry"),
-            ("Quien hace el ingreso:", "ingreso_por_edicion", "combobox", ["Juan Pérez", "María García"]),
-            ("Fecha:", "fecha_edicion", "entry"),
-            ("Status:", "status_edicion", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado", "Rechazado"])
-        ]
-        
-        # Campos adicionales
-        campos_adicionales = [
-            ("Mail:", "mail_edicion", "entry"),
-            ("Closing Date App:", "closing_date_app_edicion", "entry"),
-            ("App Quality:", "app_quality_edicion", "combobox", ["Excelente", "Buena", "Regular", "Mala", "Pendiente"]),
-            ("Confirmation by User:", "confirmation_by_user_edicion", "combobox", ["Sí", "No", "Pendiente"]),
-            ("Comment:", "comment_edicion", "entry")
-        ]
-        
-        # Crear campos básicos
-        for i, campo in enumerate(campos_basicos):
-            label_text, var_name, tipo = campo[:3]
-            ttk.Label(edicion_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=3, padx=(0, 15))  # Reducir pady
-            
-            if tipo == "entry":
-                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=47).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
-                )
+        # Botones de edición
+        ttk.Button(toolbar_frame, text="✏️ Editar Registro", command=self.editar_registro_historial, 
+                  style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="🗑️ Eliminar", command=self.eliminar_registro, 
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
-        ttk.Separator(edicion_frame, orient='horizontal').grid(
-            row=len(campos_basicos), column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10
-        )
+        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Crear campos adicionales
-        for i, campo in enumerate(campos_adicionales):
-            label_text, var_name, tipo = campo[:3]
-            row = len(campos_basicos) + 1 + i
-            ttk.Label(edicion_frame, text=label_text).grid(row=row, column=0, sticky=tk.W, pady=3, padx=(0, 15))  # Reducir pady
-            
-            if tipo == "entry":
-                ttk.Entry(edicion_frame, textvariable=self.variables[var_name], width=50).grid(
-                    row=row, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(edicion_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=47).grid(
-                    row=row, column=1, sticky=(tk.W, tk.E), pady=3  # Reducir pady
-                )
+        # Botón de actualizar
+        ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
         
-        # Botones de acción
-        botones_frame = ttk.Frame(edicion_frame)
-        botones_frame.grid(row=len(campos_basicos) + len(campos_adicionales) + 1, column=0, columnspan=2, pady=10)  # Reducir pady
+        # Tabla de resultados - Actualizada para mostrar historial
+        resultados_frame = ttk.Frame(busqueda_frame)
+        resultados_frame.grid(row=2, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
-        ttk.Button(botones_frame, text="Guardar Cambios", command=self.guardar_cambios).pack(side=tk.LEFT, padx=10)
-        ttk.Button(botones_frame, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
+        # Crear Treeview para mostrar resultados del historial
+        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Responsable", "Descripción"), 
+                                show="headings", height=12)
         
-        # Sección de resultados de búsqueda
-        resultados_frame = ttk.LabelFrame(main_frame, text="Resultados de Búsqueda", padding="15")  # Reducir padding
-        resultados_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 10))  # Reducir pady
+        # Configurar columnas
+        self.tree.heading("SID", text="SID")
+        self.tree.heading("Caso", text="Caso")
+        self.tree.heading("Proceso", text="Proceso")
+        self.tree.heading("Aplicación", text="Aplicación")
+        self.tree.heading("Estado", text="Estado")
+        self.tree.heading("Fecha", text="Fecha")
+        self.tree.heading("Responsable", text="Responsable")
+        self.tree.heading("Descripción", text="Descripción")
+        
+        # Configurar anchos de columna
+        self.tree.column("SID", width=100)
+        self.tree.column("Caso", width=120)
+        self.tree.column("Proceso", width=120)
+        self.tree.column("Aplicación", width=150)
+        self.tree.column("Estado", width=100)
+        self.tree.column("Fecha", width=120)
+        self.tree.column("Responsable", width=120)
+        self.tree.column("Descripción", width=200)
+        
+        # Scrollbar para la tabla
+        tree_scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+        
+        # Empaquetar tabla y scrollbar
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Configurar grid para que la tabla se expanda
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
-        # Frame para la tabla con scrollbars
-        tabla_frame = ttk.Frame(resultados_frame)
-        tabla_frame.grid(row=0, column=0, sticky="nsew")
-        tabla_frame.columnconfigure(0, weight=1)
-        tabla_frame.rowconfigure(0, weight=1)
+        # Eventos de la tabla
+        self.tree.bind('<Double-1>', self._on_doble_clic)
+        self.tree.bind('<Delete>', lambda e: self.eliminar_registro())
         
-        # Treeview para mostrar resultados (aumentar altura para mejor visualización)
-        self.tree = ttk.Treeview(tabla_frame, columns=("Número Caso", "SID", "Sub Unidad", "Cargo", "Status", "Request Date", "Ingreso Por", "Tipo", "APP Name", "Mail", "Closing Date App", "App Quality", "Confirmation by User", "Comment"), show="headings", height=12)
+        # Inicializar filtro delay
+        self.filtro_delay_id = None
+    
+    def _on_doble_clic(self, event):
+        """Maneja el doble clic en la tabla"""
+        self.editar_registro_historial()
+    
+    def actualizar_tabla(self):
+        """Actualiza la tabla con todos los registros del historial"""
+        try:
+            # Obtener todos los registros del historial
+            self.mostrar_todo_el_historial()
+        except Exception as e:
+            messagebox.showerror("Error", f"Error actualizando tabla: {str(e)}")
+    
+    
+    def editar_registro_historial(self):
+        """Edita el registro del historial seleccionado"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un registro para editar")
+            return
         
-        # Configurar columnas
-        self.tree.heading("Número Caso", text="Número Caso")
-        self.tree.heading("SID", text="SID")
-        self.tree.heading("Sub Unidad", text="Sub Unidad")
-        self.tree.heading("Cargo", text="Cargo")
-        self.tree.heading("Status", text="Status")
-        self.tree.heading("Request Date", text="Request Date")
-        self.tree.heading("Ingreso Por", text="Ingreso Por")
-        self.tree.heading("Tipo", text="Tipo")
-        self.tree.heading("APP Name", text="APP Name")
-        self.tree.heading("Mail", text="Mail")
-        self.tree.heading("Closing Date App", text="Closing Date App")
-        self.tree.heading("App Quality", text="App Quality")
-        self.tree.heading("Confirmation by User", text="Confirmation by User")
-        self.tree.heading("Comment", text="Comment")
+        try:
+            # Obtener el registro seleccionado
+            item = selection[0]
+            values = self.tree.item(item, 'values')
+            
+            # Ahora los valores son: SID, Caso, Proceso, Aplicación, Estado, Fecha, Responsable, Descripción
+            scotia_id = values[0]  # SID
+            case_id = values[1]    # Caso
+            process_access = values[2]  # Proceso
+            app_access_name = values[3]  # Aplicación
+            
+            # Buscar los datos completos del registro del historial
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Obtener el registro completo del historial usando una combinación de campos
+            conn = access_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Debug: imprimir los valores que estamos buscando
+            print(f"DEBUG: Buscando registro con SID: {scotia_id}, Caso: {case_id}, Proceso: {process_access}")
+            
+            cursor.execute('''
+                SELECT * FROM historico 
+                WHERE scotia_id = ? AND case_id = ? AND process_access = ? AND app_access_name = ?
+            ''', (scotia_id, case_id, process_access, app_access_name))
+            row = cursor.fetchone()
+            
+            # Debug: imprimir si se encontró algo
+            print(f"DEBUG: Registro encontrado: {row is not None}")
+            
+            if not row:
+                conn.close()
+                messagebox.showerror("Error", f"No se encontró el registro del historial con SID: {scotia_id}, Caso: {case_id}")
+                return
+            
+            # Convertir a diccionario
+            columns = [description[0] for description in cursor.description]
+            historial_data = dict(zip(columns, row))
+            conn.close()
+            
+            print(f"DEBUG: Datos del historial: {historial_data}")
+            
+            # Crear diálogo de edición del historial
+            dialog = HistorialDialog(self.parent, f"Editar Registro de Historial - SID: {scotia_id}", historial_data)
+            self.parent.wait_window(dialog.dialog)
+            
+            if dialog.result:
+                success, message = self.actualizar_registro_historial_por_campos(scotia_id, case_id, process_access, app_access_name, dialog.result)
+                
+                if success:
+                    messagebox.showinfo("Éxito", message)
+                    # Actualizar la tabla después de editar
+                    self.actualizar_tabla()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Error editando registro: {str(e)}")
+            print(f"Error en editar_registro_historial: {e}")
+    
+    def actualizar_registro_historial_por_campos(self, scotia_id, case_id, process_access, app_access_name, data):
+        """Actualiza un registro del historial usando una combinación de campos para identificarlo"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            conn = access_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Construir query de actualización
+            set_clauses = []
+            params = []
+            
+            for campo, valor in data.items():
+                if campo not in ['scotia_id', 'case_id', 'process_access', 'app_access_name']:  # No actualizar los campos de identificación
+                    set_clauses.append(f"{campo} = ?")
+                    params.append(valor)
+            
+            if not set_clauses:
+                return False, "No hay datos para actualizar"
+            
+            # Agregar los campos de identificación al WHERE
+            where_clause = "scotia_id = ? AND case_id = ? AND process_access = ? AND app_access_name = ?"
+            params.extend([scotia_id, case_id, process_access, app_access_name])
+            
+            query = f"UPDATE historico SET {', '.join(set_clauses)} WHERE {where_clause}"
+            
+            print(f"DEBUG: Query de actualización: {query}")
+            print(f"DEBUG: Parámetros: {params}")
+            
+            cursor.execute(query, params)
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return False, f"Registro con SID {scotia_id}, Caso {case_id} no encontrado"
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Registro actualizado exitosamente"
+            
+        except Exception as e:
+            return False, f"Error actualizando registro: {str(e)}"
+    
+    def eliminar_registro(self):
+        """Elimina el registro seleccionado"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un registro para eliminar")
+            return
         
-        # Configurar anchos de columna (más compactos para mejor visualización)
-        self.tree.column("Número Caso", width=100, minwidth=80)
-        self.tree.column("SID", width=70, minwidth=60)
-        self.tree.column("Sub Unidad", width=100, minwidth=80)
-        self.tree.column("Cargo", width=80, minwidth=70)
-        self.tree.column("Status", width=70, minwidth=60)
-        self.tree.column("Request Date", width=80, minwidth=70)
-        self.tree.column("Ingreso Por", width=80, minwidth=70)
-        self.tree.column("Tipo", width=70, minwidth=60)
-        self.tree.column("APP Name", width=120, minwidth=100)
-        self.tree.column("Mail", width=100, minwidth=80)
-        self.tree.column("Closing Date App", width=90, minwidth=80)
-        self.tree.column("App Quality", width=80, minwidth=70)
-        self.tree.column("Confirmation by User", width=100, minwidth=90)
-        self.tree.column("Comment", width=80, minwidth=70)
+        messagebox.showinfo("Info", "Funcionalidad de eliminar registro en desarrollo")
+    
+    def mostrar_resultados_busqueda(self, resultados, busqueda=""):
+        """Muestra los resultados de búsqueda en la tabla"""
+        # Limpiar tabla anterior
+        for item in self.tree.get_children():
+            self.tree.delete(item)
         
-        # Scrollbar vertical para treeview
-        tree_scrollbar_y = ttk.Scrollbar(tabla_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scrollbar_y.set)
-        
-        # Scrollbar horizontal para treeview
-        tree_scrollbar_x = ttk.Scrollbar(tabla_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
-        self.tree.configure(xscrollcommand=tree_scrollbar_x.set)
-        
-        # Empaquetar treeview y scrollbars
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrollbar_y.grid(row=0, column=1, sticky="ns")
-        tree_scrollbar_x.grid(row=1, column=0, sticky="ew")
-        
-        # Binding para selección
-        self.tree.bind('<<TreeviewSelect>>', self.seleccionar_registro)
-        
-        # Empaquetar canvas y scrollbar principal
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        # Configurar el canvas para que se expanda (reducir altura para dar más espacio a la tabla)
-        canvas.configure(width=1200, height=400)
-        
-        # Binding para scroll con mouse
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        if resultados:
+            for i, resultado in enumerate(resultados):
+                if i < 2:  # Debug para los primeros 2 registros
+                    print(f"DEBUG: Insertando registro {i}:")
+                    print(f"  scotia_id: {resultado.get('scotia_id', '')}")
+                    print(f"  employee: {resultado.get('employee', '')}")
+                    print(f"  unit: {resultado.get('unit', '')}")
+                    print(f"  position: {resultado.get('position', '')}")
+                    print(f"  activo: {resultado.get('activo', True)}")
+                    print(f"  start_date: {resultado.get('start_date', '')}")
+                    print(f"  email: {resultado.get('email', '')}")
+                
+                # Mapear los campos correctos de la base de datos headcount
+                values = (
+                    resultado.get('scotia_id', ''),  # Caso
+                    resultado.get('employee', ''),   # SID (usando employee como nombre)
+                    resultado.get('unit', ''),       # Sub Unidad
+                    resultado.get('position', ''),   # Cargo
+                    'Activo' if resultado.get('activo', True) else 'Inactivo',  # Status
+                    resultado.get('start_date', ''), # Request Date
+                    resultado.get('email', '')       # Mail
+                )
+                
+                if i < 2:  # Debug para los primeros 2 registros
+                    print(f"  Valores a insertar: {values}")
+                
+                self.tree.insert("", "end", values=values)
+        else:
+            messagebox.showinfo("Búsqueda", "No se encontraron registros")
     
     def buscar_por_numero_caso(self):
         """Busca registros por número de caso usando la base de datos"""
@@ -631,26 +642,171 @@ class EdicionBusquedaFrame:
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
             print(f"Error en buscar_por_numero_caso: {e}")
     
-    def buscar_por_sid(self):
-        """Busca registros por SID usando la base de datos"""
-        sid = self.variables['sid_busqueda'].get().strip()
+    def buscar_historial_por_sid(self):
+        """Busca el historial por SID"""
+        sid = self.sid_busqueda.get().strip()
         if not sid:
             messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
             return
         
         try:
-            if self.service and hasattr(self.service, 'buscar_procesos'):
-                # Buscar en la base de datos
-                filtros = {'sid': sid}
-                resultados = self.service.buscar_procesos(filtros)
-                self.mostrar_resultados_busqueda(resultados, f"SID: {sid}")
-            else:
-                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Buscar historial por SID
+            historial = access_service.get_employee_history(sid)
+            self.mostrar_resultados_historial(historial, f"historial para SID: {sid}")
         except Exception as e:
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
-            print(f"Error en buscar_por_sid: {e}")
     
-    def mostrar_resultados_busqueda(self, resultados, busqueda):
+    def mostrar_todo_el_historial(self):
+        """Muestra todo el historial de procesos"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Obtener todo el historial
+            conn = access_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Primero verificar si hay datos en la tabla
+            cursor.execute('SELECT COUNT(*) FROM historico')
+            count = cursor.fetchone()[0]
+            print(f"DEBUG: Total de registros en historico: {count}")
+            
+            if count == 0:
+                # Si no hay datos, crear algunos datos de ejemplo
+                self.crear_datos_ejemplo_historial(conn, cursor)
+                conn.commit()
+            
+            cursor.execute('''
+                SELECT h.*, a.logical_access_name, a.description as app_description
+                FROM historico h
+                LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
+                ORDER BY h.record_date DESC
+            ''')
+            rows = cursor.fetchall()
+            conn.close()
+            
+            # Convertir a diccionarios
+            columns = [description[0] for description in cursor.description]
+            historial = [dict(zip(columns, row)) for row in rows]
+            
+            print(f"DEBUG: Historial obtenido: {len(historial)} registros")
+            self.mostrar_resultados_historial(historial, "todo el historial")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error obteniendo historial: {str(e)}")
+            print(f"Error completo: {e}")
+    
+    def crear_datos_ejemplo_historial(self, conn, cursor):
+        """Crea datos de ejemplo en la tabla historico si está vacía"""
+        try:
+            # Insertar algunos registros de ejemplo
+            datos_ejemplo = [
+                {
+                    'scotia_id': 'S001',
+                    'case_id': 'CASE-20241201-001',
+                    'responsible': 'Admin',
+                    'record_date': '2024-12-01 10:00:00',
+                    'process_access': 'onboarding',
+                    'sid': 'S001',
+                    'area': 'Tecnología',
+                    'subunit': 'Desarrollo',
+                    'event_description': 'Acceso requerido para sistema de desarrollo',
+                    'ticket_email': 'admin@empresa.com',
+                    'app_access_name': 'Sistema Desarrollo',
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso'
+                },
+                {
+                    'scotia_id': 'S002',
+                    'case_id': 'CASE-20241201-002',
+                    'responsible': 'Admin',
+                    'record_date': '2024-12-01 11:00:00',
+                    'process_access': 'offboarding',
+                    'sid': 'S002',
+                    'area': 'Tecnología',
+                    'subunit': 'QA',
+                    'event_description': 'Revocación de acceso para sistema de testing',
+                    'ticket_email': 'admin@empresa.com',
+                    'app_access_name': 'Sistema Testing',
+                    'computer_system_type': 'Desktop',
+                    'status': 'Completado',
+                    'general_status': 'Completado'
+                }
+            ]
+            
+            for dato in datos_ejemplo:
+                cursor.execute('''
+                    INSERT INTO historico 
+                    (scotia_id, case_id, responsible, record_date, process_access, sid, area, subunit,
+                     event_description, ticket_email, app_access_name, computer_system_type, status, general_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    dato['scotia_id'], dato['case_id'], dato['responsible'], dato['record_date'],
+                    dato['process_access'], dato['sid'], dato['area'], dato['subunit'],
+                    dato['event_description'], dato['ticket_email'], dato['app_access_name'],
+                    dato['computer_system_type'], dato['status'], dato['general_status']
+                ))
+            
+            print("DEBUG: Datos de ejemplo creados en historico")
+            
+        except Exception as e:
+            print(f"Error creando datos de ejemplo: {e}")
+    
+    def mostrar_resultados_historial(self, resultados, busqueda=""):
+        """Muestra los resultados del historial en la tabla"""
+        # Limpiar tabla anterior
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        print(f"DEBUG: Mostrando {len(resultados) if resultados else 0} resultados del historial")
+        
+        if resultados:
+            for i, resultado in enumerate(resultados):
+                # Debug: imprimir los primeros 3 registros
+                if i < 3:
+                    print(f"DEBUG: Registro {i}: {resultado}")
+                
+                # Formatear fecha
+                fecha = resultado.get('record_date', '')
+                try:
+                    from datetime import datetime
+                    fecha_formatted = datetime.fromisoformat(fecha).strftime('%d/%m/%Y %H:%M') if fecha else 'N/A'
+                except:
+                    fecha_formatted = fecha or 'N/A'
+                
+                # Mapear los campos del historial
+                values = (
+                    resultado.get('scotia_id', ''),             # SID
+                    resultado.get('case_id', ''),               # Caso
+                    resultado.get('process_access', ''),        # Proceso
+                    resultado.get('app_access_name', ''),       # Aplicación
+                    resultado.get('status', ''),                # Estado
+                    fecha_formatted,                            # Fecha
+                    resultado.get('responsible', ''),           # Responsable
+                    resultado.get('event_description', '')      # Descripción
+                )
+                
+                if i < 3:  # Debug para los primeros 3 registros
+                    print(f"DEBUG: Valores a insertar: {values}")
+                
+                self.tree.insert("", "end", values=values)
+            
+            if busqueda:
+                messagebox.showinfo("Búsqueda", f"Se encontraron {len(resultados)} registros para: {busqueda}")
+        else:
+            if busqueda:
+                messagebox.showinfo("Búsqueda", f"No se encontraron registros para: {busqueda}")
+            else:
+                messagebox.showinfo("Búsqueda", "No se encontraron registros")
+    
+    def mostrar_resultados_busqueda(self, resultados, busqueda=""):
         """Muestra los resultados de búsqueda en el treeview"""
         # Limpiar resultados anteriores
         for item in self.tree.get_children():
@@ -686,15 +842,10 @@ class EdicionBusquedaFrame:
     def buscar_todos_los_registros(self):
         """Busca todos los registros en la base de datos"""
         try:
-            if self.service and hasattr(self.service, 'buscar_procesos'):
-                # Buscar todos los registros
-                resultados = self.service.buscar_procesos()
-                self.mostrar_resultados_busqueda(resultados, "todos los registros")
-            else:
-                messagebox.showerror("Error", "Servicio no disponible para búsqueda")
+            # Buscar todos los registros del historial
+            self.mostrar_todo_el_historial()
         except Exception as e:
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
-            print(f"Error en buscar_todos_los_registros: {e}")
     
     def aplicar_filtro(self):
         """Aplica un filtro por texto en la columna seleccionada"""
@@ -940,7 +1091,7 @@ class EdicionBusquedaFrame:
             self.tree.delete(item)
 
 class CreacionPersonaFrame:
-    """Componente para la pestaña de creación de persona en headcount"""
+    """Componente para la gestión completa de headcount y applications"""
     
     def __init__(self, parent, service=None):
         self.parent = parent
@@ -977,98 +1128,27 @@ class CreacionPersonaFrame:
         }
     
     def _crear_widgets(self):
-        """Crea los widgets de la interfaz"""
+        """Crea los widgets de la interfaz simplificada"""
         self.frame = ttk.Frame(self.parent)
         
         # Configurar grid del frame principal
         self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(0, weight=1)
-        
-        # Crear canvas con scrollbar
-        canvas = tk.Canvas(self.frame)
-        scrollbar = ttk.Scrollbar(self.frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Configurar grid del frame scrolleable
-        scrollable_frame.columnconfigure(0, weight=1)
-        scrollable_frame.rowconfigure(1, weight=1)
+        self.frame.rowconfigure(1, weight=1)
         
         # Título
-        ttk.Label(scrollable_frame, text="Crear Nueva Persona en Headcount", 
+        ttk.Label(self.frame, text="Gestión de Personas en Headcount", 
                   style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
-        # Frame principal con scroll
-        main_frame = ttk.Frame(scrollable_frame)
-        main_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=20)
+        # Frame principal simplificado
+        main_frame = ttk.Frame(self.frame)
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
         
-        # Configurar grid
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(len([
-            ("SID:", "sid", "entry"),
-            ("Nombre:", "nombre", "entry"),
-            ("Apellido:", "apellido", "entry"),
-            ("Email:", "email", "entry"),
-            ("Teléfono:", "telefono", "entry"),
-            ("Departamento:", "departamento", "combobox", ["Recursos Humanos", "Tecnología", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
-            ("Cargo:", "cargo", "entry"),
-            ("Fecha de Contratación:", "fecha_contratacion", "entry"),
-            ("Salario:", "salario", "entry"),
-            ("Estado:", "estado", "combobox", ["Activo", "Inactivo", "Vacaciones", "Licencia"])
-        ]), weight=1)
-        
-        # Campos del formulario - Actualizados para coincidir con tabla headcount
-        campos = [
-            # Campos obligatorios
-            ("Scotia ID:", "scotia_id", "entry"),
-            ("Employee:", "employee", "entry"),
-            ("Full Name:", "full_name", "entry"),
-            ("Email:", "email", "entry"),
-            
-            # Campos de posición y organización
-            ("Position:", "position", "entry"),
-            ("Manager:", "manager", "entry"),
-            ("Senior Manager:", "senior_manager", "entry"),
-            ("Unit:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
-            ("Start Date:", "start_date", "entry"),
-            
-            # Campos adicionales
-            ("COCA:", "coca", "entry"),
-            ("Skip Level:", "skip_level", "entry"),
-            ("Coleadores:", "coleadores", "entry"),
-            ("Parents:", "parents", "entry"),
-            ("Personal Email:", "personal_email", "entry"),
-            ("Size:", "size", "combobox", ["XS", "S", "M", "L", "XL"]),
-            ("Birthday:", "birthday", "entry"),
-            ("Ubicación:", "ubicacion", "entry"),
-            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"])
-        ]
-        
-        for i, campo in enumerate(campos):
-            label_text, var_name, tipo = campo[:3]
-            ttk.Label(main_frame, text=label_text).grid(row=i, column=0, sticky=tk.W, pady=5, padx=(0, 15))
-            
-            if tipo == "entry":
-                ttk.Entry(main_frame, textvariable=self.variables[var_name], width=50).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=5
-                )
-            elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(main_frame, textvariable=self.variables[var_name], 
-                            values=valores, width=47).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=5
-                )
-        
-        # Frame para búsqueda
-        busqueda_frame = ttk.LabelFrame(main_frame, text="Búsqueda de Personas", padding="15")
-        busqueda_frame.grid(row=len(campos), column=0, columnspan=2, pady=20, sticky="ew")
+        # Frame para búsqueda y herramientas
+        busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Personas", padding="15")
+        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        busqueda_frame.columnconfigure(1, weight=1)
         
         # Campo de búsqueda por SID
         ttk.Label(busqueda_frame, text="Buscar por SID:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
@@ -1084,48 +1164,24 @@ class CreacionPersonaFrame:
         ttk.Button(botones_busqueda_frame, text="Mostrar Todos", 
                   command=self.mostrar_todos).pack(side=tk.LEFT, padx=5)
         
-        # Sección de filtrado avanzado
-        filtro_frame = ttk.LabelFrame(busqueda_frame, text="Filtrado Avanzado", padding="15")
-        filtro_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
-        filtro_frame.columnconfigure(1, weight=1)
         
-        # Filtro por texto con selección de columna
-        ttk.Label(filtro_frame, text="Filtrar por:").grid(row=0, column=0, sticky=tk.W, pady=8, padx=(0, 15))
+        # Barra de herramientas para la tabla
+        toolbar_frame = ttk.Frame(busqueda_frame)
+        toolbar_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
-        # Combobox para seleccionar columna
-        columnas_filtro = [
-            "SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"
-        ]
-        columna_combobox = ttk.Combobox(filtro_frame, textvariable=self.variables['columna_filtro'], 
-                                       values=columnas_filtro, width=20, state="readonly")
-        columna_combobox.grid(row=0, column=1, sticky=tk.W, pady=8, padx=(0, 15))
+        # Botones de edición
+        ttk.Button(toolbar_frame, text="➕ Nueva Persona", command=self.crear_persona, 
+                  style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="✏️ Editar", command=self.editar_persona, 
+                  style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="🗑️ Eliminar", command=self.eliminar_persona, 
+                  style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
-        # Input para el texto del filtro
-        filtro_entry = ttk.Entry(filtro_frame, textvariable=self.variables['filtro_texto'], 
-                 width=40)
-        filtro_entry.grid(row=0, column=2, sticky=(tk.W, tk.E), pady=8, padx=(0, 15))
+        # Separador
+        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Tooltip informativo
-        ttk.Label(filtro_frame, text="💡 Escriba para filtrar en tiempo real", 
-                 style="Normal.TLabel", foreground="gray").grid(
-            row=1, column=2, sticky=tk.W, pady=(2, 0)
-        )
-        
-        # Binding para filtrado en tiempo real (con delay)
-        self.filtro_delay_id = None
-        filtro_entry.bind('<KeyRelease>', self._on_filtro_change)
-        
-        # Botón para aplicar filtro
-        ttk.Button(filtro_frame, text="🔍 Aplicar Filtro", 
-                  command=self.aplicar_filtro).grid(
-            row=0, column=3, padx=(15, 0), pady=8
-        )
-        
-        # Botón para limpiar filtro
-        ttk.Button(filtro_frame, text="🧹 Limpiar Filtro", 
-                  command=self.limpiar_filtro).grid(
-            row=2, column=0, columnspan=4, pady=(15, 0)
-        )
+        # Botón de actualizar
+        ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
         
         # Tabla de resultados
         resultados_frame = ttk.Frame(busqueda_frame)
@@ -1133,7 +1189,7 @@ class CreacionPersonaFrame:
         
         # Crear Treeview para mostrar resultados
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
-                                show="headings", height=6)
+                                show="headings", height=12)
         
         # Configurar columnas
         self.tree.heading("SID", text="SID")
@@ -1165,38 +1221,59 @@ class CreacionPersonaFrame:
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
-        # Botones de acción
-        botones_frame = ttk.Frame(main_frame)
-        botones_frame.grid(row=len(campos) + 2, column=0, columnspan=2, pady=20)
+        # Eventos de la tabla
+        self.tree.bind('<Double-1>', self._on_doble_clic)
+        self.tree.bind('<Delete>', lambda e: self.eliminar_persona())
         
-        ttk.Button(botones_frame, text="Crear Persona", command=self.crear_persona).pack(side=tk.LEFT, padx=10)
-        ttk.Button(botones_frame, text="Limpiar", command=self.limpiar).pack(side=tk.LEFT, padx=10)
-        
-        # Empaquetar canvas y scrollbar
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        # Configurar el canvas para que se expanda
-        canvas.configure(width=1000, height=700)  # Aumentar altura para acomodar la tabla
-        
-        # Binding para scroll con mouse
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Inicializar filtro delay
+        self.filtro_delay_id = None
     
     def buscar_por_sid(self):
-        """Busca una persona por SID"""
+        """Busca una persona por SID y abre el diálogo de edición si se encuentra"""
+        print("DEBUG: buscar_por_sid llamado")
         sid = self.sid_busqueda.get().strip()
+        print(f"DEBUG: SID buscado: {sid}")
+        
         if not sid:
             messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
             return
         
         try:
             # Buscar en la base de datos real
+            print("DEBUG: Buscando en la base de datos...")
             resultados = self.service.buscar_headcount_por_sid(sid)
-            self.mostrar_resultados_busqueda(resultados)
+            print(f"DEBUG: Resultados encontrados: {len(resultados) if resultados else 0}")
+            
+            if resultados:
+                # Si se encuentra un resultado, abrir el diálogo de edición
+                print("DEBUG: Abriendo diálogo de edición...")
+                persona_data = resultados[0]  # Tomar el primer resultado
+                dialog = PersonaDialog(self.parent, f"Editar Persona - {persona_data.get('scotia_id', '')}", persona_data)
+                self.parent.wait_window(dialog.dialog)
+                
+                if dialog.result:
+                    print("DEBUG: Guardando cambios...")
+                    import sys
+                    import os
+                    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+                    from access_management_service import access_service
+                    
+                    success, message = access_service.update_employee(persona_data.get('scotia_id'), dialog.result)
+                    
+                    if success:
+                        messagebox.showinfo("Éxito", message)
+                        # Actualizar la tabla después de editar
+                        self.actualizar_tabla()
+                    else:
+                        messagebox.showerror("Error", message)
+            else:
+                # Si no se encuentra, mostrar mensaje y actualizar tabla
+                print("DEBUG: No se encontró la persona")
+                messagebox.showinfo("Búsqueda", f"No se encontró ninguna persona con SID: {sid}")
+                self.actualizar_tabla()
+                
         except Exception as e:
+            print(f"DEBUG: Error en búsqueda: {str(e)}")
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
     
     def mostrar_todos(self):
@@ -1314,68 +1391,46 @@ class CreacionPersonaFrame:
         
         if resultados:
             for resultado in resultados:
+                # Separar nombre y apellido del full_name
+                full_name = resultado.get('full_name', '')
+                nombre_parts = full_name.split(' ', 1)
+                nombre = nombre_parts[0] if nombre_parts else ''
+                apellido = nombre_parts[1] if len(nombre_parts) > 1 else ''
+                
                 self.tree.insert("", "end", values=(
-                    resultado.get('employee', ''),
-                    resultado.get('full_name', ''),
-                    resultado.get('email', ''),
-                    resultado.get('position', ''),
-                    resultado.get('manager', ''),
-                    resultado.get('unit', ''),
-                    'Activo' if resultado.get('activo', True) else 'Inactivo'
+                    resultado.get('scotia_id', ''),  # SID
+                    nombre,                          # Nombre
+                    apellido,                        # Apellido
+                    resultado.get('email', ''),      # Email
+                    resultado.get('unit', ''),       # Departamento
+                    resultado.get('position', ''),   # Cargo
+                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
                 ))
     
     
     
     def crear_persona(self):
-        """Crea una nueva persona en el headcount usando el nuevo servicio"""
-        # Validación local
-        campos_vacios = self.validar_campos_obligatorios()
-        if campos_vacios:
-            messagebox.showerror("Error", f"Por favor complete los campos obligatorios: {', '.join(campos_vacios)}")
-            return
-        
-        # Obtener datos del formulario
-        datos = self.obtener_datos()
-        
-        # Preparar datos para el nuevo servicio
-        empleado_data = {
-            'scotia_id': datos.get('scotia_id', ''),
-            'employee': datos.get('employee', ''),
-            'full_name': datos.get('full_name', ''),
-            'email': datos.get('email', ''),
-            'position': datos.get('position', ''),
-            'manager': datos.get('manager', ''),
-            'senior_manager': datos.get('senior_manager', ''),
-            'unit': datos.get('unit', ''),
-            'start_date': datos.get('start_date', ''),
-            'coca': datos.get('coca', ''),
-            'skip_level': datos.get('skip_level', ''),
-            'coleadores': datos.get('coleadores', ''),
-            'parents': datos.get('parents', ''),
-            'personal_email': datos.get('personal_email', ''),
-            'size': datos.get('size', ''),
-            'birthday': datos.get('birthday', ''),
-            'ubicacion': datos.get('ubicacion', ''),
-            'activo': datos.get('activo', 'Activo') == 'Activo'
-        }
-        
-        # Usar el nuevo servicio de gestión de accesos
+        """Crea una nueva persona usando el diálogo de edición"""
         try:
-            import sys
-            import os
-            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
-            from access_management_service import access_service
+            # Crear diálogo de edición sin datos (para nueva persona)
+            dialog = PersonaDialog(self.parent, "Nueva Persona", None)
+            self.parent.wait_window(dialog.dialog)
             
-            success, message = access_service.create_employee(empleado_data)
-            
-            if success:
-                messagebox.showinfo("Éxito", message)
-                self.limpiar()
-                # Actualizar la tabla después de crear
-                self.mostrar_todos()
-            else:
-                messagebox.showerror("Error", message)
+            if dialog.result:
+                import sys
+                import os
+                sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+                from access_management_service import access_service
                 
+                success, message = access_service.create_employee(dialog.result)
+                
+                if success:
+                    messagebox.showinfo("Éxito", message)
+                    # Actualizar la tabla después de crear
+                    self.actualizar_tabla()
+                else:
+                    messagebox.showerror("Error", message)
+                    
         except Exception as e:
             messagebox.showerror("Error", f"Error creando empleado: {str(e)}")
     
@@ -1400,6 +1455,91 @@ class CreacionPersonaFrame:
             var.set("")
         self.variables['activo'].set("Activo")
     
+    def actualizar_tabla(self):
+        """Actualiza la tabla con todos los registros"""
+        try:
+            resultados = self.service.obtener_todo_headcount()
+            self.mostrar_resultados_busqueda(resultados)
+            messagebox.showinfo("Actualización", f"Tabla actualizada. Se encontraron {len(resultados)} registros.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error actualizando tabla: {str(e)}")
+    
+    def _on_doble_clic(self, event):
+        """Maneja doble clic en la tabla"""
+        self.editar_persona()
+    
+    def editar_persona(self):
+        """Edita la persona seleccionada"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione una persona para editar")
+            return
+        
+        item = self.tree.item(selection[0])
+        scotia_id = item['values'][0]
+        
+        # Buscar la persona en la base de datos
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            persona_data = access_service.get_employee_by_id(scotia_id)
+            if not persona_data:
+                messagebox.showerror("Error", "No se pudo encontrar la persona seleccionada")
+                return
+            
+            # Crear diálogo de edición
+            dialog = PersonaDialog(self.parent, "Editar Persona", persona_data)
+            self.parent.wait_window(dialog.dialog)
+            
+            if dialog.result:
+                success, message = access_service.update_employee(scotia_id, dialog.result)
+                if success:
+                    messagebox.showinfo("Éxito", message)
+                    self.actualizar_tabla()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Error editando persona: {str(e)}")
+    
+    def eliminar_persona(self):
+        """Elimina la persona seleccionada"""
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione una persona para eliminar")
+            return
+        
+        item = self.tree.item(selection[0])
+        scotia_id = item['values'][0]
+        nombre = f"{item['values'][1]} {item['values'][2]}"
+        
+        # Confirmar eliminación
+        result = messagebox.askyesno(
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar a {nombre} (SID: {scotia_id})?\n\n"
+            "Esta acción no se puede deshacer."
+        )
+        
+        if result:
+            try:
+                import sys
+                import os
+                sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+                from access_management_service import access_service
+                
+                success, message = access_service.delete_employee(scotia_id)
+                if success:
+                    messagebox.showinfo("Éxito", message)
+                    self.actualizar_tabla()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Error eliminando persona: {str(e)}")
+    
     def mostrar_resultados_busqueda(self, resultados, busqueda=""):
         """Muestra los resultados de búsqueda en la tabla"""
         # Limpiar tabla anterior
@@ -1408,14 +1548,20 @@ class CreacionPersonaFrame:
         
         if resultados:
             for resultado in resultados:
+                # Separar nombre y apellido del full_name
+                full_name = resultado.get('full_name', '')
+                nombre_parts = full_name.split(' ', 1)
+                nombre = nombre_parts[0] if nombre_parts else ''
+                apellido = nombre_parts[1] if len(nombre_parts) > 1 else ''
+                
                 self.tree.insert("", "end", values=(
-                    resultado.get('employee', ''),
-                    resultado.get('full_name', ''),
-                    resultado.get('email', ''),
-                    resultado.get('position', ''),
-                    resultado.get('manager', ''),
-                    resultado.get('unit', ''),
-                    'Activo' if resultado.get('activo', True) else 'Inactivo'
+                    resultado.get('scotia_id', ''),  # SID
+                    nombre,                          # Nombre
+                    apellido,                        # Apellido
+                    resultado.get('email', ''),      # Email
+                    resultado.get('unit', ''),       # Departamento
+                    resultado.get('position', ''),   # Cargo
+                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
                 ))
             
             # Mostrar mensaje de confirmación si se especifica
@@ -1427,3 +1573,302 @@ class CreacionPersonaFrame:
                 messagebox.showinfo("Búsqueda", f"No se encontraron registros para: {busqueda}")
             else:
                 messagebox.showinfo("Búsqueda", "No se encontraron registros")
+
+
+class PersonaDialog:
+    """Diálogo para agregar/editar personas"""
+    
+    def __init__(self, parent, title: str, persona_data: dict = None):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+        self.dialog.geometry("600x500")
+        self.dialog.resizable(True, True)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Centrar el diálogo
+        self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
+        
+        self.persona_data = persona_data
+        self.result = None
+        
+        self._setup_ui()
+        self._load_data()
+    
+    def _setup_ui(self):
+        """Configura la interfaz del diálogo"""
+        # Frame principal con scroll
+        main_frame = ttk.Frame(self.dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Canvas para scroll
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Título
+        title_label = ttk.Label(scrollable_frame, text="Información de la Persona", font=("Arial", 14, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Campos del formulario
+        campos = [
+            ("SID (Scotia ID):", "scotia_id", "entry"),
+            ("Employee ID:", "employee", "entry"),
+            ("Nombre Completo:", "full_name", "entry"),
+            ("Email:", "email", "entry"),
+            ("Posición:", "position", "entry"),
+            ("Manager:", "manager", "entry"),
+            ("Senior Manager:", "senior_manager", "entry"),
+            ("Unidad:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
+            ("Fecha de Inicio:", "start_date", "entry"),
+            ("COCA:", "coca", "entry"),
+            ("Skip Level:", "skip_level", "entry"),
+            ("Coleadores:", "coleadores", "entry"),
+            ("Parents:", "parents", "entry"),
+            ("Email Personal:", "personal_email", "entry"),
+            ("Tamaño:", "size", "combobox", ["XS", "S", "M", "L", "XL", "XXL"]),
+            ("Cumpleaños:", "birthday", "entry"),
+            ("Ubicación:", "ubicacion", "entry"),
+            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"])
+        ]
+        
+        # Crear campos dinámicamente
+        self.variables = {}
+        self.widgets = {}
+        for i, campo in enumerate(campos):
+            label_text, var_name, tipo = campo[:3]
+            ttk.Label(scrollable_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
+            
+            if tipo == "entry":
+                self.variables[var_name] = tk.StringVar()
+                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], width=40)
+                entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = entry
+            elif tipo == "combobox":
+                valores = campo[3] if len(campo) > 3 else []
+                self.variables[var_name] = tk.StringVar()
+                combo = ttk.Combobox(scrollable_frame, textvariable=self.variables[var_name], values=valores, width=37)
+                combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = combo
+        
+        # Configurar grid
+        scrollable_frame.columnconfigure(1, weight=1)
+        
+        # Canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Botones
+        button_frame = ttk.Frame(self.dialog)
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        ttk.Button(button_frame, text="Guardar", command=self._save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Configurar validación
+        if 'scotia_id' in self.widgets:
+            self.widgets['scotia_id'].focus()
+        
+        self.dialog.bind('<Return>', lambda e: self._save())
+        self.dialog.bind('<Escape>', lambda e: self._cancel())
+    
+    def _load_data(self):
+        """Carga los datos existentes si es una edición"""
+        if self.persona_data:
+            for var_name, var in self.variables.items():
+                if var_name in self.persona_data:
+                    if var_name == 'activo':
+                        var.set('Activo' if self.persona_data[var_name] else 'Inactivo')
+                    else:
+                        var.set(str(self.persona_data[var_name]) if self.persona_data[var_name] is not None else '')
+    
+    def _save(self):
+        """Guarda los datos del formulario"""
+        # Validaciones
+        if not self.variables['scotia_id'].get().strip():
+            messagebox.showerror("Error", "El SID es obligatorio")
+            return
+        
+        if not self.variables['employee'].get().strip():
+            messagebox.showerror("Error", "El Employee ID es obligatorio")
+            return
+        
+        if not self.variables['full_name'].get().strip():
+            messagebox.showerror("Error", "El nombre completo es obligatorio")
+            return
+        
+        if not self.variables['email'].get().strip():
+            messagebox.showerror("Error", "El email es obligatorio")
+            return
+        
+        # Preparar datos
+        self.result = {}
+        for var_name, var in self.variables.items():
+            if var_name == 'activo':
+                self.result[var_name] = var.get() == 'Activo'
+            else:
+                self.result[var_name] = var.get().strip()
+        
+        self.dialog.destroy()
+    
+    def _cancel(self):
+        """Cancela la operación"""
+        self.dialog.destroy()
+
+
+class HistorialDialog:
+    """Diálogo para editar registros del historial"""
+    
+    def __init__(self, parent, title: str, historial_data: dict = None):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+        self.dialog.geometry("700x600")
+        self.dialog.resizable(True, True)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Centrar el diálogo
+        self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
+        
+        self.historial_data = historial_data
+        self.result = None
+        
+        self._setup_ui()
+        self._load_data()
+    
+    def _setup_ui(self):
+        """Configura la interfaz del diálogo"""
+        # Frame principal con scroll
+        main_frame = ttk.Frame(self.dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Canvas para scroll
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Título
+        title_label = ttk.Label(scrollable_frame, text="Editar Registro de Historial", font=("Arial", 14, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        
+        # Campos del formulario
+        campos = [
+            ("SID:", "scotia_id", "entry"),
+            ("ID de Caso:", "case_id", "entry"),
+            ("Responsable:", "responsible", "entry"),
+            ("Fecha de Registro:", "record_date", "entry"),
+            ("Proceso de Acceso:", "process_access", "combobox", ["onboarding", "offboarding", "lateral_movement"]),
+            ("SID (interno):", "sid", "entry"),
+            ("Área:", "area", "entry"),
+            ("Sub Unidad:", "subunit", "entry"),
+            ("Descripción del Evento:", "event_description", "text"),
+            ("Email del Ticket:", "ticket_email", "entry"),
+            ("Nombre de Aplicación:", "app_access_name", "entry"),
+            ("Tipo de Sistema:", "computer_system_type", "combobox", ["Desktop", "Laptop", "Mobile", "Server"]),
+            ("Estado:", "status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado", "Rechazado"]),
+            ("Fecha de Cierre App:", "closing_date_app", "entry"),
+            ("Fecha de Cierre Ticket:", "closing_date_ticket", "entry"),
+            ("Calidad de App:", "app_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
+            ("Confirmación por Usuario:", "confirmation_by_user", "entry"),
+            ("Comentario:", "comment", "text"),
+            ("Calidad del Ticket:", "ticket_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
+            ("Estado General:", "general_status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado"]),
+            ("Tiempo Promedio de Apertura:", "average_time_open_ticket", "entry")
+        ]
+        
+        # Crear campos dinámicamente
+        self.variables = {}
+        self.widgets = {}
+        for i, campo in enumerate(campos):
+            label_text, var_name, tipo = campo[:3]
+            ttk.Label(scrollable_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
+            
+            if tipo == "entry":
+                self.variables[var_name] = tk.StringVar()
+                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], width=50)
+                entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = entry
+            elif tipo == "combobox":
+                valores = campo[3] if len(campo) > 3 else []
+                self.variables[var_name] = tk.StringVar()
+                combo = ttk.Combobox(scrollable_frame, textvariable=self.variables[var_name], values=valores, width=47)
+                combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.widgets[var_name] = combo
+            elif tipo == "text":
+                text_widget = tk.Text(scrollable_frame, height=3, width=50)
+                text_widget.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                self.variables[var_name] = text_widget  # Para Text widgets, guardamos el widget directamente
+                self.widgets[var_name] = text_widget
+        
+        # Configurar grid
+        scrollable_frame.columnconfigure(1, weight=1)
+        
+        # Canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Botones
+        button_frame = ttk.Frame(self.dialog)
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+        
+        ttk.Button(button_frame, text="Guardar", command=self._save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Configurar validación
+        if 'scotia_id' in self.widgets:
+            self.widgets['scotia_id'].focus()
+        
+        self.dialog.bind('<Return>', lambda e: self._save())
+        self.dialog.bind('<Escape>', lambda e: self._cancel())
+    
+    def _load_data(self):
+        """Carga los datos existentes si es una edición"""
+        if self.historial_data:
+            for var_name, var in self.variables.items():
+                if var_name in self.historial_data:
+                    if isinstance(var, tk.StringVar):
+                        var.set(str(self.historial_data[var_name]) if self.historial_data[var_name] is not None else '')
+                    elif isinstance(var, tk.Text):
+                        var.delete('1.0', tk.END)
+                        var.insert('1.0', str(self.historial_data[var_name]) if self.historial_data[var_name] is not None else '')
+    
+    def _save(self):
+        """Guarda los datos del formulario"""
+        # Validaciones básicas
+        if not self.variables['scotia_id'].get().strip():
+            messagebox.showerror("Error", "El SID es obligatorio")
+            return
+        
+        if not self.variables['process_access'].get().strip():
+            messagebox.showerror("Error", "El proceso de acceso es obligatorio")
+            return
+        
+        # Preparar datos
+        self.result = {}
+        for var_name, var in self.variables.items():
+            if isinstance(var, tk.StringVar):
+                self.result[var_name] = var.get().strip()
+            elif isinstance(var, tk.Text):
+                self.result[var_name] = var.get('1.0', tk.END).strip()
+        
+        self.dialog.destroy()
+    
+    def _cancel(self):
+        """Cancela la operación"""
+        self.dialog.destroy()
