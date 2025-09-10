@@ -80,11 +80,12 @@ class DatabaseManager:
             # ==============================
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS applications (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     jurisdiction         VARCHAR(100),
                     unit                 VARCHAR(100),
                     subunit              VARCHAR(100),
                     logical_access_name  VARCHAR(150) NOT NULL,
+                    alias                VARCHAR(150),
                     path_email_url       VARCHAR(255),
                     position_role        VARCHAR(100),
                     exception_tracking   VARCHAR(255),
@@ -108,11 +109,12 @@ class DatabaseManager:
             # ==============================
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS historico (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     scotia_id        VARCHAR(20) REFERENCES headcount(scotia_id),
                     case_id          VARCHAR(100),
                     responsible      VARCHAR(100),
                     record_date      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    request_date     DATE,
                     process_access   VARCHAR(50),
                     sid              VARCHAR(100),
                     area             VARCHAR(100),
@@ -157,12 +159,33 @@ class DatabaseManager:
                 )
             ''')
             
+            # Migración: Agregar columna alias si no existe
+            try:
+                cursor.execute('ALTER TABLE applications ADD COLUMN alias VARCHAR(150)')
+                print("✅ Columna 'alias' agregada a la tabla applications")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e).lower():
+                    print("ℹ️ Columna 'alias' ya existe en la tabla applications")
+                else:
+                    print(f"⚠️ Error agregando columna alias: {e}")
+            
+            # Migración: Agregar columna request_date si no existe
+            try:
+                cursor.execute('ALTER TABLE historico ADD COLUMN request_date DATE')
+                print("✅ Columna 'request_date' agregada a la tabla historico")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e).lower():
+                    print("ℹ️ Columna 'request_date' ya existe en la tabla historico")
+                else:
+                    print(f"⚠️ Error agregando columna request_date: {e}")
+            
             # Crear índices para mejor rendimiento
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_scotia_id ON headcount (scotia_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_position ON headcount (position)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_unit ON headcount (unit)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_applications_logical_access_name ON applications (logical_access_name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_applications_position_role ON applications (position_role)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_applications_alias ON applications (alias)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_scotia_id ON historico (scotia_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_process_access ON historico (process_access)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_historico_app_access_name ON historico (app_access_name)')
@@ -210,81 +233,81 @@ class DatabaseManager:
             # Insertar datos de ejemplo en applications - Aplicaciones completas para pruebas
             applications_ejemplo = [
                 # ===== TECNOLOGÍA - DESARROLLADOR =====
-                (1, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Desarrollador', 'TRK001', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD001', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (2, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'https://gitlab.empresa.com', 'Desarrollador', 'TRK002', 'Crear usuario', 'Admin GitLab', 'Developer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD002', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Repositorio de código fuente', 'LDAP'),
-                (3, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'https://jira.empresa.com', 'Desarrollador', 'TRK003', 'Asignar acceso', 'Admin Jira', 'Developer', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD003', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
+                (1, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST', 'https://sistema.empresa.com', 'Desarrollador', 'TRK001', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD001', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (2, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO', 'https://gitlab.empresa.com', 'Desarrollador', 'TRK002', 'Crear usuario', 'Admin GitLab', 'Developer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD002', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Repositorio de código fuente', 'LDAP'),
+                (3, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ', 'https://jira.empresa.com', 'Desarrollador', 'TRK003', 'Asignar acceso', 'Admin Jira', 'Developer', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD003', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
                 
                 # ===== TECNOLOGÍA - DESARROLLADOR SENIOR =====
-                (4, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Desarrollador Senior', 'TRK004', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD004', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (5, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'https://gitlab.empresa.com', 'Desarrollador Senior', 'TRK005', 'Crear usuario', 'Admin GitLab', 'Maintainer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD005', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
-                (6, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'https://jira.empresa.com', 'Desarrollador Senior', 'TRK006', 'Asignar acceso', 'Admin Jira', 'Project Lead', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD006', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
-                (7, 'Global', 'Tecnología', 'Desarrollo', 'Docker Registry', 'https://registry.empresa.com', 'Desarrollador Senior', 'TRK007', 'Crear usuario', 'Admin Docker', 'Maintainer', 'Aplicación', 'DevOps', 'Datos adicionales', 'AD007', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Registro de contenedores Docker', 'LDAP'),
+                (4, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST-ADM', 'https://sistema.empresa.com', 'Desarrollador Senior', 'TRK004', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD004', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (5, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO-ADM', 'https://gitlab.empresa.com', 'Desarrollador Senior', 'TRK005', 'Crear usuario', 'Admin GitLab', 'Maintainer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD005', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
+                (6, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ-ADM', 'https://jira.empresa.com', 'Desarrollador Senior', 'TRK006', 'Asignar acceso', 'Admin Jira', 'Project Lead', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD006', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
+                (7, 'Global', 'Tecnología', 'Desarrollo', 'Docker Registry', 'DOCK-REG', 'https://registry.empresa.com', 'Desarrollador Senior', 'TRK007', 'Crear usuario', 'Admin Docker', 'Maintainer', 'Aplicación', 'DevOps', 'Datos adicionales', 'AD007', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Registro de contenedores Docker', 'LDAP'),
                 
                 # ===== TECNOLOGÍA - ANALISTA =====
-                (8, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Analista', 'TRK008', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD008', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (9, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'https://jira.empresa.com', 'Analista', 'TRK009', 'Asignar acceso', 'Admin Jira', 'Analyst', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD009', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
-                (10, 'Global', 'Tecnología', 'Desarrollo', 'Power BI', 'https://powerbi.empresa.com', 'Analista', 'TRK010', 'Crear usuario', 'Admin PowerBI', 'Analyst', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD010', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Herramienta de análisis de datos', 'LDAP'),
+                (8, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST-ANAL', 'https://sistema.empresa.com', 'Analista', 'TRK008', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD008', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (9, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ-ANAL', 'https://jira.empresa.com', 'Analista', 'TRK009', 'Asignar acceso', 'Admin Jira', 'Analyst', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD009', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
+                (10, 'Global', 'Tecnología', 'Desarrollo', 'Power BI', 'PBI-ANAL', 'https://powerbi.empresa.com', 'Analista', 'TRK010', 'Crear usuario', 'Admin PowerBI', 'Analyst', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD010', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Herramienta de análisis de datos', 'LDAP'),
                 
                 # ===== TECNOLOGÍA - GERENTE =====
-                (11, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Gerente', 'TRK011', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD011', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (12, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'https://gitlab.empresa.com', 'Gerente', 'TRK012', 'Crear usuario', 'Admin GitLab', 'Owner', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD012', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
-                (13, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'https://jira.empresa.com', 'Gerente', 'TRK013', 'Asignar acceso', 'Admin Jira', 'Administrator', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD013', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
-                (14, 'Global', 'Tecnología', 'Desarrollo', 'Power BI', 'https://powerbi.empresa.com', 'Gerente', 'TRK014', 'Crear usuario', 'Admin PowerBI', 'Administrator', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD014', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP'),
+                (11, 'Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK011', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD011', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (12, 'Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO-MGR', 'https://gitlab.empresa.com', 'Gerente', 'TRK012', 'Crear usuario', 'Admin GitLab', 'Owner', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD012', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
+                (13, 'Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ-MGR', 'https://jira.empresa.com', 'Gerente', 'TRK013', 'Asignar acceso', 'Admin Jira', 'Administrator', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD013', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
+                (14, 'Global', 'Tecnología', 'Desarrollo', 'Power BI', 'PBI-MGR', 'https://powerbi.empresa.com', 'Gerente', 'TRK014', 'Crear usuario', 'Admin PowerBI', 'Administrator', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD014', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP'),
                 
                 # ===== RECURSOS HUMANOS - ANALISTA =====
-                (15, 'Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Analista', 'TRK015', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD015', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (16, 'Global', 'Recursos Humanos', 'RRHH', 'Workday', 'https://workday.empresa.com', 'Analista', 'TRK016', 'Crear usuario', 'Admin Workday', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD016', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema de gestión de RRHH', 'LDAP'),
-                (17, 'Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'https://successfactors.empresa.com', 'Analista', 'TRK017', 'Crear usuario', 'Admin SuccessFactors', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD017', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de talento y rendimiento', 'LDAP'),
+                (15, 'Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH', 'https://sistema.empresa.com', 'Analista', 'TRK015', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD015', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (16, 'Global', 'Recursos Humanos', 'RRHH', 'Workday', 'WD-RRHH', 'https://workday.empresa.com', 'Analista', 'TRK016', 'Crear usuario', 'Admin Workday', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD016', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema de gestión de RRHH', 'LDAP'),
+                (17, 'Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'SF-RRHH', 'https://successfactors.empresa.com', 'Analista', 'TRK017', 'Crear usuario', 'Admin SuccessFactors', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD017', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Gestión de talento y rendimiento', 'LDAP'),
                 
                 # ===== RECURSOS HUMANOS - GERENTE =====
-                (18, 'Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Gerente', 'TRK018', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD018', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (19, 'Global', 'Recursos Humanos', 'RRHH', 'Workday', 'https://workday.empresa.com', 'Gerente', 'TRK019', 'Crear usuario', 'Admin Workday', 'Administrator', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD019', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema de gestión de RRHH', 'LDAP'),
-                (20, 'Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'https://successfactors.empresa.com', 'Gerente', 'TRK020', 'Crear usuario', 'Admin SuccessFactors', 'Administrator', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD020', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de talento y rendimiento', 'LDAP'),
+                (18, 'Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK018', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD018', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (19, 'Global', 'Recursos Humanos', 'RRHH', 'Workday', 'WD-RRHH-MGR', 'https://workday.empresa.com', 'Gerente', 'TRK019', 'Crear usuario', 'Admin Workday', 'Administrator', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD019', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema de gestión de RRHH', 'LDAP'),
+                (20, 'Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'SF-RRHH-MGR', 'https://successfactors.empresa.com', 'Gerente', 'TRK020', 'Crear usuario', 'Admin SuccessFactors', 'Administrator', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD020', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Gestión de talento y rendimiento', 'LDAP'),
                 
                 # ===== FINANZAS - ANALISTA =====
-                (21, 'Global', 'Finanzas', 'Contabilidad', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Analista', 'TRK021', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD021', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (22, 'Global', 'Finanzas', 'Contabilidad', 'SAP', 'https://sap.empresa.com', 'Analista', 'TRK022', 'Crear usuario', 'Admin SAP', 'Analyst', 'Aplicación', 'ERP', 'Datos adicionales', 'AD022', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema ERP de gestión empresarial', 'LDAP'),
-                (23, 'Global', 'Finanzas', 'Contabilidad', 'Oracle Financials', 'https://oracle.empresa.com', 'Analista', 'TRK023', 'Crear usuario', 'Admin Oracle', 'Analyst', 'Aplicación', 'ERP', 'Datos adicionales', 'AD023', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Módulo financiero de Oracle', 'LDAP'),
-                (24, 'Global', 'Finanzas', 'Contabilidad', 'Power BI', 'https://powerbi.empresa.com', 'Analista', 'TRK024', 'Crear usuario', 'Admin PowerBI', 'Analyst', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD024', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Herramienta de análisis de datos', 'LDAP'),
+                (21, 'Global', 'Finanzas', 'Contabilidad', 'Sistema de Gestión', 'SIS-GEST-FIN', 'https://sistema.empresa.com', 'Analista', 'TRK021', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD021', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (22, 'Global', 'Finanzas', 'Contabilidad', 'SAP', 'SAP-FIN', 'https://sap.empresa.com', 'Analista', 'TRK022', 'Crear usuario', 'Admin SAP', 'Analyst', 'Aplicación', 'ERP', 'Datos adicionales', 'AD022', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Sistema ERP de gestión empresarial', 'LDAP'),
+                (23, 'Global', 'Finanzas', 'Contabilidad', 'Oracle Financials', 'ORACLE-FIN', 'https://oracle.empresa.com', 'Analista', 'TRK023', 'Crear usuario', 'Admin Oracle', 'Analyst', 'Aplicación', 'ERP', 'Datos adicionales', 'AD023', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Módulo financiero de Oracle', 'LDAP'),
+                (24, 'Global', 'Finanzas', 'Contabilidad', 'Power BI', 'PBI-FIN', 'https://powerbi.empresa.com', 'Analista', 'TRK024', 'Crear usuario', 'Admin PowerBI', 'Analyst', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD024', 'Activo', '2024-01-15 10:30:00', 'Licencia estándar', 'Herramienta de análisis de datos', 'LDAP'),
                 
                 # ===== FINANZAS - GERENTE =====
-                (25, 'Global', 'Finanzas', 'Contabilidad', 'Sistema de Gestión', 'https://sistema.empresa.com', 'Gerente', 'TRK025', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD025', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-                (26, 'Global', 'Finanzas', 'Contabilidad', 'SAP', 'https://sap.empresa.com', 'Gerente', 'TRK026', 'Crear usuario', 'Admin SAP', 'Administrator', 'Aplicación', 'ERP', 'Datos adicionales', 'AD026', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema ERP de gestión empresarial', 'LDAP'),
-                (27, 'Global', 'Finanzas', 'Contabilidad', 'Oracle Financials', 'https://oracle.empresa.com', 'Gerente', 'TRK027', 'Crear usuario', 'Admin Oracle', 'Administrator', 'Aplicación', 'ERP', 'Datos adicionales', 'AD027', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Módulo financiero de Oracle', 'LDAP'),
-                (28, 'Global', 'Finanzas', 'Contabilidad', 'Power BI', 'https://powerbi.empresa.com', 'Gerente', 'TRK028', 'Crear usuario', 'Admin PowerBI', 'Administrator', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD028', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP')
+                (25, 'Global', 'Finanzas', 'Contabilidad', 'Sistema de Gestión', 'SIS-GEST-FIN-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK025', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD025', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+                (26, 'Global', 'Finanzas', 'Contabilidad', 'SAP', 'SAP-FIN-MGR', 'https://sap.empresa.com', 'Gerente', 'TRK026', 'Crear usuario', 'Admin SAP', 'Administrator', 'Aplicación', 'ERP', 'Datos adicionales', 'AD026', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Sistema ERP de gestión empresarial', 'LDAP'),
+                (27, 'Global', 'Finanzas', 'Contabilidad', 'Oracle Financials', 'ORACLE-FIN-MGR', 'https://oracle.empresa.com', 'Gerente', 'TRK027', 'Crear usuario', 'Admin Oracle', 'Administrator', 'Aplicación', 'ERP', 'Datos adicionales', 'AD027', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Módulo financiero de Oracle', 'LDAP'),
+                (28, 'Global', 'Finanzas', 'Contabilidad', 'Power BI', 'PBI-FIN-MGR', 'https://powerbi.empresa.com', 'Gerente', 'TRK028', 'Crear usuario', 'Admin PowerBI', 'Administrator', 'eriorción', 'Analytics', 'Datos adicionales', 'AD028', 'Activo', '2024-01-15 10:30:00', 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP')
             ]
             
             for row in applications_ejemplo:
                 try:
                     cursor.execute('''
                         INSERT OR IGNORE INTO applications 
-                        (id, jurisdiction, unit, subunit, logical_access_name, path_email_url, position_role, 
+                        (id, jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
                          exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, 
                          additional_data, ad_code, access_status, last_update_date, requirement_licensing, description, authentication_method)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', row)
                 except sqlite3.IntegrityError:
                     pass  # Ya existe
             
             # Insertar datos de ejemplo en historico
             historico_ejemplo = [
-                (1, 'EMP001', 'CASE-20240115-001', 'Admin Sistema', '2024-01-15 09:00:00', 'onboarding', 'EMP001', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:30:00'),
-                (2, 'EMP002', 'CASE-20240115-002', 'Admin Portal', '2024-01-15 10:00:00', 'onboarding', 'EMP002', 'Tecnología', 'Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:45:00'),
-                (3, 'EMP003', 'CASE-20240115-003', 'Admin Sistema', '2024-01-15 11:00:00', 'onboarding', 'EMP003', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:20:00'),
-                (4, 'EMP004', 'CASE-20240115-004', 'Admin Portal', '2024-01-15 12:00:00', 'onboarding', 'EMP004', 'Tecnología', 'Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:35:00'),
-                (5, 'EMP005', 'CASE-20240115-005', 'Admin Sistema', '2024-01-15 13:00:00', 'onboarding', 'EMP005', 'Recursos Humanos', 'RRHH', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:25:00'),
-                (6, 'EMP006', 'CASE-20240115-006', 'Admin Portal', '2024-01-15 14:00:00', 'onboarding', 'EMP006', 'Recursos Humanos', 'RRHH', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:40:00')
+                (1, 'EMP001', 'CASE-20240115-001', 'Admin Sistema', '2024-01-15 09:00:00', '2024-01-14', 'onboarding', 'EMP001', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:30:00'),
+                (2, 'EMP002', 'CASE-20240115-002', 'Admin Portal', '2024-01-15 10:00:00', '2024-01-14', 'onboarding', 'EMP002', 'Tecnología', 'Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:45:00'),
+                (3, 'EMP003', 'CASE-20240115-003', 'Admin Sistema', '2024-01-15 11:00:00', '2024-01-14', 'onboarding', 'EMP003', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:20:00'),
+                (4, 'EMP004', 'CASE-20240115-004', 'Admin Portal', '2024-01-15 12:00:00', '2024-01-14', 'onboarding', 'EMP004', 'Tecnología', 'Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:35:00'),
+                (5, 'EMP005', 'CASE-20240115-005', 'Admin Sistema', '2024-01-15 13:00:00', '2024-01-14', 'onboarding', 'EMP005', 'Recursos Humanos', 'RRHH', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:25:00'),
+                (6, 'EMP006', 'CASE-20240115-006', 'Admin Portal', '2024-01-15 14:00:00', '2024-01-14', 'onboarding', 'EMP006', 'Recursos Humanos', 'RRHH', 'Usuario creado en portal', 'admin@empresa.com', 'Portal de Recursos', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', True, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:40:00')
             ]
             
             for row in historico_ejemplo:
                 try:
                     cursor.execute('''
                         INSERT OR IGNORE INTO historico 
-                        (id, scotia_id, case_id, responsible, record_date, process_access, sid, area, subunit, 
+                        (id, scotia_id, case_id, responsible, record_date, request_date, process_access, sid, area, subunit, 
                          event_description, ticket_email, app_access_name, computer_system_type, status, 
                          closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, 
                          ticket_quality, general_status, average_time_open_ticket)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', row)
                 except sqlite3.IntegrityError:
                     pass  # Ya existe

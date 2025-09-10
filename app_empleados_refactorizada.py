@@ -787,12 +787,13 @@ class AplicacionesFrame:
         table_frame.rowconfigure(0, weight=1)
         
         # Crear Treeview - Actualizado para coincidir con tabla applications
-        columns = ('ID', 'Logical Access Name', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category')
+        columns = ('ID', 'Logical Access Name', 'Alias', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category')
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         # Configurar columnas
         self.tree.heading('ID', text='ID')
         self.tree.heading('Logical Access Name', text='Logical Access Name')
+        self.tree.heading('Alias', text='Alias')
         self.tree.heading('Unit', text='Unit')
         self.tree.heading('Position Role', text='Position Role')
         self.tree.heading('System Owner', text='System Owner')
@@ -801,7 +802,8 @@ class AplicacionesFrame:
         
         # Configurar anchos de columna
         self.tree.column('ID', width=50, minwidth=50)
-        self.tree.column('Logical Access Name', width=200, minwidth=150)
+        self.tree.column('Logical Access Name', width=180, minwidth=150)
+        self.tree.column('Alias', width=120, minwidth=100)
         self.tree.column('Unit', width=120, minwidth=100)
         self.tree.column('Position Role', width=150, minwidth=120)
         self.tree.column('System Owner', width=120, minwidth=100)
@@ -867,6 +869,7 @@ class AplicacionesFrame:
             self.tree.insert('', 'end', values=(
                 app.get('id', ''),
                 app.get('logical_access_name', ''),
+                app.get('alias', ''),
                 app.get('unit', ''),
                 app.get('position_role', ''),
                 app.get('system_owner', ''),
@@ -890,6 +893,7 @@ class AplicacionesFrame:
             self.filtered_applications = [
                 app for app in self.applications
                 if (search_term in app.get('logical_access_name', '').lower() or
+                    search_term in app.get('alias', '').lower() or
                     search_term in app.get('unit', '').lower() or
                     search_term in app.get('position_role', '').lower() or
                     search_term in app.get('system_owner', '').lower() or
@@ -1005,7 +1009,7 @@ class AplicacionesFrame:
             
             if filename:
                 with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['ID', 'Logical Access Name', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category']
+                    fieldnames = ['ID', 'Logical Access Name', 'Alias', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category']
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     
                     writer.writeheader()
@@ -1013,6 +1017,7 @@ class AplicacionesFrame:
                         writer.writerow({
                             'ID': app.get('id', ''),
                             'Logical Access Name': app.get('logical_access_name', ''),
+                            'Alias': app.get('alias', ''),
                             'Unit': app.get('unit', ''),
                             'Position Role': app.get('position_role', ''),
                             'System Owner': app.get('system_owner', ''),
@@ -1185,8 +1190,8 @@ class ApplicationDialog:
     def __init__(self, parent, title: str, app_data: dict = None, categories: list = None, owners: list = None):
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(title)
-        self.dialog.geometry("500x400")
-        self.dialog.resizable(False, False)
+        self.dialog.geometry("700x600")
+        self.dialog.resizable(True, True)
         self.dialog.transient(parent)
         self.dialog.grab_set()
         
@@ -1203,17 +1208,25 @@ class ApplicationDialog:
     
     def _setup_ui(self):
         """Configura la interfaz del diálogo"""
-        # Frame principal
-        main_frame = ttk.Frame(self.dialog, padding="20")
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        # Frame principal con scroll
+        main_frame = ttk.Frame(self.dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # Configurar grid
-        self.dialog.columnconfigure(0, weight=1)
-        self.dialog.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+        # Canvas para scroll
+        canvas = tk.Canvas(main_frame)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
         
         # Título
-        title_label = ttk.Label(main_frame, text="Información de la Aplicación", font=("Arial", 14, "bold"))
+        title_label = ttk.Label(scrollable_frame, text="Información de la Aplicación", font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # Campos actualizados para coincidir con tabla applications
@@ -1222,6 +1235,7 @@ class ApplicationDialog:
             ("Unit:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
             ("Subunit:", "subunit", "entry"),
             ("Logical Access Name:", "logical_access_name", "entry"),
+            ("Alias:", "alias", "entry"),
             ("Path/Email/URL:", "path_email_url", "entry"),
             ("Position Role:", "position_role", "entry"),
             ("Exception Tracking:", "exception_tracking", "entry"),
@@ -1240,48 +1254,46 @@ class ApplicationDialog:
         
         # Crear campos dinámicamente
         self.variables = {}
-        self.widgets = {}  # Referencias a los widgets
+        self.widgets = {}
         for i, campo in enumerate(campos):
             label_text, var_name, tipo = campo[:3]
-            ttk.Label(main_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
+            ttk.Label(scrollable_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
             
             if tipo == "entry":
                 self.variables[var_name] = tk.StringVar()
-                entry = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
+                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], width=50)
                 entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.widgets[var_name] = entry
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
                 self.variables[var_name] = tk.StringVar()
-                combo = ttk.Combobox(main_frame, textvariable=self.variables[var_name], values=valores, width=37)
+                combo = ttk.Combobox(scrollable_frame, textvariable=self.variables[var_name], values=valores, width=47)
                 combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.widgets[var_name] = combo
             elif tipo == "text":
-                text_widget = tk.Text(main_frame, height=3, width=40)
+                text_widget = tk.Text(scrollable_frame, height=3, width=50)
                 text_widget.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.variables[var_name] = text_widget  # Para Text widgets, guardamos el widget directamente
                 self.widgets[var_name] = text_widget
         
-        # Ajustar el número de fila para los botones
-        button_row = len(campos) + 1
+        # Configurar grid
+        scrollable_frame.columnconfigure(1, weight=1)
+        
+        # Canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
         # Botones
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=button_row, column=0, columnspan=2, pady=(20, 0))
+        button_frame = ttk.Frame(self.dialog)
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
         
         ttk.Button(button_frame, text="Guardar", command=self._save).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancelar", command=self._cancel).pack(side=tk.LEFT, padx=5)
         
         # Configurar validación
         if 'logical_access_name' in self.widgets:
-            widget = self.widgets['logical_access_name']
-            if hasattr(widget, 'focus'):
-                try:
-                    widget.focus()
-                except Exception as e:
-                    print(f"Error al hacer focus en logical_access_name: {e}")
-        else:
-            print("Warning: logical_access_name widget not found")
+            self.widgets['logical_access_name'].focus()
+        
         self.dialog.bind('<Return>', lambda e: self._save())
         self.dialog.bind('<Escape>', lambda e: self._cancel())
     
@@ -1289,15 +1301,16 @@ class ApplicationDialog:
         """Carga los datos existentes si es una edición"""
         if self.app_data:
             for var_name, var in self.variables.items():
-                if isinstance(var, tk.StringVar):
-                    var.set(self.app_data.get(var_name, ''))
-                elif isinstance(var, tk.Text):
-                    var.delete('1.0', tk.END)
-                    var.insert('1.0', self.app_data.get(var_name, ''))
+                if var_name in self.app_data:
+                    if isinstance(var, tk.StringVar):
+                        var.set(str(self.app_data[var_name]) if self.app_data[var_name] is not None else '')
+                    elif isinstance(var, tk.Text):
+                        var.delete('1.0', tk.END)
+                        var.insert('1.0', str(self.app_data[var_name]) if self.app_data[var_name] is not None else '')
     
     def _save(self):
         """Guarda los datos del formulario"""
-        # Validaciones
+        # Validaciones básicas
         if not self.variables['logical_access_name'].get().strip():
             messagebox.showerror("Error", "El Logical Access Name es obligatorio")
             return
@@ -1319,9 +1332,6 @@ class ApplicationDialog:
             self.result['access_status'] = 'Activo'
         if not self.result.get('jurisdiction'):
             self.result['jurisdiction'] = 'Global'
-        
-        if self.app_data and hasattr(self, 'status_var'):
-            self.result['status'] = self.status_var.get()
         
         self.dialog.destroy()
     

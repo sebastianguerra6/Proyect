@@ -222,9 +222,17 @@ class AccessManagementService:
             conn = self.get_connection()
             cursor = conn.cursor()
             
+            # Obtener aplicaciones únicas por logical_access_name
             cursor.execute('''
-                SELECT * FROM applications 
+                SELECT logical_access_name, jurisdiction, unit, subunit, 
+                       alias, path_email_url, position_role, exception_tracking, 
+                       fulfillment_action, system_owner, role_name, access_type, 
+                       category, additional_data, ad_code, access_status, 
+                       last_update_date, requirement_licensing, description, 
+                       authentication_method
+                FROM applications 
                 WHERE position_role = ? AND unit = ?
+                GROUP BY logical_access_name
                 ORDER BY logical_access_name
             ''', (position, unit))
             
@@ -270,16 +278,17 @@ class AccessManagementService:
             
             cursor.execute('''
                 INSERT INTO applications 
-                (jurisdiction, unit, subunit, logical_access_name, path_email_url, position_role, 
+                (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
                  exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
                  category, additional_data, ad_code, access_status, last_update_date, 
                  requirement_licensing, description, authentication_method)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 app_data.get('jurisdiction'),
                 app_data.get('unit'),
                 app_data.get('subunit'),
                 app_data.get('logical_access_name'),
+                app_data.get('alias'),
                 app_data.get('path_email_url'),
                 app_data.get('position_role'),
                 app_data.get('exception_tracking'),
@@ -297,10 +306,13 @@ class AccessManagementService:
                 app_data.get('authentication_method')
             ))
             
+            # Obtener el ID de la aplicación creada
+            app_id = cursor.lastrowid
+            
             conn.commit()
             conn.close()
             
-            return True, f"Aplicación {app_data.get('logical_access_name')} creada exitosamente"
+            return True, f"Aplicación {app_data.get('logical_access_name')} creada exitosamente con ID {app_id}"
             
         except sqlite3.IntegrityError as e:
             return False, f"Error de integridad: La aplicación ya existe"
@@ -323,7 +335,7 @@ class AccessManagementService:
             params = []
             
             for field, value in app_data.items():
-                if field in ['jurisdiction', 'unit', 'subunit', 'logical_access_name', 'path_email_url', 
+                if field in ['jurisdiction', 'unit', 'subunit', 'logical_access_name', 'alias', 'path_email_url', 
                            'position_role', 'exception_tracking', 'fulfillment_action', 'system_owner', 
                            'role_name', 'access_type', 'category', 'additional_data', 'ad_code', 
                            'access_status', 'requirement_licensing', 'description', 'authentication_method']:
@@ -401,16 +413,17 @@ class AccessManagementService:
             
             cursor.execute('''
                 INSERT INTO historico 
-                (scotia_id, case_id, responsible, record_date, process_access, sid, area, subunit, 
+                (scotia_id, case_id, responsible, record_date, request_date, process_access, sid, area, subunit, 
                  event_description, ticket_email, app_access_name, computer_system_type, status, 
                  closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, 
                  ticket_quality, general_status, average_time_open_ticket)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 record_data.get('scotia_id'),
                 record_data.get('case_id'),
                 record_data.get('responsible'),
                 record_data.get('record_date', datetime.now().isoformat()),
+                record_data.get('request_date'),
                 record_data.get('process_access'),
                 record_data.get('sid'),
                 record_data.get('area'),
@@ -598,11 +611,11 @@ class AccessManagementService:
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
-                    'process_access': 'lateral_movement',
+                    'process_access': 'offboarding',
                     'sid': scotia_id,
                     'area': new_unit,
                     'subunit': '',
-                    'event_description': f"Revocación de acceso para {app_name} (movimiento lateral)",
+                    'event_description': f"Revocación de acceso para {app_name} (lateral movement)",
                     'ticket_email': f"{responsible}@empresa.com",
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
@@ -620,11 +633,11 @@ class AccessManagementService:
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
-                    'process_access': 'lateral_movement',
+                    'process_access': 'onboarding',
                     'sid': scotia_id,
                     'area': new_unit,
                     'subunit': '',
-                    'event_description': f"Otorgamiento de acceso para {app_name} (movimiento lateral)",
+                    'event_description': f"Otorgamiento de acceso para {app_name} (lateral movement)",
                     'ticket_email': f"{responsible}@empresa.com",
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',

@@ -407,7 +407,7 @@ class EdicionBusquedaFrame:
         resultados_frame.grid(row=2, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
         # Crear Treeview para mostrar resultados del historial
-        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Responsable", "Descripción"), 
+        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Descripción"), 
                                 show="headings", height=12)
         
         # Configurar columnas
@@ -417,6 +417,7 @@ class EdicionBusquedaFrame:
         self.tree.heading("Aplicación", text="Aplicación")
         self.tree.heading("Estado", text="Estado")
         self.tree.heading("Fecha", text="Fecha")
+        self.tree.heading("Fecha Solicitud", text="Fecha Solicitud")
         self.tree.heading("Responsable", text="Responsable")
         self.tree.heading("Descripción", text="Descripción")
         
@@ -427,6 +428,7 @@ class EdicionBusquedaFrame:
         self.tree.column("Aplicación", width=150)
         self.tree.column("Estado", width=100)
         self.tree.column("Fecha", width=120)
+        self.tree.column("Fecha Solicitud", width=120)
         self.tree.column("Responsable", width=120)
         self.tree.column("Descripción", width=200)
         
@@ -781,6 +783,14 @@ class EdicionBusquedaFrame:
                 except:
                     fecha_formatted = fecha or 'N/A'
                 
+                # Formatear fecha de solicitud
+                request_fecha = resultado.get('request_date', '')
+                try:
+                    from datetime import datetime
+                    request_fecha_formatted = datetime.fromisoformat(request_fecha).strftime('%d/%m/%Y') if request_fecha else 'N/A'
+                except:
+                    request_fecha_formatted = request_fecha or 'N/A'
+                
                 # Mapear los campos del historial
                 values = (
                     resultado.get('scotia_id', ''),             # SID
@@ -789,6 +799,7 @@ class EdicionBusquedaFrame:
                     resultado.get('app_access_name', ''),       # Aplicación
                     resultado.get('status', ''),                # Estado
                     fecha_formatted,                            # Fecha
+                    request_fecha_formatted,                    # Fecha Solicitud
                     resultado.get('responsible', ''),           # Responsable
                     resultado.get('event_description', '')      # Descripción
                 )
@@ -1773,6 +1784,7 @@ class HistorialDialog:
             ("ID de Caso:", "case_id", "entry"),
             ("Responsable:", "responsible", "entry"),
             ("Fecha de Registro:", "record_date", "entry"),
+            ("Fecha de Solicitud:", "request_date", "entry"),
             ("Proceso de Acceso:", "process_access", "combobox", ["onboarding", "offboarding", "lateral_movement"]),
             ("SID (interno):", "sid", "entry"),
             ("Área:", "area", "entry"),
