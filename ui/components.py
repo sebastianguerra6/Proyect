@@ -248,7 +248,6 @@ class LateralMovementFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
-            'empleo_anterior': tk.StringVar(),
             'submenu_lateral': tk.StringVar(),
             'other_lateral': tk.StringVar()
         }
@@ -273,25 +272,19 @@ class LateralMovementFrame:
         campos_frame.pack(fill=tk.BOTH, expand=True)
         campos_frame.columnconfigure(1, weight=1)
         
-        # Campo empleo anterior
-        ttk.Label(campos_frame, text="Empleo Anterior:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 15))
-        ttk.Entry(campos_frame, textvariable=self.variables['empleo_anterior'], width=50).grid(
-            row=0, column=1, sticky=(tk.W, tk.E), pady=5
-        )
-        
         # Título para radio buttons
         ttk.Label(campos_frame, text="Tipo de Movimiento:", style="Subsection.TLabel").grid(
-            row=1, column=0, columnspan=2, sticky=tk.W, pady=(20, 10))
+            row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
         
         # Submenú con radio buttons
         opciones_submenu = ["Movimiento Horizontal", "Reasignación de Proyecto", "Cambio de Equipo", "Rotación de Funciones"]
         for i, opcion in enumerate(opciones_submenu):
             ttk.Radiobutton(campos_frame, text=opcion, 
                            variable=self.variables['submenu_lateral'], 
-                           value=opcion).grid(row=2+i, column=0, columnspan=2, sticky="ew", pady=5)
+                           value=opcion).grid(row=1+i, column=0, columnspan=2, sticky="ew", pady=5)
         
         # Opción Other con campo de texto
-        other_row = 2 + len(opciones_submenu)
+        other_row = 1 + len(opciones_submenu)
         other_frame = ttk.Frame(campos_frame)
         other_frame.grid(row=other_row, column=0, columnspan=2, sticky="ew", pady=5)
         
@@ -332,7 +325,6 @@ class EdicionBusquedaFrame:
         """Crea las variables de control"""
         self.variables = {
             'numero_caso_busqueda': tk.StringVar(),
-            'sid_busqueda': tk.StringVar(),
             'numero_caso_edicion': tk.StringVar(),
             'nueva_sub_unidad_edicion': tk.StringVar(),
             'nuevo_cargo_edicion': tk.StringVar(),
@@ -347,6 +339,19 @@ class EdicionBusquedaFrame:
             'comment_edicion': tk.StringVar(),
             'filtro_texto': tk.StringVar(),
             'columna_filtro': tk.StringVar(value="SID")
+        }
+        
+        # Variables para filtros múltiples
+        self.filtros_activos = {}
+        self.campos_filtro = {
+            "SID": "sid",
+            "Número de Caso": "case_id", 
+            "Proceso": "process_access",
+            "Aplicación": "app_name",
+            "Estado": "status",
+            "Fecha": "record_date",
+            "Responsable": "responsible",
+            "Descripción": "event_description"
         }
     
     def _crear_widgets(self):
@@ -365,30 +370,16 @@ class EdicionBusquedaFrame:
         main_frame = ttk.Frame(self.frame)
         main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(3, weight=1)  # Cambiar de row 1 a row 3 para la tabla
         
         # Frame para búsqueda y herramientas
         busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Historial de Procesos", padding="15")
         busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         busqueda_frame.columnconfigure(1, weight=1)
         
-        # Campo de búsqueda por SID
-        ttk.Label(busqueda_frame, text="Buscar por SID:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
-        self.sid_busqueda = ttk.Entry(busqueda_frame, width=30)
-        self.sid_busqueda.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=(0, 10))
-        
-        # Botones de búsqueda
-        botones_busqueda_frame = ttk.Frame(busqueda_frame)
-        botones_busqueda_frame.grid(row=0, column=2, pady=5)
-        
-        ttk.Button(botones_busqueda_frame, text="🔍 Buscar Historial", 
-                  command=self.buscar_historial_por_sid).pack(side=tk.LEFT, padx=5)
-        ttk.Button(botones_busqueda_frame, text="📋 Mostrar Todo el Historial", 
-                  command=self.mostrar_todo_el_historial).pack(side=tk.LEFT, padx=5)
-        
         # Barra de herramientas para la tabla
         toolbar_frame = ttk.Frame(busqueda_frame)
-        toolbar_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        toolbar_frame.grid(row=0, column=0, columnspan=3, pady=(0, 15), sticky="ew")
         
         # Botones de edición
         ttk.Button(toolbar_frame, text="✏️ Editar Registro", command=self.editar_registro_historial, 
@@ -399,12 +390,17 @@ class EdicionBusquedaFrame:
         # Separador
         ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Botón de actualizar
+        # Botones de actualizar y mostrar todos
         ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="📋 Mostrar Todo el Historial", 
+                  command=self.mostrar_todo_el_historial).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Panel de filtros múltiples
+        self._crear_panel_filtros(busqueda_frame)
         
         # Tabla de resultados - Actualizada para mostrar historial
         resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=2, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
         # Crear Treeview para mostrar resultados del historial
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Descripción"), 
@@ -581,13 +577,65 @@ class EdicionBusquedaFrame:
             return False, f"Error actualizando registro: {str(e)}"
     
     def eliminar_registro(self):
-        """Elimina el registro seleccionado"""
+        """Elimina el registro seleccionado del historial"""
         selection = self.tree.selection()
         if not selection:
             messagebox.showwarning("Advertencia", "Por favor seleccione un registro para eliminar")
             return
         
-        messagebox.showinfo("Info", "Funcionalidad de eliminar registro en desarrollo")
+        # Obtener datos del registro seleccionado
+        item = self.tree.item(selection[0])
+        values = item['values']
+        
+        if len(values) < 3:
+            messagebox.showerror("Error", "Datos de registro no válidos")
+            return
+        
+        scotia_id = values[0]
+        case_id = values[1]
+        app_name = values[3]
+        
+        # Confirmar eliminación
+        result = messagebox.askyesno(
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar este registro?\n\n"
+            f"SID: {scotia_id}\n"
+            f"Caso: {case_id}\n"
+            f"Aplicación: {app_name}\n\n"
+            "Esta acción no se puede deshacer."
+        )
+        
+        if result:
+            try:
+                # Eliminar el registro del historial pasando también el app_name para ser específico
+                success, message = self._eliminar_registro_historico(scotia_id, case_id, app_name)
+                
+                if success:
+                    messagebox.showinfo("Éxito", "Registro eliminado correctamente")
+                    # Actualizar la tabla refrescando desde la base de datos
+                    self.mostrar_todo_el_historial()
+                else:
+                    messagebox.showerror("Error", f"Error al eliminar registro: {message}")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Error inesperado: {str(e)}")
+    
+    def _eliminar_registro_historico(self, scotia_id, case_id, app_name=None):
+        """Elimina un registro específico del historial"""
+        try:
+            if not self.service:
+                return False, "Servicio no disponible"
+            
+            # Usar el servicio para eliminar el registro específico
+            success = self.service.delete_historical_record(scotia_id, case_id, app_name)
+            
+            if success:
+                return True, "Registro eliminado exitosamente"
+            else:
+                return False, "No se pudo eliminar el registro"
+            
+        except Exception as e:
+            return False, f"Error eliminando registro: {str(e)}"
     
     def mostrar_resultados_busqueda(self, resultados, busqueda=""):
         """Muestra los resultados de búsqueda en la tabla"""
@@ -644,11 +692,105 @@ class EdicionBusquedaFrame:
             messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
             print(f"Error en buscar_por_numero_caso: {e}")
     
-    def buscar_historial_por_sid(self):
-        """Busca el historial por SID"""
-        sid = self.sid_busqueda.get().strip()
-        if not sid:
-            messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
+    def _crear_panel_filtros(self, parent):
+        """Crea el panel de filtros múltiples"""
+        # Frame para filtros
+        filtros_frame = ttk.LabelFrame(parent, text="Filtros Múltiples", padding="10")
+        filtros_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+        filtros_frame.columnconfigure(1, weight=1)
+        
+        # Lista de filtros activos
+        ttk.Label(filtros_frame, text="Filtros Activos:").grid(row=0, column=0, sticky="w", pady=5)
+        self.filtros_listbox = tk.Listbox(filtros_frame, height=3)
+        self.filtros_listbox.grid(row=0, column=1, sticky="ew", padx=(10, 5), pady=5)
+        
+        # Scrollbar para la lista
+        scrollbar_filtros = ttk.Scrollbar(filtros_frame, orient="vertical", command=self.filtros_listbox.yview)
+        scrollbar_filtros.grid(row=0, column=2, sticky="ns")
+        self.filtros_listbox.configure(yscrollcommand=scrollbar_filtros.set)
+        
+        # Botones para gestionar filtros
+        botones_filtros = ttk.Frame(filtros_frame)
+        botones_filtros.grid(row=0, column=3, padx=(5, 0), pady=5)
+        
+        ttk.Button(botones_filtros, text="Eliminar", command=self._eliminar_filtro_seleccionado).pack(side=tk.TOP, pady=2)
+        ttk.Button(botones_filtros, text="Limpiar", command=self._limpiar_todos_filtros).pack(side=tk.TOP, pady=2)
+        
+        # Frame para agregar nuevo filtro
+        nuevo_filtro_frame = ttk.Frame(filtros_frame)
+        nuevo_filtro_frame.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        nuevo_filtro_frame.columnconfigure(1, weight=1)
+        
+        # Campo de texto para el valor del filtro
+        ttk.Label(nuevo_filtro_frame, text="Valor:").grid(row=0, column=0, padx=(0, 5), pady=5, sticky="w")
+        self.entry_filtro = ttk.Entry(nuevo_filtro_frame, width=30)
+        self.entry_filtro.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=5)
+        
+        # Combo para seleccionar campo
+        ttk.Label(nuevo_filtro_frame, text="Campo:").grid(row=0, column=2, padx=(0, 5), pady=5, sticky="w")
+        self.combo_campo = ttk.Combobox(nuevo_filtro_frame, values=list(self.campos_filtro.keys()), width=15)
+        self.combo_campo.grid(row=0, column=3, padx=(0, 10), pady=5)
+        
+        # Botón para agregar filtro
+        ttk.Button(nuevo_filtro_frame, text="Agregar Filtro", command=self._agregar_filtro).grid(row=0, column=4, padx=(0, 5), pady=5)
+        
+        # Botones de acción
+        botones_accion = ttk.Frame(filtros_frame)
+        botones_accion.grid(row=2, column=0, columnspan=4, pady=(10, 0))
+        
+        ttk.Button(botones_accion, text="Aplicar Filtros", command=self._aplicar_filtros_multiples).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(botones_accion, text="Mostrar Todos", command=self.mostrar_todo_el_historial).pack(side=tk.LEFT)
+        
+        # Bind para Enter en el campo de texto
+        self.entry_filtro.bind('<Return>', lambda e: self._agregar_filtro())
+    
+    def _agregar_filtro(self):
+        """Agrega un nuevo filtro a la lista"""
+        valor = self.entry_filtro.get().strip()
+        campo = self.combo_campo.get()
+        
+        if not valor:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un valor para el filtro")
+            return
+        
+        if not campo:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un campo para filtrar")
+            return
+        
+        # Agregar filtro al diccionario
+        campo_bd = self.campos_filtro.get(campo)
+        if campo_bd:
+            self.filtros_activos[campo] = valor
+            self._actualizar_lista_filtros()
+            
+            # Limpiar campos
+            self.entry_filtro.delete(0, tk.END)
+            self.combo_campo.set("")
+    
+    def _eliminar_filtro_seleccionado(self):
+        """Elimina el filtro seleccionado de la lista"""
+        seleccion = self.filtros_listbox.curselection()
+        if seleccion:
+            indice = seleccion[0]
+            campo = list(self.filtros_activos.keys())[indice]
+            del self.filtros_activos[campo]
+            self._actualizar_lista_filtros()
+    
+    def _limpiar_todos_filtros(self):
+        """Limpia todos los filtros activos"""
+        self.filtros_activos.clear()
+        self._actualizar_lista_filtros()
+    
+    def _actualizar_lista_filtros(self):
+        """Actualiza la lista visual de filtros activos"""
+        self.filtros_listbox.delete(0, tk.END)
+        for campo, valor in self.filtros_activos.items():
+            self.filtros_listbox.insert(tk.END, f"{campo}: {valor}")
+    
+    def _aplicar_filtros_multiples(self):
+        """Aplica todos los filtros activos"""
+        if not self.filtros_activos:
+            messagebox.showwarning("Advertencia", "No hay filtros activos para aplicar")
             return
         
         try:
@@ -657,11 +799,43 @@ class EdicionBusquedaFrame:
             sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
             from access_management_service import access_service
             
-            # Buscar historial por SID
-            historial = access_service.get_employee_history(sid)
-            self.mostrar_resultados_historial(historial, f"historial para SID: {sid}")
+            # Obtener todos los registros del historial
+            todos_resultados = access_service.buscar_procesos({})
+            
+            # Aplicar filtros múltiples
+            resultados_filtrados = self._aplicar_filtros_en_memoria(todos_resultados)
+            
+            # Mostrar resultados
+            if resultados_filtrados:
+                mensaje = f"Se encontraron {len(resultados_filtrados)} registros con los filtros aplicados"
+                self.mostrar_resultados_historial(resultados_filtrados, mensaje)
+            else:
+                messagebox.showinfo("Filtros", "No se encontraron registros que coincidan con los filtros aplicados")
+                
         except Exception as e:
-            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+            messagebox.showerror("Error", f"Error aplicando filtros: {str(e)}")
+    
+    def _aplicar_filtros_en_memoria(self, resultados):
+        """Aplica los filtros activos a los resultados en memoria"""
+        if not resultados:
+            return resultados
+        
+        resultados_filtrados = []
+        for resultado in resultados:
+            cumple_filtros = True
+            
+            for campo_ui, valor_filtro in self.filtros_activos.items():
+                campo_bd = self.campos_filtro.get(campo_ui)
+                if campo_bd:
+                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    if valor_filtro.lower() not in valor_campo:
+                        cumple_filtros = False
+                        break
+            
+            if cumple_filtros:
+                resultados_filtrados.append(resultado)
+        
+        return resultados_filtrados
     
     def mostrar_todo_el_historial(self):
         """Muestra todo el historial de procesos"""
@@ -1124,18 +1298,32 @@ class CreacionPersonaFrame:
             'senior_manager': tk.StringVar(),
             'unit': tk.StringVar(),
             'start_date': tk.StringVar(),
-            'coca': tk.StringVar(),
+            'ceco': tk.StringVar(),
             'skip_level': tk.StringVar(),
-            'coleadores': tk.StringVar(),
+            'cafe_alcides': tk.StringVar(),
             'parents': tk.StringVar(),
             'personal_email': tk.StringVar(),
             'size': tk.StringVar(),
             'birthday': tk.StringVar(),
-            'ubicacion': tk.StringVar(),
+            'validacion': tk.StringVar(),
             'activo': tk.StringVar(value="Activo"),
             # Campos para filtros
             'filtro_texto': tk.StringVar(),
             'columna_filtro': tk.StringVar(value="scotia_id")
+        }
+        
+        # Variables para filtros múltiples
+        self.filtros_activos = {}
+        self.campos_filtro = {
+            "SID": "scotia_id",
+            "Nombre": "full_name",
+            "Email": "email",
+            "Posición": "position",
+            "Manager": "manager",
+            "Unidad": "unit",
+            "CECO": "ceco",
+            "Cafe Alcides": "cafe_alcides",
+            "Validación": "validacion"
         }
     
     def _crear_widgets(self):
@@ -1154,31 +1342,16 @@ class CreacionPersonaFrame:
         main_frame = ttk.Frame(self.frame)
         main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(3, weight=1)  # Cambiar de row 1 a row 3 para la tabla
         
         # Frame para búsqueda y herramientas
         busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Personas", padding="15")
         busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         busqueda_frame.columnconfigure(1, weight=1)
         
-        # Campo de búsqueda por SID
-        ttk.Label(busqueda_frame, text="Buscar por SID:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0, 10))
-        self.sid_busqueda = ttk.Entry(busqueda_frame, width=30)
-        self.sid_busqueda.grid(row=0, column=1, sticky=tk.W, pady=5, padx=(0, 10))
-        
-        # Botones de búsqueda
-        botones_busqueda_frame = ttk.Frame(busqueda_frame)
-        botones_busqueda_frame.grid(row=0, column=2, pady=5)
-        
-        ttk.Button(botones_busqueda_frame, text="Buscar por SID", 
-                  command=self.buscar_por_sid).pack(side=tk.LEFT, padx=5)
-        ttk.Button(botones_busqueda_frame, text="Mostrar Todos", 
-                  command=self.mostrar_todos).pack(side=tk.LEFT, padx=5)
-        
-        
         # Barra de herramientas para la tabla
         toolbar_frame = ttk.Frame(busqueda_frame)
-        toolbar_frame.grid(row=1, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        toolbar_frame.grid(row=0, column=0, columnspan=3, pady=(0, 15), sticky="ew")
         
         # Botones de edición
         ttk.Button(toolbar_frame, text="➕ Nueva Persona", command=self.crear_persona, 
@@ -1191,12 +1364,17 @@ class CreacionPersonaFrame:
         # Separador
         ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Botón de actualizar
+        # Botones de actualizar y mostrar todos
         ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="📋 Mostrar Todos", 
+                  command=self.mostrar_todos).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Panel de filtros múltiples
+        self._crear_panel_filtros_personas(busqueda_frame)
         
         # Tabla de resultados
         resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=2, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="ew")
         
         # Crear Treeview para mostrar resultados
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
@@ -1239,53 +1417,145 @@ class CreacionPersonaFrame:
         # Inicializar filtro delay
         self.filtro_delay_id = None
     
-    def buscar_por_sid(self):
-        """Busca una persona por SID y abre el diálogo de edición si se encuentra"""
-        print("DEBUG: buscar_por_sid llamado")
-        sid = self.sid_busqueda.get().strip()
-        print(f"DEBUG: SID buscado: {sid}")
+    def _crear_panel_filtros_personas(self, parent):
+        """Crea el panel de filtros múltiples para personas"""
+        # Frame para filtros
+        filtros_frame = ttk.LabelFrame(parent, text="Filtros Múltiples", padding="10")
+        filtros_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+        filtros_frame.columnconfigure(1, weight=1)
         
-        if not sid:
-            messagebox.showwarning("Advertencia", "Por favor ingrese un SID para buscar")
+        # Lista de filtros activos
+        ttk.Label(filtros_frame, text="Filtros Activos:").grid(row=0, column=0, sticky="w", pady=5)
+        self.filtros_listbox = tk.Listbox(filtros_frame, height=3)
+        self.filtros_listbox.grid(row=0, column=1, sticky="ew", padx=(10, 5), pady=5)
+        
+        # Scrollbar para la lista
+        scrollbar_filtros = ttk.Scrollbar(filtros_frame, orient="vertical", command=self.filtros_listbox.yview)
+        scrollbar_filtros.grid(row=0, column=2, sticky="ns")
+        self.filtros_listbox.configure(yscrollcommand=scrollbar_filtros.set)
+        
+        # Botones para gestionar filtros
+        botones_filtros = ttk.Frame(filtros_frame)
+        botones_filtros.grid(row=0, column=3, padx=(5, 0), pady=5)
+        
+        ttk.Button(botones_filtros, text="Eliminar", command=self._eliminar_filtro_seleccionado_personas).pack(side=tk.TOP, pady=2)
+        ttk.Button(botones_filtros, text="Limpiar", command=self._limpiar_todos_filtros_personas).pack(side=tk.TOP, pady=2)
+        
+        # Frame para agregar nuevo filtro
+        nuevo_filtro_frame = ttk.Frame(filtros_frame)
+        nuevo_filtro_frame.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        nuevo_filtro_frame.columnconfigure(1, weight=1)
+        
+        # Campo de texto para el valor del filtro
+        ttk.Label(nuevo_filtro_frame, text="Valor:").grid(row=0, column=0, padx=(0, 5), pady=5, sticky="w")
+        self.entry_filtro = ttk.Entry(nuevo_filtro_frame, width=30)
+        self.entry_filtro.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=5)
+        
+        # Combo para seleccionar campo
+        ttk.Label(nuevo_filtro_frame, text="Campo:").grid(row=0, column=2, padx=(0, 5), pady=5, sticky="w")
+        self.combo_campo = ttk.Combobox(nuevo_filtro_frame, values=list(self.campos_filtro.keys()), width=15)
+        self.combo_campo.grid(row=0, column=3, padx=(0, 10), pady=5)
+        
+        # Botón para agregar filtro
+        ttk.Button(nuevo_filtro_frame, text="Agregar Filtro", command=self._agregar_filtro_personas).grid(row=0, column=4, padx=(0, 5), pady=5)
+        
+        # Botones de acción
+        botones_accion = ttk.Frame(filtros_frame)
+        botones_accion.grid(row=2, column=0, columnspan=4, pady=(10, 0))
+        
+        ttk.Button(botones_accion, text="Aplicar Filtros", command=self._aplicar_filtros_multiples_personas).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(botones_accion, text="Mostrar Todos", command=self.mostrar_todos).pack(side=tk.LEFT)
+        
+        # Bind para Enter en el campo de texto
+        self.entry_filtro.bind('<Return>', lambda e: self._agregar_filtro_personas())
+    
+    def _agregar_filtro_personas(self):
+        """Agrega un nuevo filtro a la lista de personas"""
+        valor = self.entry_filtro.get().strip()
+        campo = self.combo_campo.get()
+        
+        if not valor:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un valor para el filtro")
+            return
+        
+        if not campo:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un campo para filtrar")
+            return
+        
+        # Agregar filtro al diccionario
+        campo_bd = self.campos_filtro.get(campo)
+        if campo_bd:
+            self.filtros_activos[campo] = valor
+            self._actualizar_lista_filtros_personas()
+            
+            # Limpiar campos
+            self.entry_filtro.delete(0, tk.END)
+            self.combo_campo.set("")
+    
+    def _eliminar_filtro_seleccionado_personas(self):
+        """Elimina el filtro seleccionado de la lista de personas"""
+        seleccion = self.filtros_listbox.curselection()
+        if seleccion:
+            indice = seleccion[0]
+            campo = list(self.filtros_activos.keys())[indice]
+            del self.filtros_activos[campo]
+            self._actualizar_lista_filtros_personas()
+    
+    def _limpiar_todos_filtros_personas(self):
+        """Limpia todos los filtros activos de personas"""
+        self.filtros_activos.clear()
+        self._actualizar_lista_filtros_personas()
+    
+    def _actualizar_lista_filtros_personas(self):
+        """Actualiza la lista visual de filtros activos de personas"""
+        self.filtros_listbox.delete(0, tk.END)
+        for campo, valor in self.filtros_activos.items():
+            self.filtros_listbox.insert(tk.END, f"{campo}: {valor}")
+    
+    def _aplicar_filtros_multiples_personas(self):
+        """Aplica todos los filtros activos para personas"""
+        if not self.filtros_activos:
+            messagebox.showwarning("Advertencia", "No hay filtros activos para aplicar")
             return
         
         try:
-            # Buscar en la base de datos real
-            print("DEBUG: Buscando en la base de datos...")
-            resultados = self.service.buscar_headcount_por_sid(sid)
-            print(f"DEBUG: Resultados encontrados: {len(resultados) if resultados else 0}")
+            # Obtener todos los registros del headcount
+            todos_resultados = self.service.obtener_todo_headcount()
             
-            if resultados:
-                # Si se encuentra un resultado, abrir el diálogo de edición
-                print("DEBUG: Abriendo diálogo de edición...")
-                persona_data = resultados[0]  # Tomar el primer resultado
-                dialog = PersonaDialog(self.parent, f"Editar Persona - {persona_data.get('scotia_id', '')}", persona_data)
-                self.parent.wait_window(dialog.dialog)
-                
-                if dialog.result:
-                    print("DEBUG: Guardando cambios...")
-                    import sys
-                    import os
-                    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
-                    from access_management_service import access_service
-                    
-                    success, message = access_service.update_employee(persona_data.get('scotia_id'), dialog.result)
-                    
-                    if success:
-                        messagebox.showinfo("Éxito", message)
-                        # Actualizar la tabla después de editar
-                        self.actualizar_tabla()
-                    else:
-                        messagebox.showerror("Error", message)
+            # Aplicar filtros múltiples
+            resultados_filtrados = self._aplicar_filtros_en_memoria_personas(todos_resultados)
+            
+            # Mostrar resultados
+            if resultados_filtrados:
+                mensaje = f"Se encontraron {len(resultados_filtrados)} personas con los filtros aplicados"
+                self.mostrar_resultados_busqueda(resultados_filtrados, mensaje)
             else:
-                # Si no se encuentra, mostrar mensaje y actualizar tabla
-                print("DEBUG: No se encontró la persona")
-                messagebox.showinfo("Búsqueda", f"No se encontró ninguna persona con SID: {sid}")
-                self.actualizar_tabla()
+                messagebox.showinfo("Filtros", "No se encontraron personas que coincidan con los filtros aplicados")
                 
         except Exception as e:
-            print(f"DEBUG: Error en búsqueda: {str(e)}")
-            messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
+            messagebox.showerror("Error", f"Error aplicando filtros: {str(e)}")
+    
+    def _aplicar_filtros_en_memoria_personas(self, resultados):
+        """Aplica los filtros activos a los resultados de personas en memoria"""
+        if not resultados:
+            return resultados
+        
+        resultados_filtrados = []
+        for resultado in resultados:
+            cumple_filtros = True
+            
+            for campo_ui, valor_filtro in self.filtros_activos.items():
+                campo_bd = self.campos_filtro.get(campo_ui)
+                if campo_bd:
+                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    if valor_filtro.lower() not in valor_campo:
+                        cumple_filtros = False
+                        break
+            
+            if cumple_filtros:
+                resultados_filtrados.append(resultado)
+        
+        return resultados_filtrados
     
     def mostrar_todos(self):
         """Muestra todos los registros del headcount"""
@@ -1640,14 +1910,14 @@ class PersonaDialog:
             ("Senior Manager:", "senior_manager", "entry"),
             ("Unidad:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
             ("Fecha de Inicio:", "start_date", "entry"),
-            ("COCA:", "coca", "entry"),
+            ("CECO:", "ceco", "entry"),
             ("Skip Level:", "skip_level", "entry"),
-            ("Coleadores:", "coleadores", "entry"),
+            ("Cafe Alcides:", "cafe_alcides", "entry"),
             ("Parents:", "parents", "entry"),
             ("Email Personal:", "personal_email", "entry"),
             ("Tamaño:", "size", "combobox", ["XS", "S", "M", "L", "XL", "XXL"]),
             ("Cumpleaños:", "birthday", "entry"),
-            ("Ubicación:", "ubicacion", "entry"),
+            ("Validación:", "validacion", "entry"),
             ("Estado:", "activo", "combobox", ["Activo", "Inactivo"])
         ]
         

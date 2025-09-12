@@ -111,9 +111,9 @@ class SearchService:
             
             query = """
                 SELECT scotia_id, employee, full_name, email, position, manager, 
-                       senior_manager, unit, start_date, coca, skip_level, 
-                       coleadores, parents, personal_email, size, birthday, 
-                       ubicacion, activo
+                       senior_manager, unit, start_date, ceco, skip_level, 
+                       cafe_alcides, parents, personal_email, size, birthday, 
+                       validacion, activo
                 FROM headcount
                 WHERE employee LIKE ?
                 ORDER BY full_name
@@ -146,9 +146,9 @@ class SearchService:
             
             query = """
                 SELECT scotia_id, employee, full_name, email, position, manager, 
-                       senior_manager, unit, start_date, coca, skip_level, 
-                       coleadores, parents, personal_email, size, birthday, 
-                       ubicacion, activo
+                       senior_manager, unit, start_date, ceco, skip_level, 
+                       cafe_alcides, parents, personal_email, size, birthday, 
+                       validacion, activo
                 FROM headcount
                 ORDER BY full_name
             """

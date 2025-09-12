@@ -63,14 +63,14 @@ class DatabaseManager:
                     senior_manager   VARCHAR(100),
                     unit             VARCHAR(100),
                     start_date       DATE,
-                    coca             VARCHAR(100),
+                    ceco             VARCHAR(100),
                     skip_level       VARCHAR(100),
-                    coleadores       VARCHAR(100),
+                    cafe_alcides     VARCHAR(100),
                     parents          VARCHAR(100),
                     personal_email   VARCHAR(150),
                     size             VARCHAR(50),
                     birthday         DATE,
-                    ubicacion        VARCHAR(100),
+                    validacion       VARCHAR(100),
                     activo           BOOLEAN DEFAULT TRUE
                 )
             ''')
@@ -98,7 +98,7 @@ class DatabaseManager:
                     ad_code              VARCHAR(100),
                     access_status        VARCHAR(50),
                     last_update_date     TIMESTAMP,
-                    requirement_licensing VARCHAR(255),
+                    require_licensing VARCHAR(255),
                     description          TEXT,
                     authentication_method VARCHAR(100)
                 )
@@ -211,12 +211,12 @@ class DatabaseManager:
             
             # Insertar datos de ejemplo en headcount
             headcount_ejemplo = [
-                ('EMP001', 'Juan Pérez', 'Juan Pérez', 'juan.perez@empresa.com', 'Desarrollador', 'María García', 'Carlos López', 'Tecnología', '2023-01-15', 'COCA001', 'Carlos López', 'María García', 'Juan Pérez', 'juan.personal@gmail.com', 'M', '1990-05-20', 'Oficina Central', True),
-                ('EMP002', 'María García', 'María García', 'maria.garcia@empresa.com', 'Analista Senior', 'Carlos López', 'Ana Rodríguez', 'Tecnología', '2022-08-10', 'COCA002', 'Ana Rodríguez', 'Carlos López', 'María García', 'maria.personal@gmail.com', 'F', '1988-12-03', 'Oficina Central', True),
-                ('EMP003', 'Carlos López', 'Carlos López', 'carlos.lopez@empresa.com', 'Gerente', 'Ana Rodríguez', 'Luis Martínez', 'Tecnología', '2021-03-22', 'COCA003', 'Luis Martínez', 'Ana Rodríguez', 'Carlos López', 'carlos.personal@gmail.com', 'M', '1985-09-15', 'Oficina Central', True),
-                ('EMP004', 'Ana Rodríguez', 'Ana Rodríguez', 'ana.rodriguez@empresa.com', 'Desarrollador Senior', 'Luis Martínez', 'Carmen Silva', 'Tecnología', '2020-11-05', 'COCA004', 'Carmen Silva', 'Luis Martínez', 'Ana Rodríguez', 'ana.personal@gmail.com', 'F', '1987-07-28', 'Oficina Central', True),
-                ('EMP005', 'Luis Martínez', 'Luis Martínez', 'luis.martinez@empresa.com', 'Analista', 'Carmen Silva', 'Pedro González', 'Recursos Humanos', '2023-06-12', 'COCA005', 'Pedro González', 'Carmen Silva', 'Luis Martínez', 'luis.personal@gmail.com', 'M', '1992-04-10', 'Oficina Central', True),
-                ('EMP006', 'Carmen Silva', 'Carmen Silva', 'carmen.silva@empresa.com', 'Gerente', 'Pedro González', 'Sofia Herrera', 'Recursos Humanos', '2019-09-18', 'COCA006', 'Sofia Herrera', 'Pedro González', 'Carmen Silva', 'carmen.personal@gmail.com', 'F', '1983-11-25', 'Oficina Central', True)
+                ('EMP001', 'Juan Pérez', 'Juan Pérez', 'juan.perez@empresa.com', 'Desarrollador', 'María García', 'Carlos López', 'Tecnología', '2023-01-15', 'CECO001', 'Carlos López', 'María García', 'Juan Pérez', 'juan.personal@gmail.com', 'M', '1990-05-20', 'Oficina Central', True),
+                ('EMP002', 'María García', 'María García', 'maria.garcia@empresa.com', 'Analista Senior', 'Carlos López', 'Ana Rodríguez', 'Tecnología', '2022-08-10', 'CECO002', 'Ana Rodríguez', 'Carlos López', 'María García', 'maria.personal@gmail.com', 'F', '1988-12-03', 'Oficina Central', True),
+                ('EMP003', 'Carlos López', 'Carlos López', 'carlos.lopez@empresa.com', 'Gerente', 'Ana Rodríguez', 'Luis Martínez', 'Tecnología', '2021-03-22', 'CECO003', 'Luis Martínez', 'Ana Rodríguez', 'Carlos López', 'carlos.personal@gmail.com', 'M', '1985-09-15', 'Oficina Central', True),
+                ('EMP004', 'Ana Rodríguez', 'Ana Rodríguez', 'ana.rodriguez@empresa.com', 'Desarrollador Senior', 'Luis Martínez', 'Carmen Silva', 'Tecnología', '2020-11-05', 'CECO004', 'Carmen Silva', 'Luis Martínez', 'Ana Rodríguez', 'ana.personal@gmail.com', 'F', '1987-07-28', 'Oficina Central', True),
+                ('EMP005', 'Luis Martínez', 'Luis Martínez', 'luis.martinez@empresa.com', 'Analista', 'Carmen Silva', 'Pedro González', 'Recursos Humanos', '2023-06-12', 'CECO005', 'Pedro González', 'Carmen Silva', 'Luis Martínez', 'luis.personal@gmail.com', 'M', '1992-04-10', 'Oficina Central', True),
+                ('EMP006', 'Carmen Silva', 'Carmen Silva', 'carmen.silva@empresa.com', 'Gerente', 'Pedro González', 'Sofia Herrera', 'Recursos Humanos', '2019-09-18', 'CECO006', 'Sofia Herrera', 'Pedro González', 'Carmen Silva', 'carmen.personal@gmail.com', 'F', '1983-11-25', 'Oficina Central', True)
             ]
             
             for row in headcount_ejemplo:
@@ -224,7 +224,7 @@ class DatabaseManager:
                     cursor.execute('''
                         INSERT OR IGNORE INTO headcount 
                         (scotia_id, employee, full_name, email, position, manager, senior_manager, unit, 
-                         start_date, coca, skip_level, coleadores, parents, personal_email, size, birthday, ubicacion, activo)
+                         start_date, ceco, skip_level, cafe_alcides, parents, personal_email, size, birthday, validacion, activo)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', row)
                 except sqlite3.IntegrityError:
@@ -283,7 +283,7 @@ class DatabaseManager:
                         INSERT OR IGNORE INTO applications 
                         (id, jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
                          exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, 
-                         additional_data, ad_code, access_status, last_update_date, requirement_licensing, description, authentication_method)
+                         additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', row)
                 except sqlite3.IntegrityError:

@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 import sqlite3
 
-from services import reconciliation_service, export_service, history_service, access_service, search_service
+from services import export_service, history_service, access_service, search_service
 from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
                 LateralMovementFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
 from ui.styles import aplicar_estilos_personalizados
@@ -247,6 +247,7 @@ class AppEmpleadosRefactorizada:
             ("💾 Guardar", self.guardar_datos, "Success.TButton"),
             ("🧹 Limpiar", self.limpiar_campos, "Info.TButton"),
             ("📊 Estadísticas", self.mostrar_estadisticas, "Warning.TButton"),
+            ("🔍 Probar Deduplicación", self.probar_deduplicacion, "Info.TButton"),
             ("🚪 Salir", self.root.quit, "Danger.TButton")
         ]
         
@@ -256,7 +257,7 @@ class AppEmpleadosRefactorizada:
     
     def crear_componente_edicion(self):
         """Crea el componente de edición y búsqueda"""
-        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, search_service)
+        self.componentes['edicion_busqueda'] = EdicionBusquedaFrame(self.contenido_principal_frame, access_service)
         self.componentes['edicion_busqueda'].frame.grid(row=0, column=0, sticky="nsew")
         self.componentes['edicion_busqueda'].frame.grid_remove()
     
@@ -447,6 +448,50 @@ class AppEmpleadosRefactorizada:
             messagebox.showerror("Error", f"Error obteniendo estadísticas: {str(e)}")
             print(f"Error en mostrar_estadisticas: {e}")
 
+    def probar_deduplicacion(self):
+        """Método de prueba para verificar la deduplicación de aplicaciones"""
+        try:
+            # Obtener un empleado de ejemplo para probar
+            empleados = access_service.get_all_employees()
+            if not empleados:
+                messagebox.showwarning("Advertencia", "No hay empleados para probar")
+                return
+            
+            empleado = empleados[0]
+            position = empleado.get('position', '')
+            unit = empleado.get('unit', '')
+            
+            if not position or not unit:
+                messagebox.showwarning("Advertencia", f"Empleado {empleado.get('scotia_id')} no tiene posición o unidad válida")
+                return
+            
+            # Probar deduplicación
+            debug_info = access_service.debug_applications_by_position(position, unit)
+            
+            if "error" in debug_info:
+                messagebox.showerror("Error", f"Error en debug: {debug_info['error']}")
+                return
+            
+            mensaje = f"Prueba de Deduplicación para {empleado.get('scotia_id')}:\n\n"
+            mensaje += f"Posición: {position}\n"
+            mensaje += f"Unidad: {unit}\n\n"
+            mensaje += f"Total sin deduplicación: {debug_info['total_without_dedup']}\n"
+            mensaje += f"Total con deduplicación: {debug_info['total_with_dedup']}\n"
+            mensaje += f"Duplicados encontrados: {debug_info['duplicates_found']}\n\n"
+            
+            if debug_info['duplicates_found'] > 0:
+                mensaje += "Aplicaciones duplicadas encontradas:\n"
+                for row in debug_info['all_rows']:
+                    mensaje += f"- {row[0]} (Unit: {row[1]}, Subunit: {row[2]}, Position: {row[3]})\n"
+            else:
+                mensaje += "✅ No se encontraron duplicados"
+            
+            messagebox.showinfo("Prueba de Deduplicación", mensaje)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en prueba de deduplicación: {str(e)}")
+            print(f"Error en probar_deduplicacion: {e}")
+
 
 class ConciliacionFrame:
     """Frame simplificado para la conciliación de accesos"""
@@ -499,8 +544,6 @@ class ConciliacionFrame:
         ttk.Button(entrada_frame, text="🔍 Conciliar Accesos", 
                   command=self._conciliar_accesos, style="Success.TButton").grid(row=2, column=0, pady=(0, 10), sticky="ew")
         
-        ttk.Button(entrada_frame, text="🌐 Conciliar Todos", 
-                  command=self._conciliar_todos, style="Info.TButton").grid(row=3, column=0, pady=(0, 20), sticky="ew")
         
         # Información adicional
         info_text = ("Este sistema compara los accesos actuales de un empleado\n"
@@ -534,14 +577,24 @@ class ConciliacionFrame:
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
-        # Treeview para mostrar resultados
-        columns = ('Acceso', 'Rol', 'Estado', 'Acción')
+        # Treeview para mostrar resultados con campos de conciliación estricta
+        columns = ('Acceso', 'Unidad', 'Subunidad', 'Posición', 'Rol', 'Estado', 'Acción')
         self.tree_resultados = ttk.Treeview(resultados_frame, columns=columns, show='headings', height=8)
         
-        # Configurar columnas
+        # Configurar columnas con anchos específicos
+        column_widths = {
+            'Acceso': 150,
+            'Unidad': 100,
+            'Subunidad': 100,
+            'Posición': 120,
+            'Rol': 100,
+            'Estado': 80,
+            'Acción': 80
+        }
+        
         for col in columns:
             self.tree_resultados.heading(col, text=col)
-            self.tree_resultados.column(col, width=120, anchor="center")
+            self.tree_resultados.column(col, width=column_widths.get(col, 120), anchor="center")
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree_resultados.yview)
@@ -552,7 +605,7 @@ class ConciliacionFrame:
         scrollbar.grid(row=0, column=1, sticky="ns")
         
         # Mensaje inicial
-        self.tree_resultados.insert('', 'end', values=('', '', 'Sin datos', ''))
+        self.tree_resultados.insert('', 'end', values=('', '', '', '', '', 'Sin datos', ''))
     
     def _conciliar_accesos(self):
         """Ejecuta la conciliación de accesos para un SID específico usando la nueva estructura"""
@@ -576,34 +629,6 @@ class ConciliacionFrame:
         except Exception as e:
             messagebox.showerror("Error", f"Error durante la conciliación: {str(e)}")
     
-    def _conciliar_todos(self):
-        """Ejecuta la conciliación de accesos para todos los usuarios"""
-        try:
-            resultados = reconciliation_service.reconcile_all()
-            
-            if not resultados:
-                messagebox.showwarning("Advertencia", "No se encontraron usuarios para conciliar")
-                return
-            
-            self.resultado_conciliacion = resultados
-            
-            # Mostrar resumen
-            total_to_grant = sum(len(r.get('to_grant', [])) for r in resultados if 'error' not in r)
-            total_to_revoke = sum(len(r.get('to_revoke', [])) for r in resultados if 'error' not in r)
-            
-            mensaje = f"Conciliación masiva completada:\n"
-            mensaje += f"Usuarios procesados: {len(resultados)}\n"
-            mensaje += f"Accesos a otorgar: {total_to_grant}\n"
-            mensaje += f"Accesos a revocar: {total_to_revoke}"
-            
-            messagebox.showinfo("Éxito", mensaje)
-            
-            # Limpiar treeview
-            self.tree_resultados.delete(*self.tree_resultados.get_children())
-            self.tree_resultados.insert('', 'end', values=('', '', 'Conciliación masiva completada', ''))
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error durante la conciliación masiva: {str(e)}")
     
     def _exportar_excel(self):
         """Exporta los resultados de conciliación a Excel"""
@@ -673,7 +698,7 @@ class ConciliacionFrame:
             ))
     
     def _mostrar_resultados_nuevos(self, reporte):
-        """Muestra los resultados de conciliación usando la nueva estructura"""
+        """Muestra los resultados de conciliación usando la nueva estructura con campos estrictos"""
         # Limpiar treeview
         self.tree_resultados.delete(*self.tree_resultados.get_children())
         
@@ -682,6 +707,9 @@ class ConciliacionFrame:
         for acceso in current_access:
             self.tree_resultados.insert('', 'end', values=(
                 acceso.get('app_name', ''),
+                acceso.get('unit', ''),
+                acceso.get('subunit', ''),
+                acceso.get('position_role', ''),
                 acceso.get('role_name', 'Sin rol'),
                 '✅ Activo',
                 'Mantener'
@@ -692,6 +720,9 @@ class ConciliacionFrame:
         for acceso in to_grant:
             self.tree_resultados.insert('', 'end', values=(
                 acceso.get('app_name', ''),
+                acceso.get('unit', ''),
+                acceso.get('subunit', ''),
+                acceso.get('position_role', ''),
                 acceso.get('role_name', 'Sin rol'),
                 '❌ Faltante',
                 '🟢 Otorgar'
@@ -702,6 +733,9 @@ class ConciliacionFrame:
         for acceso in to_revoke:
             self.tree_resultados.insert('', 'end', values=(
                 acceso.get('app_name', ''),
+                acceso.get('unit', ''),
+                acceso.get('subunit', ''),
+                acceso.get('position_role', ''),
                 acceso.get('role_name', 'Sin rol'),
                 '⚠️ Excesivo',
                 '🔴 Revocar'
@@ -725,6 +759,22 @@ class AplicacionesFrame:
         self.filtered_applications = []
         self.current_filter = ""
         
+        # Variables para filtros múltiples
+        self.filtros_activos = {}
+        self.campos_filtro = {
+            "Nombre Lógico": "logical_access_name",
+            "Jurisdicción": "jurisdiction",
+            "Unidad": "unit",
+            "Subunidad": "subunit",
+            "Alias": "alias",
+            "Rol de Posición": "position_role",
+            "Tipo de Acceso": "access_type",
+            "Categoría": "category",
+            "Propietario del Sistema": "system_owner",
+            "Estado": "access_status",
+            "Requiere Licencia": "require_licensing"
+        }
+        
         self._crear_interfaz()
         self._cargar_aplicaciones()
     
@@ -738,10 +788,13 @@ class AplicacionesFrame:
         main_content = ttk.Frame(self.frame)
         main_content.grid(row=1, column=0, sticky="nsew", padx=20)
         main_content.columnconfigure(0, weight=1)
-        main_content.rowconfigure(1, weight=1)
+        main_content.rowconfigure(2, weight=1)  # Cambiar de row 1 a row 2 para la tabla
         
         # Barra de herramientas
         self._crear_barra_herramientas(main_content)
+        
+        # Panel de filtros múltiples
+        self._crear_panel_filtros_aplicaciones(main_content)
         
         # Tabla de aplicaciones
         self._crear_tabla_aplicaciones(main_content)
@@ -778,11 +831,157 @@ class AplicacionesFrame:
         # Botón de exportar
         ttk.Button(toolbar, text="📊 Exportar", command=self._exportar_datos).pack(side=tk.LEFT, padx=(10, 0))
     
+    def _crear_panel_filtros_aplicaciones(self, parent):
+        """Crea el panel de filtros múltiples para aplicaciones"""
+        # Frame para filtros
+        filtros_frame = ttk.LabelFrame(parent, text="Filtros Múltiples", padding="10")
+        filtros_frame.grid(row=1, column=0, sticky="ew", pady=(15, 0))
+        filtros_frame.columnconfigure(1, weight=1)
+        
+        # Lista de filtros activos
+        ttk.Label(filtros_frame, text="Filtros Activos:").grid(row=0, column=0, sticky="w", pady=5)
+        self.filtros_listbox = tk.Listbox(filtros_frame, height=3)
+        self.filtros_listbox.grid(row=0, column=1, sticky="ew", padx=(10, 5), pady=5)
+        
+        # Scrollbar para la lista
+        scrollbar_filtros = ttk.Scrollbar(filtros_frame, orient="vertical", command=self.filtros_listbox.yview)
+        scrollbar_filtros.grid(row=0, column=2, sticky="ns")
+        self.filtros_listbox.configure(yscrollcommand=scrollbar_filtros.set)
+        
+        # Botones para gestionar filtros
+        botones_filtros = ttk.Frame(filtros_frame)
+        botones_filtros.grid(row=0, column=3, padx=(5, 0), pady=5)
+        
+        ttk.Button(botones_filtros, text="Eliminar", command=self._eliminar_filtro_seleccionado_apps).pack(side=tk.TOP, pady=2)
+        ttk.Button(botones_filtros, text="Limpiar", command=self._limpiar_todos_filtros_apps).pack(side=tk.TOP, pady=2)
+        
+        # Frame para agregar nuevo filtro
+        nuevo_filtro_frame = ttk.Frame(filtros_frame)
+        nuevo_filtro_frame.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        nuevo_filtro_frame.columnconfigure(1, weight=1)
+        
+        # Campo de texto para el valor del filtro
+        ttk.Label(nuevo_filtro_frame, text="Valor:").grid(row=0, column=0, padx=(0, 5), pady=5, sticky="w")
+        self.entry_filtro = ttk.Entry(nuevo_filtro_frame, width=30)
+        self.entry_filtro.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=5)
+        
+        # Combo para seleccionar campo
+        ttk.Label(nuevo_filtro_frame, text="Campo:").grid(row=0, column=2, padx=(0, 5), pady=5, sticky="w")
+        self.combo_campo = ttk.Combobox(nuevo_filtro_frame, values=list(self.campos_filtro.keys()), width=15)
+        self.combo_campo.grid(row=0, column=3, padx=(0, 10), pady=5)
+        
+        # Botón para agregar filtro
+        ttk.Button(nuevo_filtro_frame, text="Agregar Filtro", command=self._agregar_filtro_apps).grid(row=0, column=4, padx=(0, 5), pady=5)
+        
+        # Botones de acción
+        botones_accion = ttk.Frame(filtros_frame)
+        botones_accion.grid(row=2, column=0, columnspan=4, pady=(10, 0))
+        
+        ttk.Button(botones_accion, text="Aplicar Filtros", command=self._aplicar_filtros_multiples_apps).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(botones_accion, text="Mostrar Todas", command=self._mostrar_todas_aplicaciones).pack(side=tk.LEFT)
+        
+        # Bind para Enter en el campo de texto
+        self.entry_filtro.bind('<Return>', lambda e: self._agregar_filtro_apps())
+    
+    def _agregar_filtro_apps(self):
+        """Agrega un nuevo filtro a la lista de aplicaciones"""
+        valor = self.entry_filtro.get().strip()
+        campo = self.combo_campo.get()
+        
+        if not valor:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un valor para el filtro")
+            return
+        
+        if not campo:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un campo para filtrar")
+            return
+        
+        # Agregar filtro al diccionario
+        campo_bd = self.campos_filtro.get(campo)
+        if campo_bd:
+            self.filtros_activos[campo] = valor
+            self._actualizar_lista_filtros_apps()
+            
+            # Limpiar campos
+            self.entry_filtro.delete(0, tk.END)
+            self.combo_campo.set("")
+    
+    def _eliminar_filtro_seleccionado_apps(self):
+        """Elimina el filtro seleccionado de la lista de aplicaciones"""
+        seleccion = self.filtros_listbox.curselection()
+        if seleccion:
+            indice = seleccion[0]
+            campo = list(self.filtros_activos.keys())[indice]
+            del self.filtros_activos[campo]
+            self._actualizar_lista_filtros_apps()
+    
+    def _limpiar_todos_filtros_apps(self):
+        """Limpia todos los filtros activos de aplicaciones"""
+        self.filtros_activos.clear()
+        self._actualizar_lista_filtros_apps()
+    
+    def _actualizar_lista_filtros_apps(self):
+        """Actualiza la lista visual de filtros activos de aplicaciones"""
+        self.filtros_listbox.delete(0, tk.END)
+        for campo, valor in self.filtros_activos.items():
+            self.filtros_listbox.insert(tk.END, f"{campo}: {valor}")
+    
+    def _aplicar_filtros_multiples_apps(self):
+        """Aplica todos los filtros activos para aplicaciones"""
+        if not self.filtros_activos:
+            messagebox.showwarning("Advertencia", "No hay filtros activos para aplicar")
+            return
+        
+        try:
+            # Aplicar filtros múltiples
+            resultados_filtrados = self._aplicar_filtros_en_memoria_apps(self.applications)
+            
+            # Mostrar resultados
+            if resultados_filtrados:
+                self.filtered_applications = resultados_filtrados
+                self._actualizar_tabla()
+                self._actualizar_estado(f"🔍 Mostrando {len(resultados_filtrados)} de {len(self.applications)} aplicaciones con filtros aplicados")
+            else:
+                messagebox.showinfo("Filtros", "No se encontraron aplicaciones que coincidan con los filtros aplicados")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error aplicando filtros: {str(e)}")
+    
+    def _aplicar_filtros_en_memoria_apps(self, aplicaciones):
+        """Aplica los filtros activos a las aplicaciones en memoria"""
+        if not aplicaciones:
+            return aplicaciones
+        
+        resultados_filtrados = []
+        for app in aplicaciones:
+            cumple_filtros = True
+            
+            for campo_ui, valor_filtro in self.filtros_activos.items():
+                campo_bd = self.campos_filtro.get(campo_ui)
+                if campo_bd:
+                    valor_campo = str(app.get(campo_bd, '')).lower()
+                    if valor_filtro.lower() not in valor_campo:
+                        cumple_filtros = False
+                        break
+            
+            if cumple_filtros:
+                resultados_filtrados.append(app)
+        
+        return resultados_filtrados
+    
+    def _mostrar_todas_aplicaciones(self):
+        """Muestra todas las aplicaciones sin filtros"""
+        self.filtros_activos.clear()
+        self._actualizar_lista_filtros_apps()
+        self.filtered_applications = self.applications.copy()
+        self._actualizar_tabla()
+        self._actualizar_estado(f"✅ Mostrando todas las {len(self.applications)} aplicaciones")
+    
     def _crear_tabla_aplicaciones(self, parent):
         """Crea la tabla de aplicaciones"""
         # Frame para la tabla
         table_frame = ttk.Frame(parent)
-        table_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 15))
+        table_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 15))
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
@@ -827,7 +1026,7 @@ class AplicacionesFrame:
     def _crear_barra_estado(self, parent):
         """Crea la barra de estado"""
         status_frame = ttk.Frame(parent)
-        status_frame.grid(row=2, column=0, sticky="ew", pady=(15, 0))
+        status_frame.grid(row=3, column=0, sticky="ew", pady=(15, 0))
         
         self.status_label = ttk.Label(status_frame, text="Listo", style="Success.TLabel")
         self.status_label.pack(side=tk.LEFT)
@@ -967,8 +1166,13 @@ class AplicacionesFrame:
             return
         
         item = self.tree.item(selection[0])
-        app_name = item['values'][1]
-        app_id = item['values'][0]
+        values = item['values']
+        if len(values) < 2:
+            messagebox.showerror("Error", "Datos de aplicación no válidos")
+            return
+            
+        app_id = values[0]  # ID está en la posición 0
+        app_name = values[1]  # Nombre está en la posición 1
         
         # Confirmar eliminación
         result = messagebox.askyesno(
@@ -1065,7 +1269,7 @@ class ApplicationManager:
     
     def get_all_applications(self) -> list:
         """Obtiene todas las aplicaciones de la base de datos"""
-        try:
+        try:    
             conn = self.get_connection()
             cursor = conn.cursor()
             
@@ -1247,7 +1451,7 @@ class ApplicationDialog:
             ("Additional Data:", "additional_data", "entry"),
             ("AD Code:", "ad_code", "entry"),
             ("Access Status:", "access_status", "combobox", ["Activo", "Inactivo", "Mantenimiento"]),
-            ("Requirement Licensing:", "requirement_licensing", "entry"),
+            ("Require Licensing:", "require_licensing", "entry"),
             ("Description:", "description", "text"),
             ("Authentication Method:", "authentication_method", "combobox", ["LDAP", "SSO", "Local", "OAuth", "SAML"])
         ]

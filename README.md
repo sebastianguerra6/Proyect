@@ -137,7 +137,7 @@ python app/main.py
 - **Búsqueda Inteligente**: Coincidencias parciales insensibles a mayúsculas/minúsculas
 - **Controles Manuales**: Botones para aplicar y limpiar filtros
 
-### Ubicaciones del Sistema de Filtrado
+### Validaciones del Sistema de Filtrado
 - **Edición y Búsqueda**: Filtrado por 12 columnas de procesos
 - **Creación de Persona**: Filtrado por 7 columnas de empleados
 

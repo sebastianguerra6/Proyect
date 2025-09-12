@@ -83,8 +83,8 @@ class ExcelToSQLiteImporter:
         cursor.execute('''
             INSERT OR REPLACE INTO headcount 
             (scotia_id, employee, full_name, email, position, manager, senior_manager, 
-             unit, start_date, coca, skip_level, coleadores, parents, personal_email, 
-             size, birthday, ubicacion, activo)
+             unit, start_date, ceco, skip_level, cafe_alcides, parents, personal_email, 
+             size, birthday, validacion, activo)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('scotia_id', ''),
@@ -96,14 +96,14 @@ class ExcelToSQLiteImporter:
             data.get('senior_manager', ''),
             data.get('unit', ''),
             data.get('start_date', ''),
-            data.get('coca', ''),
+            data.get('ceco', ''),
             data.get('skip_level', ''),
-            data.get('coleadores', ''),
+            data.get('cafe_alcides', ''),
             data.get('parents', ''),
             data.get('personal_email', ''),
             data.get('size', ''),
             data.get('birthday', ''),
-            data.get('ubicacion', ''),
+            data.get('validacion', ''),
             data.get('activo', 'True').lower() == 'true'
         ))
     
@@ -114,7 +114,7 @@ class ExcelToSQLiteImporter:
             (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, 
              position_role, exception_tracking, fulfillment_action, system_owner, 
              role_name, access_type, category, additional_data, ad_code, access_status, 
-             last_update_date, requirement_licensing, description, authentication_method)
+             last_update_date, require_licensing, description, authentication_method)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('jurisdiction', ''),
@@ -134,7 +134,7 @@ class ExcelToSQLiteImporter:
             data.get('ad_code', ''),
             data.get('access_status', ''),
             data.get('last_update_date', ''),
-            data.get('requirement_licensing', ''),
+            data.get('require_licensing', ''),
             data.get('description', ''),
             data.get('authentication_method', '')
         ))
@@ -226,14 +226,14 @@ class ExcelToSQLServerImporter:
                     senior_manager VARCHAR(100),
                     unit VARCHAR(100),
                     start_date DATE,
-                    coca VARCHAR(100),
+                    ceco VARCHAR(100),
                     skip_level VARCHAR(100),
-                    coleadores VARCHAR(100),
+                    cafe_alcides VARCHAR(100),
                     parents VARCHAR(100),
                     personal_email VARCHAR(150),
                     size VARCHAR(50),
                     birthday DATE,
-                    ubicacion VARCHAR(100),
+                    validacion VARCHAR(100),
                     activo BIT DEFAULT 1
                 )
             ''')
@@ -260,7 +260,7 @@ class ExcelToSQLServerImporter:
                     ad_code VARCHAR(100),
                     access_status VARCHAR(50),
                     last_update_date DATETIME,
-                    requirement_licensing VARCHAR(255),
+                    require_licensing VARCHAR(255),
                     description TEXT,
                     authentication_method VARCHAR(100)
                 )
@@ -363,29 +363,29 @@ class ExcelToSQLServerImporter:
             MERGE headcount AS target
             USING (SELECT ? AS scotia_id, ? AS employee, ? AS full_name, ? AS email, 
                           ? AS position, ? AS manager, ? AS senior_manager, ? AS unit,
-                          ? AS start_date, ? AS coca, ? AS skip_level, ? AS coleadores,
+                          ? AS start_date, ? AS ceco, ? AS skip_level, ? AS cafe_alcides,
                           ? AS parents, ? AS personal_email, ? AS size, ? AS birthday,
-                          ? AS ubicacion, ? AS activo) AS source
+                          ? AS validacion, ? AS activo) AS source
             ON target.scotia_id = source.scotia_id
             WHEN MATCHED THEN
                 UPDATE SET employee = source.employee, full_name = source.full_name,
                           email = source.email, position = source.position,
                           manager = source.manager, senior_manager = source.senior_manager,
                           unit = source.unit, start_date = source.start_date,
-                          coca = source.coca, skip_level = source.skip_level,
-                          coleadores = source.coleadores, parents = source.parents,
+                          ceco = source.ceco, skip_level = source.skip_level,
+                          cafe_alcides = source.cafe_alcides, parents = source.parents,
                           personal_email = source.personal_email, size = source.size,
-                          birthday = source.birthday, ubicacion = source.ubicacion,
+                          birthday = source.birthday, validacion = source.validacion,
                           activo = source.activo
             WHEN NOT MATCHED THEN
                 INSERT (scotia_id, employee, full_name, email, position, manager, 
-                       senior_manager, unit, start_date, coca, skip_level, coleadores,
-                       parents, personal_email, size, birthday, ubicacion, activo)
+                       senior_manager, unit, start_date, ceco, skip_level, cafe_alcides,
+                       parents, personal_email, size, birthday, validacion, activo)
                 VALUES (source.scotia_id, source.employee, source.full_name, source.email,
                        source.position, source.manager, source.senior_manager, source.unit,
-                       source.start_date, source.coca, source.skip_level, source.coleadores,
+                       source.start_date, source.ceco, source.skip_level, source.cafe_alcides,
                        source.parents, source.personal_email, source.size, source.birthday,
-                       source.ubicacion, source.activo);
+                       source.validacion, source.activo);
         ''', (
             data.get('scotia_id', ''),
             data.get('employee', ''),
@@ -396,14 +396,14 @@ class ExcelToSQLServerImporter:
             data.get('senior_manager', ''),
             data.get('unit', ''),
             data.get('start_date', ''),
-            data.get('coca', ''),
+            data.get('ceco', ''),
             data.get('skip_level', ''),
-            data.get('coleadores', ''),
+            data.get('cafe_alcides', ''),
             data.get('parents', ''),
             data.get('personal_email', ''),
             data.get('size', ''),
             data.get('birthday', ''),
-            data.get('ubicacion', ''),
+            data.get('validacion', ''),
             1 if data.get('activo', 'True').lower() == 'true' else 0
         ))
     
@@ -414,7 +414,7 @@ class ExcelToSQLServerImporter:
             (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, 
              position_role, exception_tracking, fulfillment_action, system_owner, 
              role_name, access_type, category, additional_data, ad_code, access_status, 
-             last_update_date, requirement_licensing, description, authentication_method)
+             last_update_date, require_licensing, description, authentication_method)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('jurisdiction', ''),
@@ -434,7 +434,7 @@ class ExcelToSQLServerImporter:
             data.get('ad_code', ''),
             data.get('access_status', ''),
             data.get('last_update_date', ''),
-            data.get('requirement_licensing', ''),
+            data.get('require_licensing', ''),
             data.get('description', ''),
             data.get('authentication_method', '')
         ))

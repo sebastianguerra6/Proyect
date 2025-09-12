@@ -2,26 +2,16 @@
 Módulo de servicios para el sistema de conciliación de accesos
 """
 
-# Servicios del nuevo sistema de conciliación de accesos
-from .reconcile_service import ReconciliationService, reconciliation_service
+# Servicios del sistema de gestión de accesos
 from .export_service import ExportService, export_service
 from .history_service import HistoryService, history_service
-
-# Nuevo servicio de gestión de accesos
 from .access_management_service import AccessManagementService, access_service
-
-# Servicio de búsqueda
 from .search_service import SearchService, search_service
 
 __all__ = [
-    # Servicios de conciliación
-    'ReconciliationService', 'reconciliation_service',
+    # Servicios de gestión de accesos
     'ExportService', 'export_service',
     'HistoryService', 'history_service',
-    
-    # Nuevo servicio de gestión de accesos
     'AccessManagementService', 'access_service',
-    
-    # Servicio de búsqueda
     'SearchService', 'search_service'
 ]
