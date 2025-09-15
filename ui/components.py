@@ -345,13 +345,13 @@ class EdicionBusquedaFrame:
         self.filtros_activos = {}
         self.campos_filtro = {
             "SID": "sid",
-            "Número de Caso": "case_id", 
-            "Proceso": "process_access",
-            "Aplicación": "app_name",
-            "Estado": "status",
-            "Fecha": "record_date",
-            "Responsable": "responsible",
-            "Descripción": "event_description"
+            "Número de Caso": "numero_caso", 
+            "Proceso": "proceso",
+            "Aplicación": "aplicacion",
+            "Estado": "estado",
+            "Fecha": "fecha",
+            "Responsable": "responsable",
+            "Descripción": "descripcion"
         }
     
     def _crear_widgets(self):
@@ -363,7 +363,7 @@ class EdicionBusquedaFrame:
         self.frame.rowconfigure(1, weight=1)
         
         # Título
-        ttk.Label(self.frame, text="Edición y Búsqueda de Registros - Historial de Procesos", 
+        ttk.Label(self.frame, text="🔍 Edición y Búsqueda - Historial de Procesos", 
                   style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
         # Frame principal simplificado
@@ -373,7 +373,7 @@ class EdicionBusquedaFrame:
         main_frame.rowconfigure(3, weight=1)  # Cambiar de row 1 a row 3 para la tabla
         
         # Frame para búsqueda y herramientas
-        busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Historial de Procesos", padding="15")
+        busqueda_frame = ttk.LabelFrame(main_frame, text="📊 Historial de Procesos y Asignaciones", padding="15")
         busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         busqueda_frame.columnconfigure(1, weight=1)
         
@@ -454,8 +454,15 @@ class EdicionBusquedaFrame:
     def actualizar_tabla(self):
         """Actualiza la tabla con todos los registros del historial"""
         try:
+            # Limpiar tabla primero
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            
             # Obtener todos los registros del historial
             self.mostrar_todo_el_historial()
+            
+            # Mostrar mensaje de confirmación
+            messagebox.showinfo("Actualización", "Tabla actualizada correctamente")
         except Exception as e:
             messagebox.showerror("Error", f"Error actualizando tabla: {str(e)}")
     
@@ -845,24 +852,20 @@ class EdicionBusquedaFrame:
             sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
             from access_management_service import access_service
             
-            # Obtener todo el historial
+            # Obtener todo el historial usando el método del servicio
             conn = access_service.get_connection()
             cursor = conn.cursor()
-            
-            # Primero verificar si hay datos en la tabla
-            cursor.execute('SELECT COUNT(*) FROM historico')
-            count = cursor.fetchone()[0]
-            print(f"DEBUG: Total de registros en historico: {count}")
-            
-            if count == 0:
-                # Si no hay datos, crear algunos datos de ejemplo
-                self.crear_datos_ejemplo_historial(conn, cursor)
-                conn.commit()
             
             cursor.execute('''
                 SELECT h.*, a.logical_access_name, a.description as app_description
                 FROM historico h
-                LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
+                LEFT JOIN (
+                    SELECT 
+                        logical_access_name,
+                        description,
+                        ROW_NUMBER() OVER (PARTITION BY logical_access_name ORDER BY id) as rn
+                    FROM applications
+                ) a ON h.app_access_name = a.logical_access_name AND a.rn = 1
                 ORDER BY h.record_date DESC
             ''')
             rows = cursor.fetchall()
@@ -873,7 +876,7 @@ class EdicionBusquedaFrame:
             historial = [dict(zip(columns, row)) for row in rows]
             
             print(f"DEBUG: Historial obtenido: {len(historial)} registros")
-            self.mostrar_resultados_historial(historial, "todo el historial")
+            self.mostrar_resultados_historial(historial, "")
         except Exception as e:
             messagebox.showerror("Error", f"Error obteniendo historial: {str(e)}")
             print(f"Error completo: {e}")
@@ -983,11 +986,14 @@ class EdicionBusquedaFrame:
                 
                 self.tree.insert("", "end", values=values)
             
-            if busqueda:
+            if busqueda and busqueda.strip():
                 messagebox.showinfo("Búsqueda", f"Se encontraron {len(resultados)} registros para: {busqueda}")
         else:
-            if busqueda:
+            if busqueda and busqueda.strip():
                 messagebox.showinfo("Búsqueda", f"No se encontraron registros para: {busqueda}")
+            elif busqueda == "":
+                # Solo mostrar mensaje si no hay resultados y no es una búsqueda específica
+                pass
             else:
                 messagebox.showinfo("Búsqueda", "No se encontraron registros")
     

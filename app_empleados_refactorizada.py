@@ -286,6 +286,7 @@ class AppEmpleadosRefactorizada:
         self.componentes['aplicaciones'].frame.grid(row=0, column=0, sticky="nsew")
         self.componentes['aplicaciones'].frame.grid_remove()
     
+    
     def cambiar_contenido(self, tipo_contenido):
         """Cambia el contenido mostrado según el botón seleccionado"""
         # Ocultar todos los componentes
@@ -544,6 +545,9 @@ class ConciliacionFrame:
         ttk.Button(entrada_frame, text="🔍 Conciliar Accesos", 
                   command=self._conciliar_accesos, style="Success.TButton").grid(row=2, column=0, pady=(0, 10), sticky="ew")
         
+        ttk.Button(entrada_frame, text="⚡ Asignar Accesos Automáticamente", 
+                  command=self._asignar_accesos_automaticos, style="Warning.TButton").grid(row=3, column=0, pady=(0, 10), sticky="ew")
+        
         
         # Información adicional
         info_text = ("Este sistema compara los accesos actuales de un empleado\n"
@@ -615,6 +619,42 @@ class ConciliacionFrame:
             return
         
         try:
+            # Verificar si el empleado existe y tiene datos necesarios
+            empleado = access_service.get_employee_by_id(sid)
+            if not empleado:
+                messagebox.showerror("Error", f"El empleado {sid} no existe en el headcount")
+                return
+            
+            # Verificar si tiene posición y unidad
+            if not empleado.get('position') or not empleado.get('unit'):
+                respuesta = messagebox.askyesno(
+                    "Datos Incompletos", 
+                    f"El empleado {sid} no tiene posición o unidad definida.\n\n"
+                    "¿Desea usar datos de ejemplo para probar la conciliación?\n"
+                    "(Se asignará: ANALISTA SENIOR - TECNOLOGÍA)"
+                )
+                
+                if respuesta:
+                    # Actualizar con datos de ejemplo
+                    conn = access_service.get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE headcount 
+                        SET position = 'ANALISTA SENIOR', unit = 'TECNOLOGÍA'
+                        WHERE scotia_id = ?
+                    """, (sid,))
+                    conn.commit()
+                    conn.close()
+                    
+                    # Crear aplicaciones de ejemplo si no existen
+                    self._ensure_sample_applications()
+                    
+                    messagebox.showinfo("Datos Actualizados", 
+                        "Se han asignado datos de ejemplo al empleado.\n"
+                        "Ahora puede proceder con la conciliación.")
+                else:
+                    return
+            
             # Usar el nuevo servicio de conciliación
             reporte = access_service.get_access_reconciliation_report(sid)
             
@@ -629,6 +669,83 @@ class ConciliacionFrame:
         except Exception as e:
             messagebox.showerror("Error", f"Error durante la conciliación: {str(e)}")
     
+    def _ensure_sample_applications(self):
+        """Asegura que existan aplicaciones de ejemplo para la conciliación"""
+        try:
+            conn = access_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar si ya existen aplicaciones para ANALISTA SENIOR en TECNOLOGÍA
+            cursor.execute("""
+                SELECT COUNT(*) FROM applications 
+                WHERE unit = 'TECNOLOGÍA' AND position_role = 'ANALISTA SENIOR'
+            """)
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                # Crear aplicaciones de ejemplo
+                applications_data = [
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'JIRA', 'JIRA', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de gestión de proyectos'),
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'CONFLUENCE', 'CONFLUENCE', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de documentación'),
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'GITLAB', 'GITLAB', 'ANALISTA SENIOR', 'DEVELOPER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de control de versiones'),
+                    ('Global', 'TECNOLOGÍA', 'ANALISIS', 'POWER BI', 'POWER BI', 'ANALISTA SENIOR', 'ANALYST', 'Aplicación', 'Analytics', 'Activo', 'Tecnología', 'Herramienta de análisis de datos')
+                ]
+                
+                for app in applications_data:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO applications 
+                        (jurisdiction, unit, subunit, logical_access_name, alias, position_role, 
+                         role_name, access_type, category, access_status, system_owner, description)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, app)
+                
+                conn.commit()
+            
+            conn.close()
+            
+        except Exception as e:
+            print(f"Error creando aplicaciones de ejemplo: {e}")
+    
+    def _asignar_accesos_automaticos(self):
+        """Asigna accesos automáticamente según la unit y position del empleado"""
+        sid = self.sid_var.get().strip()
+        if not sid:
+            messagebox.showerror("Error", "Por favor ingrese un SID válido")
+            return
+        
+        try:
+            # Confirmar la acción
+            result = messagebox.askyesno(
+                "Confirmar Asignación Automática",
+                f"¿Está seguro de que desea asignar accesos automáticamente para {sid}?\n\n"
+                "Esto creará tickets 'Pendiente' para los accesos que faltan y revocará los excesivos."
+            )
+            
+            if not result:
+                return
+            
+            # Llamar al método assign_accesses del servicio
+            success, message, counts = access_service.assign_accesses(sid, "Sistema")
+            
+            if success:
+                # Mostrar resultados
+                resultado_texto = f"✅ {message}\n\n"
+                resultado_texto += f"📊 Resumen:\n"
+                resultado_texto += f"• Accesos otorgados: {counts['granted']}\n"
+                resultado_texto += f"• Accesos revocados: {counts['revoked']}\n\n"
+                resultado_texto += f"Los tickets han sido creados con estado 'Pendiente' en el historial."
+                
+                messagebox.showinfo("Asignación Completada", resultado_texto)
+                
+                # Actualizar la conciliación para mostrar los cambios
+                self._conciliar_accesos()
+                
+            else:
+                messagebox.showerror("Error", f"Error en la asignación automática: {message}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error durante la asignación automática: {str(e)}")
+    
     
     def _exportar_excel(self):
         """Exporta los resultados de conciliación a Excel"""
@@ -637,9 +754,11 @@ class ConciliacionFrame:
             return
         
         try:
+            # Adaptar la estructura de datos para el servicio de exportación
+            adapted_data = self._adapt_data_for_export(self.resultado_conciliacion)
+            
             output_path = export_service.export_reconciliation_tickets(
-                [self.resultado_conciliacion] if isinstance(self.resultado_conciliacion, dict) 
-                else self.resultado_conciliacion,
+                [adapted_data],
                 "Sistema Integrado"
             )
             
@@ -647,6 +766,44 @@ class ConciliacionFrame:
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+    
+    def _adapt_data_for_export(self, reconciliation_data):
+        """Adapta los datos de conciliación para el formato esperado por el servicio de exportación"""
+        try:
+            employee = reconciliation_data.get('employee', {})
+            
+            # Adaptar estructura para el servicio de exportación
+            adapted = {
+                "person_info": {
+                    "sid": employee.get('scotia_id', ''),
+                    "area": employee.get('unit', ''),
+                    "subunit": employee.get('subunit', ''),
+                    "cargo": employee.get('position', '')
+                },
+                "current": reconciliation_data.get('current_access', []),
+                "target": [],  # No tenemos datos de target en la nueva estructura
+                "to_grant": self._adapt_access_list(reconciliation_data.get('to_grant', []), 'grant'),
+                "to_revoke": self._adapt_access_list(reconciliation_data.get('to_revoke', []), 'revoke')
+            }
+            
+            return adapted
+            
+        except Exception as e:
+            return reconciliation_data
+    
+    def _adapt_access_list(self, access_list, action_type):
+        """Adapta una lista de accesos para el formato de exportación"""
+        adapted_list = []
+        for access in access_list:
+            adapted_item = {
+                "sid": self.sid_var.get().strip(),
+                "app_name": access.get('app_name', ''),
+                "role_name": access.get('role_name', ''),
+                "accion": "GRANT" if action_type == 'grant' else "REVOKE",
+                "motivo": f"Acceso {'requerido' if action_type == 'grant' else 'excesivo'} para {access.get('app_name', '')}"
+            }
+            adapted_list.append(adapted_item)
+        return adapted_list
     
     def _registrar_tickets(self):
         """Registra los tickets de conciliación en el historial"""
@@ -740,6 +897,10 @@ class ConciliacionFrame:
                 '⚠️ Excesivo',
                 '🔴 Revocar'
             ))
+        
+        # Si no hay datos, mostrar mensaje
+        if not current_access and not to_grant and not to_revoke:
+            self.tree_resultados.insert('', 'end', values=('', '', '', '', '', 'Sin datos', ''))
 
 
 class AplicacionesFrame:

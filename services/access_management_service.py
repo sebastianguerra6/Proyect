@@ -52,10 +52,145 @@ class AccessManagementService:
 
     def __init__(self):
         self.db_manager = DatabaseManager()
+        self._ensure_views_and_indexes()
 
     def get_connection(self) -> sqlite3.Connection:
         """Obtiene una conexión a la base de datos"""
         return self.db_manager.get_connection()
+
+    def _ensure_views_and_indexes(self):
+        """Asegura que existan las vistas e índices necesarios (idempotente)"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Eliminar vistas existentes si hay problemas
+            views_to_drop = ['vw_to_revoke', 'vw_to_grant', 'vw_current_access', 'vw_required_apps']
+            for view in views_to_drop:
+                try:
+                    cursor.execute(f"DROP VIEW IF EXISTS {view}")
+                except:
+                    pass  # Ignorar errores si la vista no existe
+            
+            # Crear índices adicionales para optimizar las consultas
+            indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_applications_unit_position ON applications (unit, position_role)",
+                "CREATE INDEX IF NOT EXISTS idx_historico_scotia_status ON historico (scotia_id, status)",
+                "CREATE INDEX IF NOT EXISTS idx_historico_process_status ON historico (process_access, status)",
+                "CREATE INDEX IF NOT EXISTS idx_headcount_unit_position ON headcount (unit, position)"
+            ]
+            
+            for index_sql in indexes:
+                cursor.execute(index_sql)
+            
+            # Crear vista para aplicaciones requeridas por (unit, position)
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS vw_required_apps AS
+                SELECT 
+                    h.scotia_id,
+                    h.unit,
+                    h.position,
+                    a.logical_access_name,
+                    a.subunit,
+                    a.position_role,
+                    a.role_name,
+                    a.system_owner,
+                    a.access_type,
+                    a.category,
+                    a.description
+                FROM headcount h
+                INNER JOIN (
+                    SELECT DISTINCT
+                        logical_access_name,
+                        unit,
+                        position_role,
+                        subunit,
+                        role_name,
+                        system_owner,
+                        access_type,
+                        category,
+                        description
+                    FROM applications
+                    WHERE access_status = 'Activo'
+                ) a ON 
+                    UPPER(TRIM(h.unit)) = UPPER(TRIM(a.unit)) AND
+                    UPPER(TRIM(h.position)) = UPPER(TRIM(a.position_role))
+                WHERE h.activo = 1
+                GROUP BY h.scotia_id, a.logical_access_name
+                ORDER BY h.scotia_id, a.logical_access_name
+            ''')
+            
+            # Crear vista para accesos actuales (completados y pendientes)
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS vw_current_access AS
+                SELECT 
+                    h.scotia_id,
+                    head.unit,
+                    head.position,
+                    h.app_access_name as logical_access_name,
+                    h.area as subunit,
+                    head.position as position_role,
+                    h.record_date,
+                    h.status
+                FROM historico h
+                INNER JOIN headcount head ON h.scotia_id = head.scotia_id
+                WHERE h.status IN ('Completado', 'Pendiente')
+                AND h.process_access IN ('onboarding', 'lateral_movement')
+                AND head.activo = 1
+                AND h.app_access_name IS NOT NULL
+                GROUP BY h.scotia_id, h.app_access_name
+                ORDER BY h.scotia_id, h.app_access_name
+            ''')
+            
+            # Crear vista para deltas: accesos por otorgar
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS vw_to_grant AS
+                SELECT 
+                    req.scotia_id,
+                    req.unit,
+                    req.position,
+                    req.logical_access_name,
+                    req.subunit,
+                    req.position_role,
+                    'onboarding' as process_type
+                FROM vw_required_apps req
+                LEFT JOIN vw_current_access curr ON 
+                    req.scotia_id = curr.scotia_id AND
+                    UPPER(TRIM(req.logical_access_name)) = UPPER(TRIM(curr.logical_access_name)) AND
+                    UPPER(TRIM(req.unit)) = UPPER(TRIM(curr.unit)) AND
+                    UPPER(TRIM(req.position)) = UPPER(TRIM(curr.position))
+                WHERE curr.scotia_id IS NULL
+                ORDER BY req.scotia_id, req.logical_access_name
+            ''')
+            
+            # Crear vista para deltas: accesos por revocar
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS vw_to_revoke AS
+                SELECT 
+                    curr.scotia_id,
+                    curr.unit,
+                    curr.position,
+                    curr.logical_access_name,
+                    curr.subunit,
+                    curr.position_role,
+                    curr.record_date,
+                    'offboarding' as process_type
+                FROM vw_current_access curr
+                LEFT JOIN vw_required_apps req ON 
+                    curr.scotia_id = req.scotia_id AND
+                    UPPER(TRIM(curr.logical_access_name)) = UPPER(TRIM(req.logical_access_name)) AND
+                    UPPER(TRIM(curr.unit)) = UPPER(TRIM(req.unit)) AND
+                    UPPER(TRIM(curr.position)) = UPPER(TRIM(req.position))
+                WHERE req.scotia_id IS NULL
+                ORDER BY curr.scotia_id, curr.logical_access_name
+            ''')
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            print(f"Error creando vistas e índices: {e}")
+            # No lanzar excepción para no interrumpir la inicialización
 
     # ==============================
     # MÉTODOS PARA HEADCOUNT
@@ -560,21 +695,16 @@ class AccessManagementService:
 
             # Verificación anti-duplicados: evita más de un "Pendiente" por la misma app/empleado
             cursor.execute('''
-                SELECT 1 FROM historico
+                SELECT COUNT(*) FROM historico
                 WHERE scotia_id = ?
-                  AND process_access IN ('onboarding','offboarding')
                   AND status = 'Pendiente'
                   AND UPPER(TRIM(app_access_name)) = UPPER(TRIM(?))
-                  AND UPPER(TRIM(COALESCE(area,''))) = UPPER(TRIM(COALESCE(?,'')))
-                  -- si deseas ignorar subunit en la duplicidad, comenta esta línea:
-                  AND UPPER(TRIM(COALESCE(subunit,''))) = UPPER(TRIM(COALESCE(?,'')))
-                LIMIT 1
-            ''', (record_data['scotia_id'], record_data.get('app_access_name', ''),
-                  record_data.get('area',''), record_data.get('subunit','')))
+            ''', (record_data['scotia_id'], record_data.get('app_access_name', '')))
             
-            if cursor.fetchone():
+            existing_count = cursor.fetchone()[0]
+            if existing_count > 0:
                 conn.close()
-                return True, "Registro ya pendiente; no se duplicó"
+                return True, f"Registro ya pendiente; no se duplicó (existentes: {existing_count})"
 
             cursor.execute('''
                 INSERT INTO historico 
@@ -634,14 +764,15 @@ class AccessManagementService:
                     a.position_role       AS app_position_role
                 FROM historico h
                 LEFT JOIN (
-                    SELECT DISTINCT 
+                    SELECT 
                         logical_access_name,
                         description,
                         unit,
                         subunit,
-                        position_role
+                        position_role,
+                        ROW_NUMBER() OVER (PARTITION BY logical_access_name ORDER BY id) as rn
                     FROM applications
-                ) a ON h.app_access_name = a.logical_access_name
+                ) a ON h.app_access_name = a.logical_access_name AND a.rn = 1
                 WHERE h.scotia_id = ?
                 ORDER BY h.record_date DESC
             ''', (scotia_id,))
@@ -925,6 +1056,10 @@ class AccessManagementService:
                 app_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                 
                 # Solo agregar si coincide con la unidad actual del empleado y tiene position válido
+                # Si no hay position en el historial, usar la posición actual del empleado
+                if not app_position:
+                    app_position = emp_position
+                
                 if (app_unit == emp_unit and app_position and app_name):
                     current_keys.add(self._triplet_key(app_unit, app_position, app_name))
 
@@ -953,6 +1088,10 @@ class AccessManagementService:
                 app_position = h.get('app_position_role') or h.get('position', '')
                 app_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                 
+                # Si no hay position en el historial, usar la posición actual del empleado
+                if not app_position:
+                    app_position = emp_position
+                
                 if app_unit and app_position and app_name:
                     key = self._triplet_key(app_unit, app_position, app_name)
                     rec_index[key] = h
@@ -976,6 +1115,10 @@ class AccessManagementService:
                     app_unit = h.get('app_unit') or h.get('area', '')
                     app_position = h.get('app_position_role') or h.get('position', '')
                     app_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
+                    
+                    # Si no hay position en el historial, usar la posición actual del empleado
+                    if not app_position:
+                        app_position = emp_position
                     
                     if app_unit and app_position and app_name:
                         key = self._triplet_key(app_unit, app_position, app_name)
@@ -1048,7 +1191,215 @@ class AccessManagementService:
         except Exception as e:
             print(f"Error eliminando registro: {str(e)}")
             return False
-    
+
+    def buscar_procesos(self, filtros: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """
+        Busca procesos en el historial con filtros opcionales.
+        
+        Args:
+            filtros: Diccionario con filtros de búsqueda
+            
+        Returns:
+            Lista de registros del historial que coinciden con los filtros
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Query base
+            query = '''
+                SELECT h.*, a.logical_access_name, a.description as app_description
+                FROM historico h
+                LEFT JOIN (
+                    SELECT 
+                        logical_access_name,
+                        description,
+                        ROW_NUMBER() OVER (PARTITION BY logical_access_name ORDER BY id) as rn
+                    FROM applications
+                ) a ON h.app_access_name = a.logical_access_name AND a.rn = 1
+            '''
+            
+            # Construir WHERE clause basado en filtros
+            where_conditions = []
+            params = []
+            
+            if filtros:
+                for campo, valor in filtros.items():
+                    if valor and valor.strip():
+                        if campo == 'numero_caso':
+                            where_conditions.append("h.case_id LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'sid':
+                            where_conditions.append("h.scotia_id LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'proceso':
+                            where_conditions.append("h.process_access LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'aplicacion':
+                            where_conditions.append("h.app_access_name LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'estado':
+                            where_conditions.append("h.status LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'fecha':
+                            where_conditions.append("h.record_date LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'responsable':
+                            where_conditions.append("h.responsible LIKE ?")
+                            params.append(f"%{valor}%")
+                        elif campo == 'descripcion':
+                            where_conditions.append("h.event_description LIKE ?")
+                            params.append(f"%{valor}%")
+            
+            if where_conditions:
+                query += " WHERE " + " AND ".join(where_conditions)
+            
+            query += " ORDER BY h.record_date DESC"
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            conn.close()
+            
+            # Convertir a diccionarios
+            columns = [description[0] for description in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+            
+        except Exception as e:
+            print(f"Error en buscar_procesos: {e}")
+            return []
+
+    def assign_accesses(self, scotia_id: str, responsable: str = "Sistema") -> Tuple[bool, str, Dict[str, int]]:
+        """
+        Asigna accesos automáticamente según la unit y position del empleado.
+        
+        Args:
+            scotia_id: ID del empleado
+            responsable: Responsable del proceso (default: "Sistema")
+            
+        Returns:
+            Tuple[bool, str, Dict[str, int]]: (success, message, counts)
+            counts contiene: {'granted': int, 'revoked': int}
+        """
+        try:
+            # Verificar que el empleado existe
+            employee = self.get_employee_by_id(scotia_id)
+            if not employee:
+                return False, f"Empleado {scotia_id} no encontrado", {'granted': 0, 'revoked': 0}
+            
+            # Verificar si ya hay registros pendientes para este empleado
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM historico 
+                WHERE scotia_id = ? AND status = 'Pendiente'
+            ''', (scotia_id,))
+            existing_pending = cursor.fetchone()[0]
+            
+            if existing_pending > 0:
+                conn.close()
+                return False, f"Ya existen {existing_pending} registros pendientes para {scotia_id}. Complete los procesos pendientes antes de crear nuevos.", {'granted': 0, 'revoked': 0}
+            
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Obtener accesos por otorgar desde la vista
+            cursor.execute('''
+                SELECT * FROM vw_to_grant 
+                WHERE scotia_id = ?
+            ''', (scotia_id,))
+            to_grant_rows = cursor.fetchall()
+            
+            # Obtener accesos por revocar desde la vista
+            cursor.execute('''
+                SELECT * FROM vw_to_revoke 
+                WHERE scotia_id = ?
+            ''', (scotia_id,))
+            to_revoke_rows = cursor.fetchall()
+            
+            # Contadores
+            granted_count = 0
+            revoked_count = 0
+            
+            # Generar un solo case_id para todo el proceso
+            case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
+            
+            # Deduplicar accesos por otorgar por logical_access_name
+            to_grant_unique = {}
+            for row in to_grant_rows:
+                columns = [description[0] for description in cursor.description]
+                access_data = dict(zip(columns, row))
+                app_name = access_data.get('logical_access_name')
+                if app_name and app_name not in to_grant_unique:
+                    to_grant_unique[app_name] = access_data
+            
+            # Procesar accesos por otorgar (ya deduplicados)
+            for app_name, access_data in to_grant_unique.items():
+                # Crear registro histórico para otorgamiento
+                record_data = {
+                    'scotia_id': scotia_id,
+                    'case_id': case_id,
+                    'responsible': responsable,
+                    'process_access': 'onboarding',
+                    'sid': scotia_id,
+                    'area': access_data.get('unit', ''),
+                    'subunit': access_data.get('subunit', ''),
+                    'event_description': f"Otorgamiento automático de acceso para {app_name}",
+                    'ticket_email': f"{responsable}@empresa.com",
+                    'app_access_name': app_name,
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso'
+                }
+                
+                success, message = self.create_historical_record(record_data)
+                if success:
+                    granted_count += 1
+                else:
+                    print(f"Error creando registro de otorgamiento: {message}")
+            
+            # Deduplicar accesos por revocar por logical_access_name
+            to_revoke_unique = {}
+            for row in to_revoke_rows:
+                columns = [description[0] for description in cursor.description]
+                access_data = dict(zip(columns, row))
+                app_name = access_data.get('logical_access_name')
+                if app_name and app_name not in to_revoke_unique:
+                    to_revoke_unique[app_name] = access_data
+            
+            # Procesar accesos por revocar (ya deduplicados)
+            for app_name, access_data in to_revoke_unique.items():
+                # Crear registro histórico para revocación
+                record_data = {
+                    'scotia_id': scotia_id,
+                    'case_id': case_id,
+                    'responsible': responsable,
+                    'process_access': 'offboarding',
+                    'sid': scotia_id,
+                    'area': access_data.get('unit', ''),
+                    'subunit': access_data.get('subunit', ''),
+                    'event_description': f"Revocación automática de acceso para {app_name}",
+                    'ticket_email': f"{responsable}@empresa.com",
+                    'app_access_name': app_name,
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso'
+                }
+                
+                success, message = self.create_historical_record(record_data)
+                if success:
+                    revoked_count += 1
+                else:
+                    print(f"Error creando registro de revocación: {message}")
+            
+            conn.close()
+            
+            counts = {'granted': granted_count, 'revoked': revoked_count}
+            message = f"Proceso completado. Otorgados: {granted_count}, Revocados: {revoked_count}"
+            
+            return True, message, counts
+            
+        except Exception as e:
+            return False, f"Error en assign_accesses: {str(e)}", {'granted': 0, 'revoked': 0}
 
 
 # Instancia global del servicio
