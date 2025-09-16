@@ -292,6 +292,104 @@ class ExportService:
             print(f"Error limpiando archivos antiguos: {e}")
             return 0
 
+    def export_headcount_statistics(self, statistics_data: Dict[str, Any], 
+                                   source_system: str = "Sistema Integrado") -> str:
+        """Exporta estadísticas del headcount a Excel"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"estadisticas_headcount_{timestamp}.xlsx"
+            filepath = os.path.join(self.output_dir, filename)
+            
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                # Hoja 1: Estadísticas Generales
+                if 'generales' in statistics_data:
+                    generales_df = pd.DataFrame([statistics_data['generales']])
+                    generales_df.to_excel(writer, sheet_name='Generales', index=False)
+                
+                # Hoja 2: Por Unidad
+                if 'por_unidad' in statistics_data and statistics_data['por_unidad']:
+                    unidad_df = pd.DataFrame(statistics_data['por_unidad'])
+                    unidad_df.to_excel(writer, sheet_name='Por Unidad', index=False)
+                
+                # Hoja 3: Por Puesto
+                if 'por_puesto' in statistics_data and statistics_data['por_puesto']:
+                    puesto_df = pd.DataFrame(statistics_data['por_puesto'])
+                    puesto_df.to_excel(writer, sheet_name='Por Puesto', index=False)
+                
+                # Hoja 4: Por Manager
+                if 'por_manager' in statistics_data and statistics_data['por_manager']:
+                    manager_df = pd.DataFrame(statistics_data['por_manager'])
+                    manager_df.to_excel(writer, sheet_name='Por Manager', index=False)
+                
+                # Hoja 5: Por Senior Manager
+                if 'por_senior_manager' in statistics_data and statistics_data['por_senior_manager']:
+                    senior_manager_df = pd.DataFrame(statistics_data['por_senior_manager'])
+                    senior_manager_df.to_excel(writer, sheet_name='Por Senior Manager', index=False)
+                
+                # Hoja 6: Por Estado
+                if 'por_estado' in statistics_data and statistics_data['por_estado']:
+                    estado_df = pd.DataFrame(statistics_data['por_estado'])
+                    estado_df.to_excel(writer, sheet_name='Por Estado', index=False)
+                
+                # Hoja 7: Por Año de Inicio
+                if 'por_año_inicio' in statistics_data and statistics_data['por_año_inicio']:
+                    año_df = pd.DataFrame(statistics_data['por_año_inicio'])
+                    año_df.to_excel(writer, sheet_name='Por Año de Inicio', index=False)
+                
+                # Hoja 8: Detalle por Unidad
+                if 'detalle_por_unidad' in statistics_data and statistics_data['detalle_por_unidad']:
+                    detalle_df = pd.DataFrame(statistics_data['detalle_por_unidad'])
+                    detalle_df.to_excel(writer, sheet_name='Detalle por Unidad', index=False)
+            
+            return filepath
+            
+        except Exception as e:
+            raise Exception(f"Error exportando estadísticas del headcount: {str(e)}")
+
+    def export_historial_statistics(self, statistics_data: Dict[str, Any], 
+                                  source_system: str = "Sistema Integrado") -> str:
+        """Exporta estadísticas del historial a Excel"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"estadisticas_historial_{timestamp}.xlsx"
+            filepath = os.path.join(self.output_dir, filename)
+            
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                # Hoja 1: Estadísticas Generales
+                if 'generales' in statistics_data:
+                    generales_df = pd.DataFrame([statistics_data['generales']])
+                    generales_df.to_excel(writer, sheet_name='Generales', index=False)
+                
+                # Hoja 2: Por Unidad
+                if 'por_unidad' in statistics_data and statistics_data['por_unidad']:
+                    unidad_df = pd.DataFrame(statistics_data['por_unidad'])
+                    unidad_df.to_excel(writer, sheet_name='Por Unidad', index=False)
+                
+                # Hoja 3: Por Subunidad
+                if 'por_subunidad' in statistics_data and statistics_data['por_subunidad']:
+                    subunidad_df = pd.DataFrame(statistics_data['por_subunidad'])
+                    subunidad_df.to_excel(writer, sheet_name='Por Subunidad', index=False)
+                
+                # Hoja 4: Por Puesto
+                if 'por_puesto' in statistics_data and statistics_data['por_puesto']:
+                    puesto_df = pd.DataFrame(statistics_data['por_puesto'])
+                    puesto_df.to_excel(writer, sheet_name='Por Puesto', index=False)
+                
+                # Hoja 5: Por Aplicación
+                if 'por_aplicacion' in statistics_data and statistics_data['por_aplicacion']:
+                    aplicacion_df = pd.DataFrame(statistics_data['por_aplicacion'])
+                    aplicacion_df.to_excel(writer, sheet_name='Por Aplicación', index=False)
+                
+                # Hoja 6: Por Proceso
+                if 'por_proceso' in statistics_data and statistics_data['por_proceso']:
+                    proceso_df = pd.DataFrame(statistics_data['por_proceso'])
+                    proceso_df.to_excel(writer, sheet_name='Por Proceso', index=False)
+            
+            return filepath
+            
+        except Exception as e:
+            raise Exception(f"Error exportando estadísticas: {str(e)}")
+
 
 # Instancia global para usar en toda la aplicación
 export_service = ExportService()

@@ -71,7 +71,8 @@ class DatabaseManager:
                     size             VARCHAR(50),
                     birthday         DATE,
                     validacion       VARCHAR(100),
-                    activo           BOOLEAN DEFAULT TRUE
+                    activo           BOOLEAN DEFAULT TRUE,
+                    inactivation_date DATE
                 )
             ''')
             
@@ -178,6 +179,16 @@ class DatabaseManager:
                     print("ℹ️ Columna 'request_date' ya existe en la tabla historico")
                 else:
                     print(f"⚠️ Error agregando columna request_date: {e}")
+            
+            # Migración: Agregar columna inactivation_date si no existe
+            try:
+                cursor.execute('ALTER TABLE headcount ADD COLUMN inactivation_date DATE')
+                print("✅ Columna 'inactivation_date' agregada a la tabla headcount")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e).lower():
+                    print("ℹ️ Columna 'inactivation_date' ya existe en la tabla headcount")
+                else:
+                    print(f"⚠️ Error agregando columna inactivation_date: {e}")
             
             # Crear índices para mejor rendimiento
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_headcount_scotia_id ON headcount (scotia_id)')

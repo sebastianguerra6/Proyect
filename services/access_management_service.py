@@ -134,7 +134,7 @@ class AccessManagementService:
                     h.status
                 FROM historico h
                 INNER JOIN headcount head ON h.scotia_id = head.scotia_id
-                WHERE h.status IN ('Completado', 'Pendiente')
+                WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
                 AND h.process_access IN ('onboarding', 'lateral_movement')
                 AND head.activo = 1
                 AND h.app_access_name IS NOT NULL
@@ -682,6 +682,60 @@ class AccessManagementService:
     # MÉTODOS PARA HISTORICO
     # ==============================
 
+    def create_manual_access_record(self, scotia_id: str, app_name: str, 
+                                   responsible: str = "Manual", 
+                                   description: str = None) -> Tuple[bool, str]:
+        """Crea un registro manual individual de acceso para una persona específica"""
+        try:
+            # Verificar que el empleado existe
+            employee = self.get_employee_by_id(scotia_id)
+            if not employee:
+                return False, f"Empleado {scotia_id} no encontrado"
+            
+            # Generar case_id único
+            case_id = f"MANUAL-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{scotia_id}"
+            
+            # Crear descripción si no se proporciona
+            if not description:
+                description = f"Acceso manual a {app_name} para {employee.get('full_name', scotia_id)}"
+            
+            # Datos del registro manual
+            record_data = {
+                'scotia_id': scotia_id,
+                'case_id': case_id,
+                'responsible': responsible,
+                'record_date': datetime.now().isoformat(),
+                'request_date': datetime.now().strftime('%Y-%m-%d'),
+                'process_access': 'manual_access',
+                'sid': scotia_id,
+                'area': employee.get('unit', 'Sin Unidad'),
+                'subunit': employee.get('unit', 'Sin Unidad'),
+                'event_description': description,
+                'ticket_email': f"{responsible}@empresa.com",
+                'app_access_name': app_name,
+                'computer_system_type': 'Desktop',
+                'status': 'Pendiente',
+                'closing_date_app': None,
+                'closing_date_ticket': None,
+                'app_quality': None,
+                'confirmation_by_user': None,
+                'comment': f"Registro manual creado por {responsible}",
+                'ticket_quality': None,
+                'general_status': 'Pendiente',
+                'average_time_open_ticket': None
+            }
+            
+            # Crear el registro
+            success, message = self.create_historical_record(record_data)
+            
+            if success:
+                return True, f"Registro manual creado exitosamente para {scotia_id} - {app_name}"
+            else:
+                return False, f"Error creando registro manual: {message}"
+                
+        except Exception as e:
+            return False, f"Error creando registro manual: {str(e)}"
+
     def create_historical_record(self, record_data: Dict[str, Any]) -> Tuple[bool, str]:
         """Crea un registro en el historial con verificación anti-duplicados"""
         try:
@@ -694,17 +748,20 @@ class AccessManagementService:
                     return False, f"Campo requerido faltante: {field}"
 
             # Verificación anti-duplicados: evita más de un "Pendiente" por la misma app/empleado
-            cursor.execute('''
-                SELECT COUNT(*) FROM historico
-                WHERE scotia_id = ?
-                  AND status = 'Pendiente'
-                  AND UPPER(TRIM(app_access_name)) = UPPER(TRIM(?))
-            ''', (record_data['scotia_id'], record_data.get('app_access_name', '')))
-            
-            existing_count = cursor.fetchone()[0]
-            if existing_count > 0:
-                conn.close()
-                return True, f"Registro ya pendiente; no se duplicó (existentes: {existing_count})"
+            # PERO permite registros de offboarding incluso si ya existe un registro pendiente
+            process_access = record_data.get('process_access', '')
+            if process_access != 'offboarding':
+                cursor.execute('''
+                    SELECT COUNT(*) FROM historico
+                    WHERE scotia_id = ?
+                      AND status = 'Pendiente'
+                      AND UPPER(TRIM(app_access_name)) = UPPER(TRIM(?))
+                ''', (record_data['scotia_id'], record_data.get('app_access_name', '')))
+                
+                existing_count = cursor.fetchone()[0]
+                if existing_count > 0:
+                    conn.close()
+                    return True, f"Registro ya pendiente; no se duplicó (existentes: {existing_count})"
 
             cursor.execute('''
                 INSERT INTO historico 
@@ -797,6 +854,7 @@ class AccessManagementService:
                                    subunit: Optional[str] = None) -> Tuple[bool, str, List[Dict[str, Any]]]:
         """Procesa el onboarding de un empleado y determina qué accesos necesita.
         Crea registros por cada app que coincida con (unit, subunit?, position_role) **sin duplicados**.
+        Actualiza la posición y unidad del empleado si están vacías.
         """
         try:
             # 1. Verificar que el empleado existe
@@ -804,12 +862,30 @@ class AccessManagementService:
             if not employee:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
-            # 2. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
+            # 2. Actualizar posición y unidad del empleado si están vacías
+            current_position = employee.get('position', '').strip()
+            current_unit = employee.get('unit', '').strip()
+            
+            if not current_position or not current_unit:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE headcount 
+                    SET position = ?, unit = ?
+                    WHERE scotia_id = ?
+                ''', (position, unit, scotia_id))
+                conn.commit()
+                pass
+            else:
+                conn = self.get_connection()
+
+            # 3. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
             required_apps = self.get_applications_by_position(position, unit, subunit=subunit)
+            conn.close()
             if not required_apps:
                 return False, f"No se encontraron aplicaciones para la posición {position} en {unit}", []
 
-            # 3. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
+            # 4. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{scotia_id}"
             created_records = []
             seen_triplets = set()
@@ -859,12 +935,15 @@ class AccessManagementService:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             history = self.get_employee_history(scotia_id)
-            active_access = [h for h in history if h.get('status') == 'Completado' and h.get('process_access') in ('onboarding', 'lateral_movement')]
+            # Considerar TODOS los accesos de onboarding y lateral_movement, independientemente del estado
+            active_access = [h for h in history if h.get('process_access') in ('onboarding', 'lateral_movement')]
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
 
             for access in active_access:
+                app_name = access.get('app_access_name') or access.get('app_logical_access_name')
+                
                 record_data = {
                     'scotia_id': scotia_id,
                     'case_id': case_id,
@@ -873,9 +952,9 @@ class AccessManagementService:
                     'sid': scotia_id,
                     'area': 'out of the company',  # Área fija para offboarding
                     'subunit': 'out of the company',  # Subárea fija para offboarding
-                    'event_description': f"Revocación de acceso para {access.get('app_access_name') or access.get('app_logical_access_name')}",
+                    'event_description': f"Revocación de acceso para {app_name}",
                     'ticket_email': f"{responsible}@empresa.com",
-                    'app_access_name': access.get('app_access_name') or access.get('app_logical_access_name'),
+                    'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
                     'general_status': 'En Proceso'
@@ -885,12 +964,17 @@ class AccessManagementService:
                 if success:
                     created_records.append(record_data)
                 else:
-                    print(f"Error creando registro de offboarding: {message}")
+                    print(f"Error creando registro de offboarding para {app_name}: {message}")
 
-            # Marcar empleado como inactivo
+            # Marcar empleado como inactivo y registrar fecha de inactivación
             conn = self.get_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE headcount SET activo = 0 WHERE scotia_id = ?', (scotia_id,))
+            inactivation_date = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute('''
+                UPDATE headcount 
+                SET activo = 0, inactivation_date = ? 
+                WHERE scotia_id = ?
+            ''', (inactivation_date, scotia_id))
             conn.commit()
             conn.close()
 
@@ -1037,12 +1121,11 @@ class AccessManagementService:
                 for app in filtered_required_apps
             }
 
-            # 4) Historial/actuales: considerar solo completados (onboarding o lateral)
-            # Y que coincidan con la unidad actual del empleado
+            # 4) Historial/actuales: considerar TODOS los registros (onboarding o lateral)
+            # Y que coincidan con la unidad actual del empleado, independientemente del estado
             current_records = [
                 h for h in history
-                if (h.get('status') == 'Completado' and 
-                    h.get('process_access') in ('onboarding', 'lateral_movement') and
+                if (h.get('process_access') in ('onboarding', 'lateral_movement') and
                     h.get('area') == emp_unit)  # Solo comparar por unidad
             ]
 
@@ -1191,6 +1274,263 @@ class AccessManagementService:
         except Exception as e:
             print(f"Error eliminando registro: {str(e)}")
             return False
+
+    def get_headcount_statistics(self) -> Dict[str, Any]:
+        """Obtiene estadísticas del headcount agrupadas por diferentes criterios"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            stats = {}
+            
+            # 1. Estadísticas por unidad
+            cursor.execute('''
+                SELECT unit as unidad, COUNT(*) as total_empleados,
+                       COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                       COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos,
+                       COUNT(CASE WHEN position IS NOT NULL AND position != '' THEN 1 END) as con_posicion,
+                       COUNT(CASE WHEN start_date IS NOT NULL AND start_date != '' THEN 1 END) as con_fecha_inicio
+                FROM headcount
+                WHERE unit IS NOT NULL AND unit != ''
+                GROUP BY unit
+                ORDER BY total_empleados DESC
+            ''')
+            stats['por_unidad'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 2. Estadísticas por puesto
+            cursor.execute('''
+                SELECT position as puesto, unit as unidad, COUNT(*) as total_empleados,
+                       COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                       COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos,
+                       COUNT(CASE WHEN start_date IS NOT NULL AND start_date != '' THEN 1 END) as con_fecha_inicio
+                FROM headcount
+                WHERE position IS NOT NULL AND position != ''
+                GROUP BY position, unit
+                ORDER BY total_empleados DESC
+            ''')
+            stats['por_puesto'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 3. Estadísticas por manager
+            cursor.execute('''
+                SELECT manager, unit as unidad, COUNT(*) as total_empleados,
+                       COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                       COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos
+                FROM headcount
+                WHERE manager IS NOT NULL AND manager != ''
+                GROUP BY manager, unit
+                ORDER BY total_empleados DESC
+            ''')
+            stats['por_manager'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 4. Estadísticas por senior manager
+            cursor.execute('''
+                SELECT senior_manager, unit as unidad, COUNT(*) as total_empleados,
+                       COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                       COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos
+                FROM headcount
+                WHERE senior_manager IS NOT NULL AND senior_manager != ''
+                GROUP BY senior_manager, unit
+                ORDER BY total_empleados DESC
+            ''')
+            stats['por_senior_manager'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 5. Estadísticas por estado de activación
+            cursor.execute('''
+                SELECT 
+                    CASE WHEN activo = 1 THEN 'Activo' ELSE 'Inactivo' END as estado,
+                    COUNT(*) as total_empleados,
+                    COUNT(CASE WHEN inactivation_date IS NOT NULL THEN 1 END) as con_fecha_inactivacion
+                FROM headcount
+                GROUP BY activo
+                ORDER BY activo DESC
+            ''')
+            stats['por_estado'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 6. Estadísticas por año de inicio (si hay fecha de inicio)
+            cursor.execute('''
+                SELECT 
+                    SUBSTR(start_date, 1, 4) as año_inicio,
+                    COUNT(*) as total_empleados,
+                    COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                    COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos
+                FROM headcount
+                WHERE start_date IS NOT NULL AND start_date != '' 
+                AND LENGTH(start_date) >= 4
+                GROUP BY SUBSTR(start_date, 1, 4)
+                ORDER BY año_inicio DESC
+            ''')
+            stats['por_año_inicio'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 7. Resumen detallado por unidad (con lista de empleados)
+            cursor.execute('''
+                SELECT 
+                    unit as unidad,
+                    scotia_id,
+                    full_name,
+                    position as puesto,
+                    manager,
+                    senior_manager,
+                    CASE WHEN activo = 1 THEN 'Activo' ELSE 'Inactivo' END as estado,
+                    start_date,
+                    inactivation_date
+                FROM headcount
+                WHERE unit IS NOT NULL AND unit != ''
+                ORDER BY unit, full_name
+            ''')
+            stats['detalle_por_unidad'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 8. Estadísticas generales
+            cursor.execute('''
+                SELECT 
+                    COUNT(*) as total_empleados,
+                    COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+                    COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos,
+                    COUNT(CASE WHEN position IS NOT NULL AND position != '' THEN 1 END) as con_posicion,
+                    COUNT(CASE WHEN unit IS NOT NULL AND unit != '' THEN 1 END) as con_unidad,
+                    COUNT(CASE WHEN start_date IS NOT NULL AND start_date != '' THEN 1 END) as con_fecha_inicio,
+                    COUNT(CASE WHEN inactivation_date IS NOT NULL THEN 1 END) as con_fecha_inactivacion,
+                    COUNT(DISTINCT unit) as unidades_unicas,
+                    COUNT(DISTINCT position) as puestos_unicos
+                FROM headcount
+            ''')
+            stats['generales'] = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
+            
+            conn.close()
+            return stats
+            
+        except Exception as e:
+            return {"error": f"Error obteniendo estadísticas del headcount: {str(e)}"}
+
+    def get_available_applications(self) -> List[Dict[str, Any]]:
+        """Obtiene la lista de aplicaciones disponibles para registros manuales"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Obtener aplicaciones únicas del historial y de la tabla applications
+            cursor.execute('''
+                SELECT DISTINCT app_access_name as application_name
+                FROM historico 
+                WHERE app_access_name IS NOT NULL AND app_access_name != ''
+                UNION
+                SELECT DISTINCT logical_access_name as application_name
+                FROM applications 
+                WHERE logical_access_name IS NOT NULL AND logical_access_name != ''
+                ORDER BY application_name
+            ''')
+            
+            applications = [{'name': row[0]} for row in cursor.fetchall()]
+            conn.close()
+            
+            return applications
+            
+        except Exception as e:
+            return []
+
+    def get_historial_statistics(self) -> Dict[str, Any]:
+        """Obtiene estadísticas del historial agrupadas por diferentes criterios"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            stats = {}
+            
+            # 1. Estadísticas por unidad
+            cursor.execute('''
+                SELECT h.area as unidad, COUNT(*) as total_registros,
+                       COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                       COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                       COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                       COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                       COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
+                FROM historico h
+                WHERE h.area IS NOT NULL AND h.area != ''
+                GROUP BY h.area
+                ORDER BY total_registros DESC
+            ''')
+            stats['por_unidad'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 2. Estadísticas por subunidad
+            cursor.execute('''
+                SELECT h.subunit as subunidad, h.area as unidad, COUNT(*) as total_registros,
+                       COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                       COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                       COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                       COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                       COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
+                FROM historico h
+                WHERE h.subunit IS NOT NULL AND h.subunit != ''
+                GROUP BY h.subunit, h.area
+                ORDER BY total_registros DESC
+            ''')
+            stats['por_subunidad'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 3. Estadísticas por puesto
+            cursor.execute('''
+                SELECT head.position as puesto, head.unit as unidad, COUNT(*) as total_registros,
+                       COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                       COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                       COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                       COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                       COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
+                FROM historico h
+                INNER JOIN headcount head ON h.scotia_id = head.scotia_id
+                WHERE head.position IS NOT NULL AND head.position != ''
+                GROUP BY head.position, head.unit
+                ORDER BY total_registros DESC
+            ''')
+            stats['por_puesto'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 4. Estadísticas por aplicación
+            cursor.execute('''
+                SELECT h.app_access_name as aplicacion, COUNT(*) as total_registros,
+                       COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                       COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                       COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                       COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                       COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
+                FROM historico h
+                WHERE h.app_access_name IS NOT NULL AND h.app_access_name != ''
+                GROUP BY h.app_access_name
+                ORDER BY total_registros DESC
+            ''')
+            stats['por_aplicacion'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 5. Estadísticas por proceso
+            cursor.execute('''
+                SELECT h.process_access as proceso, COUNT(*) as total_registros,
+                       COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                       COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                       COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                       COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                       COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
+                FROM historico h
+                WHERE h.process_access IS NOT NULL AND h.process_access != ''
+                GROUP BY h.process_access
+                ORDER BY total_registros DESC
+            ''')
+            stats['por_proceso'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # 6. Estadísticas generales
+            cursor.execute('''
+                SELECT 
+                    COUNT(*) as total_registros,
+                    COUNT(CASE WHEN h.status = 'Completado' THEN 1 END) as completados,
+                    COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
+                    COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
+                    COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
+                    COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados,
+                    COUNT(DISTINCT h.scotia_id) as empleados_unicos,
+                    COUNT(DISTINCT h.app_access_name) as aplicaciones_unicas
+                FROM historico h
+            ''')
+            stats['generales'] = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
+            
+            conn.close()
+            return stats
+            
+        except Exception as e:
+            return {"error": f"Error obteniendo estadísticas: {str(e)}"}
 
     def buscar_procesos(self, filtros: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """

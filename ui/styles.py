@@ -74,3 +74,12 @@ def aplicar_estilos_personalizados():
     style.map('TNotebook.Tab',
               background=[('selected', '#ffebee'), ('active', '#ffcdd2')],
               foreground=[('selected', '#d32f2f'), ('active', '#b71c1c')])
+    
+    # Estilos para el logo GAMLO
+    style.configure('Logo.TFrame',
+                   relief='raised',
+                   borderwidth=2,
+                   background='#F8F9FA')
+    
+    style.map('Logo.TFrame',
+              background=[('active', '#E3F2FD'), ('pressed', '#BBDEFB')])

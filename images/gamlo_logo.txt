@@ -1,0 +1,5 @@
+GAMLO
+Logo placeholder
+Este archivo puede ser reemplazado por una imagen real del logo de GAMLO
+Formato recomendado: PNG, JPG o ICO
+Tamaño recomendado: 64x64 píxeles o similar

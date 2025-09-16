@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from datetime import datetime
 import os
 import sqlite3
+from PIL import Image, ImageTk
 
 from services import export_service, history_service, access_service, search_service
 from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
@@ -15,7 +16,7 @@ class AppEmpleadosRefactorizada:
     
     def __init__(self, root):
         self.root = root
-        self.root.title("Sistema Integrado de Gestión de Empleados y Conciliación de Accesos")
+        self.root.title("GAMLO - Sistema Integrado de Gestión de Empleados y Conciliación de Accesos")
         
         # Configuración responsive
         self.configurar_ventana_responsive()
@@ -74,13 +75,56 @@ class AppEmpleadosRefactorizada:
         self.main_frame.rowconfigure(0, weight=0)
         self.main_frame.rowconfigure(1, weight=1)
         
-        # Título responsive
-        titulo_label = ttk.Label(self.main_frame, text="Sistema Integrado de Gestión", 
+        # Frame para el header con logo y título
+        header_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
+        header_frame.grid(row=0, column=0, columnspan=2, pady=(0, 35), sticky="ew")
+        header_frame.columnconfigure(1, weight=1)
+        
+        # Logo GAMLO (esquina izquierda)
+        self.crear_logo_gamlo(header_frame)
+        
+        # Título con GAMLO
+        titulo_label = ttk.Label(header_frame, text="GAMLO - Sistema Integrado de Gestión", 
                                 style="Title.TLabel")
-        titulo_label.grid(row=0, column=0, columnspan=2, pady=(0, 35), sticky="ew")
+        titulo_label.grid(row=0, column=1, pady=(0, 0), sticky="ew", padx=(20, 0))
         
         self.crear_botones_laterales(self.main_frame)
         self.crear_contenido_principal(self.main_frame)
+    
+    def crear_logo_gamlo(self, parent):
+        """Crea el logo de GAMLO en la esquina izquierda"""
+        try:
+            # Intentar cargar imagen del logo
+            logo_path = os.path.join("images", "gamlo_logo.png")
+            if os.path.exists(logo_path):
+                # Cargar imagen real
+                image = Image.open(logo_path)
+                image = image.resize((64, 64), Image.Resampling.LANCZOS)
+                self.logo_photo = ImageTk.PhotoImage(image)
+                logo_label = ttk.Label(parent, image=self.logo_photo)
+            else:
+                # Crear logo de texto si no hay imagen
+                logo_label = ttk.Label(parent, text="GAMLO", 
+                                     font=("Arial", 16, "bold"),
+                                     foreground="#2E86AB",
+                                     background="#F8F9FA")
+                # Crear un frame con borde para simular un logo
+                logo_frame = ttk.Frame(parent, style="Logo.TFrame")
+                logo_frame.grid(row=0, column=0, padx=(0, 10), pady=5)
+                logo_label = ttk.Label(logo_frame, text="GAMLO", 
+                                     font=("Arial", 14, "bold"),
+                                     foreground="#2E86AB")
+                logo_label.pack(padx=10, pady=10)
+                return
+            
+            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
+            
+        except Exception as e:
+            # Fallback: crear logo de texto si hay error
+            logo_label = ttk.Label(parent, text="GAMLO", 
+                                 font=("Arial", 14, "bold"),
+                                 foreground="#2E86AB")
+            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
     
     def crear_botones_laterales(self, parent):
         """Crea la navegación lateral"""

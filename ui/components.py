@@ -390,6 +390,22 @@ class EdicionBusquedaFrame:
         # Separador
         ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
+        # Botones de estadísticas
+        ttk.Button(toolbar_frame, text="📊 Ver Estadísticas", command=self.mostrar_estadisticas, 
+                  style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="📤 Exportar Excel", command=self.exportar_estadisticas, 
+                  style="Warning.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Separador
+        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # Botón para crear registro manual
+        ttk.Button(toolbar_frame, text="➕ Registro Manual", command=self.crear_registro_manual, 
+                  style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Separador
+        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
         # Botones de actualizar y mostrar todos
         ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(toolbar_frame, text="📋 Mostrar Todo el Historial", 
@@ -1281,6 +1297,155 @@ class EdicionBusquedaFrame:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
+    def mostrar_estadisticas(self):
+        """Muestra las estadísticas del historial en una ventana"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Obtener estadísticas
+            stats = access_service.get_historial_statistics()
+            
+            if "error" in stats:
+                messagebox.showerror("Error", stats["error"])
+                return
+            
+            # Crear ventana de estadísticas
+            stats_window = tk.Toplevel(self.frame)
+            stats_window.title("📊 Estadísticas del Historial")
+            stats_window.geometry("800x600")
+            stats_window.transient(self.frame)
+            stats_window.grab_set()
+            
+            # Frame principal con scroll
+            main_frame = ttk.Frame(stats_window)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+            
+            # Canvas para scroll
+            canvas = tk.Canvas(main_frame)
+            scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Título
+            ttk.Label(scrollable_frame, text="📊 Estadísticas del Historial", 
+                     font=("Arial", 16, "bold")).pack(pady=(0, 20))
+            
+            # Estadísticas generales
+            if 'generales' in stats:
+                generales = stats['generales']
+                ttk.Label(scrollable_frame, text="📈 Resumen General", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                generales_text = f"""
+Total de Registros: {generales.get('total_registros', 0)}
+Completados: {generales.get('completados', 0)}
+Pendientes: {generales.get('pendientes', 0)}
+En Proceso: {generales.get('en_proceso', 0)}
+Cancelados: {generales.get('cancelados', 0)}
+Rechazados: {generales.get('rechazados', 0)}
+Empleados Únicos: {generales.get('empleados_unicos', 0)}
+Aplicaciones Únicas: {generales.get('aplicaciones_unicas', 0)}
+                """
+                ttk.Label(scrollable_frame, text=generales_text, 
+                         font=("Arial", 10)).pack(anchor="w", pady=(0, 20))
+            
+            # Estadísticas por unidad
+            if 'por_unidad' in stats and stats['por_unidad']:
+                ttk.Label(scrollable_frame, text="🏢 Por Unidad", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                # Crear tabla para unidades
+                unidad_frame = ttk.Frame(scrollable_frame)
+                unidad_frame.pack(fill=tk.X, pady=(0, 20))
+                
+                # Headers
+                headers = ["Unidad", "Total", "Completados", "Pendientes", "En Proceso", "Cancelados", "Rechazados"]
+                for i, header in enumerate(headers):
+                    ttk.Label(unidad_frame, text=header, font=("Arial", 10, "bold")).grid(
+                        row=0, column=i, padx=5, pady=2, sticky="w")
+                
+                # Datos
+                for row_idx, unidad in enumerate(stats['por_unidad'][:10]):  # Mostrar solo top 10
+                    ttk.Label(unidad_frame, text=unidad.get('unidad', '')[:20]).grid(
+                        row=row_idx+1, column=0, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('total_registros', 0))).grid(
+                        row=row_idx+1, column=1, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('completados', 0))).grid(
+                        row=row_idx+1, column=2, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('pendientes', 0))).grid(
+                        row=row_idx+1, column=3, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('en_proceso', 0))).grid(
+                        row=row_idx+1, column=4, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('cancelados', 0))).grid(
+                        row=row_idx+1, column=5, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('rechazados', 0))).grid(
+                        row=row_idx+1, column=6, padx=5, pady=1, sticky="w")
+            
+            # Botón de cerrar
+            ttk.Button(scrollable_frame, text="Cerrar", command=stats_window.destroy).pack(pady=20)
+            
+            # Configurar scroll
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error mostrando estadísticas: {str(e)}")
+
+    def exportar_estadisticas(self):
+        """Exporta las estadísticas del historial a Excel"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            from export_service import export_service
+            
+            # Obtener estadísticas
+            stats = access_service.get_historial_statistics()
+            
+            if "error" in stats:
+                messagebox.showerror("Error", stats["error"])
+                return
+            
+            # Exportar a Excel
+            filepath = export_service.export_historial_statistics(stats)
+            
+            messagebox.showinfo("Éxito", f"Estadísticas exportadas exitosamente a:\n{filepath}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error exportando estadísticas: {str(e)}")
+
+    def crear_registro_manual(self):
+        """Abre el diálogo para crear un registro manual de acceso"""
+        try:
+            from ui.manual_access_component import ManualAccessDialog
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Abrir diálogo de registro manual
+            dialog = ManualAccessDialog(self.frame, access_service)
+            self.frame.wait_window(dialog.dialog)
+            
+            # Si se creó un registro, actualizar la tabla
+            if dialog.result:
+                self.actualizar_tabla()
+                messagebox.showinfo("Éxito", "Registro manual creado exitosamente")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error abriendo diálogo de registro manual: {str(e)}")
+
 class CreacionPersonaFrame:
     """Componente para la gestión completa de headcount y applications"""
     
@@ -1313,6 +1478,7 @@ class CreacionPersonaFrame:
             'birthday': tk.StringVar(),
             'validacion': tk.StringVar(),
             'activo': tk.StringVar(value="Activo"),
+            'inactivation_date': tk.StringVar(),
             # Campos para filtros
             'filtro_texto': tk.StringVar(),
             'columna_filtro': tk.StringVar(value="scotia_id")
@@ -1366,6 +1532,15 @@ class CreacionPersonaFrame:
                   style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(toolbar_frame, text="🗑️ Eliminar", command=self.eliminar_persona, 
                   style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Separador
+        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # Botones de estadísticas
+        ttk.Button(toolbar_frame, text="📊 Ver Estadísticas", command=self.mostrar_estadisticas_headcount, 
+                  style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar_frame, text="📤 Exportar Excel", command=self.exportar_estadisticas_headcount, 
+                  style="Warning.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
         ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
@@ -1861,6 +2036,211 @@ class CreacionPersonaFrame:
             else:
                 messagebox.showinfo("Búsqueda", "No se encontraron registros")
 
+    def mostrar_estadisticas_headcount(self):
+        """Muestra las estadísticas del headcount en una ventana"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            # Obtener estadísticas
+            stats = access_service.get_headcount_statistics()
+            
+            if "error" in stats:
+                messagebox.showerror("Error", stats["error"])
+                return
+            
+            # Crear ventana de estadísticas
+            stats_window = tk.Toplevel(self.frame)
+            stats_window.title("📊 Estadísticas del Headcount")
+            stats_window.geometry("900x700")
+            stats_window.transient(self.frame)
+            stats_window.grab_set()
+            
+            # Frame principal con scroll
+            main_frame = ttk.Frame(stats_window)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+            
+            # Canvas para scroll
+            canvas = tk.Canvas(main_frame)
+            scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Título
+            ttk.Label(scrollable_frame, text="📊 Estadísticas del Headcount", 
+                     font=("Arial", 16, "bold")).pack(pady=(0, 20))
+            
+            # Estadísticas generales
+            if 'generales' in stats:
+                generales = stats['generales']
+                ttk.Label(scrollable_frame, text="📈 Resumen General", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                generales_text = f"""
+Total de Empleados: {generales.get('total_empleados', 0)}
+Activos: {generales.get('activos', 0)}
+Inactivos: {generales.get('inactivos', 0)}
+Con Posición: {generales.get('con_posicion', 0)}
+Con Unidad: {generales.get('con_unidad', 0)}
+Con Fecha de Inicio: {generales.get('con_fecha_inicio', 0)}
+Con Fecha de Inactivación: {generales.get('con_fecha_inactivacion', 0)}
+Unidades Únicas: {generales.get('unidades_unicas', 0)}
+Puestos Únicos: {generales.get('puestos_unicos', 0)}
+                """
+                ttk.Label(scrollable_frame, text=generales_text, 
+                         font=("Arial", 10)).pack(anchor="w", pady=(0, 20))
+            
+            # Estadísticas por unidad
+            if 'por_unidad' in stats and stats['por_unidad']:
+                ttk.Label(scrollable_frame, text="🏢 Por Unidad", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                # Crear tabla para unidades
+                unidad_frame = ttk.Frame(scrollable_frame)
+                unidad_frame.pack(fill=tk.X, pady=(0, 20))
+                
+                # Headers
+                headers = ["Unidad", "Total", "Activos", "Inactivos", "Con Posición", "Con Fecha Inicio"]
+                for i, header in enumerate(headers):
+                    ttk.Label(unidad_frame, text=header, font=("Arial", 10, "bold")).grid(
+                        row=0, column=i, padx=5, pady=2, sticky="w")
+                
+                # Datos
+                for row_idx, unidad in enumerate(stats['por_unidad'][:15]):  # Mostrar top 15
+                    ttk.Label(unidad_frame, text=unidad.get('unidad', '')[:20]).grid(
+                        row=row_idx+1, column=0, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('total_empleados', 0))).grid(
+                        row=row_idx+1, column=1, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('activos', 0))).grid(
+                        row=row_idx+1, column=2, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('inactivos', 0))).grid(
+                        row=row_idx+1, column=3, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('con_posicion', 0))).grid(
+                        row=row_idx+1, column=4, padx=5, pady=1, sticky="w")
+                    ttk.Label(unidad_frame, text=str(unidad.get('con_fecha_inicio', 0))).grid(
+                        row=row_idx+1, column=5, padx=5, pady=1, sticky="w")
+            
+            # Estadísticas por puesto
+            if 'por_puesto' in stats and stats['por_puesto']:
+                ttk.Label(scrollable_frame, text="👔 Por Puesto", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                # Crear tabla para puestos
+                puesto_frame = ttk.Frame(scrollable_frame)
+                puesto_frame.pack(fill=tk.X, pady=(0, 20))
+                
+                # Headers
+                headers = ["Puesto", "Unidad", "Total", "Activos", "Inactivos", "Con Fecha Inicio"]
+                for i, header in enumerate(headers):
+                    ttk.Label(puesto_frame, text=header, font=("Arial", 10, "bold")).grid(
+                        row=0, column=i, padx=5, pady=2, sticky="w")
+                
+                # Datos
+                for row_idx, puesto in enumerate(stats['por_puesto'][:15]):  # Mostrar top 15
+                    ttk.Label(puesto_frame, text=puesto.get('puesto', '')[:15]).grid(
+                        row=row_idx+1, column=0, padx=5, pady=1, sticky="w")
+                    ttk.Label(puesto_frame, text=puesto.get('unidad', '')[:15]).grid(
+                        row=row_idx+1, column=1, padx=5, pady=1, sticky="w")
+                    ttk.Label(puesto_frame, text=str(puesto.get('total_empleados', 0))).grid(
+                        row=row_idx+1, column=2, padx=5, pady=1, sticky="w")
+                    ttk.Label(puesto_frame, text=str(puesto.get('activos', 0))).grid(
+                        row=row_idx+1, column=3, padx=5, pady=1, sticky="w")
+                    ttk.Label(puesto_frame, text=str(puesto.get('inactivos', 0))).grid(
+                        row=row_idx+1, column=4, padx=5, pady=1, sticky="w")
+                    ttk.Label(puesto_frame, text=str(puesto.get('con_fecha_inicio', 0))).grid(
+                        row=row_idx+1, column=5, padx=5, pady=1, sticky="w")
+            
+            # Detalle por unidad (lista de empleados)
+            if 'detalle_por_unidad' in stats and stats['detalle_por_unidad']:
+                ttk.Label(scrollable_frame, text="👥 Detalle por Unidad - Lista de Empleados", 
+                         font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+                
+                # Agrupar por unidad
+                unidades_empleados = {}
+                for emp in stats['detalle_por_unidad']:
+                    unidad = emp.get('unidad', 'Sin Unidad')
+                    if unidad not in unidades_empleados:
+                        unidades_empleados[unidad] = []
+                    unidades_empleados[unidad].append(emp)
+                
+                # Mostrar cada unidad
+                for unidad, empleados in list(unidades_empleados.items())[:5]:  # Mostrar top 5 unidades
+                    ttk.Label(scrollable_frame, text=f"🏢 {unidad} ({len(empleados)} empleados)", 
+                             font=("Arial", 12, "bold")).pack(anchor="w", pady=(10, 5))
+                    
+                    # Crear tabla para empleados de esta unidad
+                    emp_frame = ttk.Frame(scrollable_frame)
+                    emp_frame.pack(fill=tk.X, pady=(0, 15))
+                    
+                    # Headers
+                    headers = ["ID", "Nombre", "Puesto", "Manager", "Estado", "Fecha Inicio"]
+                    for i, header in enumerate(headers):
+                        ttk.Label(emp_frame, text=header, font=("Arial", 9, "bold")).grid(
+                            row=0, column=i, padx=3, pady=1, sticky="w")
+                    
+                    # Datos de empleados
+                    for row_idx, emp in enumerate(empleados[:10]):  # Mostrar max 10 empleados por unidad
+                        ttk.Label(emp_frame, text=emp.get('scotia_id', '')[:8]).grid(
+                            row=row_idx+1, column=0, padx=3, pady=1, sticky="w")
+                        ttk.Label(emp_frame, text=emp.get('full_name', '')[:20]).grid(
+                            row=row_idx+1, column=1, padx=3, pady=1, sticky="w")
+                        ttk.Label(emp_frame, text=emp.get('puesto', '')[:15]).grid(
+                            row=row_idx+1, column=2, padx=3, pady=1, sticky="w")
+                        ttk.Label(emp_frame, text=emp.get('manager', '')[:15]).grid(
+                            row=row_idx+1, column=3, padx=3, pady=1, sticky="w")
+                        ttk.Label(emp_frame, text=emp.get('estado', '')[:8]).grid(
+                            row=row_idx+1, column=4, padx=3, pady=1, sticky="w")
+                        ttk.Label(emp_frame, text=emp.get('start_date', '')[:10]).grid(
+                            row=row_idx+1, column=5, padx=3, pady=1, sticky="w")
+                    
+                    if len(empleados) > 10:
+                        ttk.Label(emp_frame, text=f"... y {len(empleados) - 10} empleados más", 
+                                 font=("Arial", 9, "italic")).grid(
+                            row=len(empleados)+1, column=0, columnspan=6, padx=3, pady=1, sticky="w")
+            
+            # Botón de cerrar
+            ttk.Button(scrollable_frame, text="Cerrar", command=stats_window.destroy).pack(pady=20)
+            
+            # Configurar scroll
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error mostrando estadísticas: {str(e)}")
+
+    def exportar_estadisticas_headcount(self):
+        """Exporta las estadísticas del headcount a Excel"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            from export_service import export_service
+            
+            # Obtener estadísticas
+            stats = access_service.get_headcount_statistics()
+            
+            if "error" in stats:
+                messagebox.showerror("Error", stats["error"])
+                return
+            
+            # Exportar a Excel
+            filepath = export_service.export_headcount_statistics(stats)
+            
+            messagebox.showinfo("Éxito", f"Estadísticas del headcount exportadas exitosamente a:\n{filepath}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error exportando estadísticas: {str(e)}")
+
 
 class PersonaDialog:
     """Diálogo para agregar/editar personas"""
@@ -1924,7 +2304,8 @@ class PersonaDialog:
             ("Tamaño:", "size", "combobox", ["XS", "S", "M", "L", "XL", "XXL"]),
             ("Cumpleaños:", "birthday", "entry"),
             ("Validación:", "validacion", "entry"),
-            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"])
+            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"]),
+            ("Fecha de Inactivación:", "inactivation_date", "entry")
         ]
         
         # Crear campos dinámicamente
