@@ -74,22 +74,23 @@ class AppEmpleadosRefactorizada:
         self.main_frame.columnconfigure(1, weight=1)
         self.main_frame.rowconfigure(0, weight=0)
         self.main_frame.rowconfigure(1, weight=1)
+        self.main_frame.rowconfigure(2, weight=0)
         
-        # Frame para el header con logo y título
+        # Frame para el header con título
         header_frame = ttk.Frame(self.main_frame, style="Main.TFrame")
         header_frame.grid(row=0, column=0, columnspan=2, pady=(0, 35), sticky="ew")
-        header_frame.columnconfigure(1, weight=1)
-        
-        # Logo GAMLO (esquina izquierda)
-        self.crear_logo_gamlo(header_frame)
+        header_frame.columnconfigure(0, weight=1)
         
         # Título con GAMLO
         titulo_label = ttk.Label(header_frame, text="GAMLO - Sistema Integrado de Gestión", 
                                 style="Title.TLabel")
-        titulo_label.grid(row=0, column=1, pady=(0, 0), sticky="ew", padx=(20, 0))
+        titulo_label.grid(row=0, column=0, pady=(0, 0), sticky="ew")
         
         self.crear_botones_laterales(self.main_frame)
         self.crear_contenido_principal(self.main_frame)
+        
+        # Footer con logo GAMLO (abajo a la izquierda)
+        self.crear_footer_con_logo(self.main_frame)
     
     def crear_logo_gamlo(self, parent):
         """Crea el logo de GAMLO en la esquina izquierda"""
@@ -123,6 +124,55 @@ class AppEmpleadosRefactorizada:
             # Fallback: crear logo de texto si hay error
             logo_label = ttk.Label(parent, text="GAMLO", 
                                  font=("Arial", 14, "bold"),
+                                 foreground="#2E86AB")
+            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
+    
+    def crear_footer_con_logo(self, parent):
+        """Crea el footer con el logo GAMLO en la parte inferior izquierda"""
+        # Frame para el footer
+        footer_frame = ttk.Frame(parent, style="Main.TFrame")
+        footer_frame.grid(row=2, column=0, columnspan=2, pady=(20, 0), sticky="ew")
+        footer_frame.columnconfigure(0, weight=0)
+        footer_frame.columnconfigure(1, weight=1)
+        
+        # Logo GAMLO (abajo a la izquierda)
+        self.crear_logo_gamlo_footer(footer_frame)
+        
+        # Espacio en blanco para empujar el logo a la izquierda
+        ttk.Frame(footer_frame).grid(row=0, column=1, sticky="ew")
+    
+    def crear_logo_gamlo_footer(self, parent):
+        """Crea el logo de GAMLO para el footer"""
+        try:
+            # Intentar cargar imagen del logo
+            logo_path = os.path.join("images", "gamlo_logo.png")
+            if os.path.exists(logo_path):
+                # Cargar imagen real
+                image = Image.open(logo_path)
+                image = image.resize((48, 48), Image.Resampling.LANCZOS)  # Más pequeño para el footer
+                self.logo_photo_footer = ImageTk.PhotoImage(image)
+                logo_label = ttk.Label(parent, image=self.logo_photo_footer)
+            else:
+                # Crear logo de texto si no hay imagen
+                logo_label = ttk.Label(parent, text="GAMLO", 
+                                     font=("Arial", 12, "bold"),
+                                     foreground="#2E86AB",
+                                     background="#F8F9FA")
+                # Crear un frame con borde para simular un logo
+                logo_frame = ttk.Frame(parent, style="Logo.TFrame")
+                logo_frame.grid(row=0, column=0, padx=(0, 10), pady=5)
+                logo_label = ttk.Label(logo_frame, text="GAMLO", 
+                                     font=("Arial", 10, "bold"),
+                                     foreground="#2E86AB")
+                logo_label.pack(padx=8, pady=8)
+                return
+            
+            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
+            
+        except Exception as e:
+            # Fallback: crear logo de texto si hay error
+            logo_label = ttk.Label(parent, text="GAMLO", 
+                                 font=("Arial", 10, "bold"),
                                  foreground="#2E86AB")
             logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
     

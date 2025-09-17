@@ -892,7 +892,27 @@ class EdicionBusquedaFrame:
             historial = [dict(zip(columns, row)) for row in rows]
             
             print(f"DEBUG: Historial obtenido: {len(historial)} registros")
+            
+            # Analizar registros de lateral movement para debug
+            lateral_records = [r for r in historial if r.get('event_description') and 'lateral movement' in r.get('event_description', '')]
+            onboarding_count = len([r for r in lateral_records if r.get('process_access') == 'onboarding'])
+            offboarding_count = len([r for r in lateral_records if r.get('process_access') == 'offboarding'])
+            
+            print(f"DEBUG: Registros de lateral movement: {len(lateral_records)} (Onboarding: {onboarding_count}, Offboarding: {offboarding_count})")
+            
             self.mostrar_resultados_historial(historial, "")
+            
+            # Mostrar información de debug al usuario
+            if lateral_records:
+                messagebox.showinfo("Información de Debug", 
+                    f"Se encontraron {len(lateral_records)} registros de lateral movement:\n"
+                    f"• Onboarding: {onboarding_count}\n"
+                    f"• Offboarding: {offboarding_count}\n\n"
+                    f"Si no ves todos los registros, verifica:\n"
+                    f"1. Filtros activos en la interfaz\n"
+                    f"2. Búsqueda por SID específico\n"
+                    f"3. Scroll en la tabla")
+            
         except Exception as e:
             messagebox.showerror("Error", f"Error obteniendo historial: {str(e)}")
             print(f"Error completo: {e}")

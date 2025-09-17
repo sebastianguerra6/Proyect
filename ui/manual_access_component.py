@@ -36,7 +36,7 @@ class ManualAccessDialog:
         
         # Título
         ttk.Label(main_frame, text="➕ Crear Registro Manual de Acceso", 
-                 font=("Arial", 14, "bold")).pack(pady=(0, 20))
+                 font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 20), sticky="ew")
         
         # Campos del formulario
         campos = [
@@ -49,7 +49,7 @@ class ManualAccessDialog:
         for i, (label_text, var_name, widget_type) in enumerate(campos):
             # Label
             ttk.Label(main_frame, text=label_text, font=("Arial", 10, "bold")).grid(
-                row=i, column=0, sticky="w", pady=5, padx=(0, 10))
+                row=i+1, column=0, sticky="w", pady=5, padx=(0, 10))
             
             # Widget
             if widget_type == "entry":
@@ -61,14 +61,14 @@ class ManualAccessDialog:
             else:
                 widget = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
             
-            widget.grid(row=i, column=1, sticky="ew", pady=5)
+            widget.grid(row=i+1, column=1, sticky="ew", pady=5)
         
         # Configurar grid
         main_frame.columnconfigure(1, weight=1)
         
         # Botones
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=len(campos), column=0, columnspan=2, pady=20, sticky="ew")
+        button_frame.grid(row=len(campos)+1, column=0, columnspan=2, pady=20, sticky="ew")
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
         
@@ -86,7 +86,7 @@ class ManualAccessDialog:
 • El registro quedará en estado "Pendiente" para su procesamiento
         """
         ttk.Label(main_frame, text=info_text, font=("Arial", 9), 
-                 foreground="gray").grid(row=len(campos)+1, column=0, columnspan=2, 
+                 foreground="gray").grid(row=len(campos)+2, column=0, columnspan=2, 
                                        pady=(10, 0), sticky="w")
     
     def _load_applications(self, combobox):
