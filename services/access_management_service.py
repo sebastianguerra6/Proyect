@@ -10,7 +10,7 @@ Cambios clave:
 - get_employee_history ahora trae unit/subunit/position_role de la app para poder comparar correctamente.
 - process_lateral_movement y get_access_reconciliation_report usan la clave completa para decidir mantener/quitar/otorgar.
 """
-import sqlite3
+import pyodbc
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import sys
@@ -19,6 +19,11 @@ import os
 # Agregar el directorio database al path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
 from database_manager import DatabaseManager
+
+# Importar configuración
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from config import is_sql_server
+from sql_server_connection_config import SQLServerDatabaseManager
 
 
 class AccessManagementService:
@@ -50,11 +55,17 @@ class AccessManagementService:
             (logical_access_name or '').strip().upper(),
         )
 
-    def __init__(self):
-        self.db_manager = DatabaseManager()
+    def __init__(self, use_sql_server=None):
+        if use_sql_server is None:
+            use_sql_server = is_sql_server()
+        
+        if use_sql_server:
+            self.db_manager = SQLServerDatabaseManager()
+        else:
+            self.db_manager = DatabaseManager()
         self._ensure_views_and_indexes()
 
-    def get_connection(self) -> sqlite3.Connection:
+    def get_connection(self) -> pyodbc.Connection:
         """Obtiene una conexión a la base de datos"""
         return self.db_manager.get_connection()
 
@@ -73,117 +84,242 @@ class AccessManagementService:
                     pass  # Ignorar errores si la vista no existe
             
             # Crear índices adicionales para optimizar las consultas
-            indexes = [
-                "CREATE INDEX IF NOT EXISTS idx_applications_unit_position ON applications (unit, position_role)",
-                "CREATE INDEX IF NOT EXISTS idx_historico_scotia_status ON historico (scotia_id, status)",
-                "CREATE INDEX IF NOT EXISTS idx_historico_process_status ON historico (process_access, status)",
-                "CREATE INDEX IF NOT EXISTS idx_headcount_unit_position ON headcount (unit, position)"
-            ]
+            if is_sql_server():
+                # Sintaxis SQL Server
+                indexes = [
+                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_applications_unit_position' AND object_id = OBJECT_ID('applications')) CREATE INDEX idx_applications_unit_position ON applications (unit, position_role)",
+                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_scotia_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_scotia_status ON historico (scotia_id, status)",
+                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_process_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_process_status ON historico (process_access, status)",
+                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_headcount_unit_position' AND object_id = OBJECT_ID('headcount')) CREATE INDEX idx_headcount_unit_position ON headcount (unit, position)"
+                ]
+            else:
+                # Sintaxis SQLite
+                indexes = [
+                    "CREATE INDEX IF NOT EXISTS idx_applications_unit_position ON applications (unit, position_role)",
+                    "CREATE INDEX IF NOT EXISTS idx_historico_scotia_status ON historico (scotia_id, status)",
+                    "CREATE INDEX IF NOT EXISTS idx_historico_process_status ON historico (process_access, status)",
+                    "CREATE INDEX IF NOT EXISTS idx_headcount_unit_position ON headcount (unit, position)"
+                ]
             
             for index_sql in indexes:
                 cursor.execute(index_sql)
             
             # Crear vista para aplicaciones requeridas por (unit, position)
-            cursor.execute('''
-                CREATE VIEW IF NOT EXISTS vw_required_apps AS
-                SELECT 
-                    h.scotia_id,
-                    h.unit,
-                    h.position,
-                    a.logical_access_name,
-                    a.subunit,
-                    a.position_role,
-                    a.role_name,
-                    a.system_owner,
-                    a.access_type,
-                    a.category,
-                    a.description
-                FROM headcount h
-                INNER JOIN (
-                    SELECT DISTINCT
-                        logical_access_name,
-                        unit,
-                        position_role,
-                        subunit,
-                        role_name,
-                        system_owner,
-                        access_type,
-                        category,
-                        description
-                    FROM applications
-                    WHERE access_status = 'Activo'
-                ) a ON 
-                    UPPER(TRIM(h.unit)) = UPPER(TRIM(a.unit)) AND
-                    UPPER(TRIM(h.position)) = UPPER(TRIM(a.position_role))
-                WHERE h.activo = 1
-                GROUP BY h.scotia_id, a.logical_access_name
-                ORDER BY h.scotia_id, a.logical_access_name
-            ''')
+            if is_sql_server():
+                # Sintaxis SQL Server
+                cursor.execute('''
+                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_required_apps')
+                    CREATE VIEW vw_required_apps AS
+                    SELECT 
+                        h.scotia_id,
+                        h.unit,
+                        h.position,
+                        a.logical_access_name,
+                        a.subunit,
+                        a.position_role,
+                        a.role_name,
+                        a.system_owner,
+                        a.access_type,
+                        a.category,
+                        a.description
+                    FROM headcount h
+                    INNER JOIN (
+                        SELECT DISTINCT
+                            logical_access_name,
+                            unit,
+                            position_role,
+                            subunit,
+                            role_name,
+                            system_owner,
+                            access_type,
+                            category,
+                            description
+                        FROM applications
+                        WHERE access_status = 'Activo'
+                    ) a ON 
+                        UPPER(LTRIM(RTRIM(h.unit))) = UPPER(LTRIM(RTRIM(a.unit))) AND
+                        UPPER(LTRIM(RTRIM(h.position))) = UPPER(LTRIM(RTRIM(a.position_role)))
+                    WHERE h.activo = 1
+                    GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.position, a.subunit, a.position_role, 
+                             a.role_name, a.system_owner, a.access_type, a.category, a.description
+                    ORDER BY h.scotia_id, a.logical_access_name
+                ''')
+            else:
+                # Sintaxis SQLite
+                cursor.execute('''
+                    CREATE VIEW IF NOT EXISTS vw_required_apps AS
+                    SELECT 
+                        h.scotia_id,
+                        h.unit,
+                        h.position,
+                        a.logical_access_name,
+                        a.subunit,
+                        a.position_role,
+                        a.role_name,
+                        a.system_owner,
+                        a.access_type,
+                        a.category,
+                        a.description
+                    FROM headcount h
+                    INNER JOIN (
+                        SELECT DISTINCT
+                            logical_access_name,
+                            unit,
+                            position_role,
+                            subunit,
+                            role_name,
+                            system_owner,
+                            access_type,
+                            category,
+                            description
+                        FROM applications
+                        WHERE access_status = 'Activo'
+                    ) a ON 
+                        UPPER(TRIM(h.unit)) = UPPER(TRIM(a.unit)) AND
+                        UPPER(TRIM(h.position)) = UPPER(TRIM(a.position_role))
+                    WHERE h.activo = 1
+                    GROUP BY h.scotia_id, a.logical_access_name
+                    ORDER BY h.scotia_id, a.logical_access_name
+                ''')
             
             # Crear vista para accesos actuales (completados y pendientes)
-            cursor.execute('''
-                CREATE VIEW IF NOT EXISTS vw_current_access AS
-                SELECT 
-                    h.scotia_id,
-                    head.unit,
-                    head.position,
-                    h.app_access_name as logical_access_name,
-                    h.area as subunit,
-                    head.position as position_role,
-                    h.record_date,
-                    h.status
-                FROM historico h
-                INNER JOIN headcount head ON h.scotia_id = head.scotia_id
-                WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
-                AND h.process_access IN ('onboarding', 'lateral_movement')
-                AND head.activo = 1
-                AND h.app_access_name IS NOT NULL
-                GROUP BY h.scotia_id, h.app_access_name
-                ORDER BY h.scotia_id, h.app_access_name
-            ''')
+            if is_sql_server():
+                # Sintaxis SQL Server
+                cursor.execute('''
+                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_current_access')
+                    CREATE VIEW vw_current_access AS
+                    SELECT 
+                        h.scotia_id,
+                        head.unit,
+                        head.position,
+                        h.app_access_name as logical_access_name,
+                        h.area as subunit,
+                        head.position as position_role,
+                        h.record_date,
+                        h.status
+                    FROM historico h
+                    INNER JOIN headcount head ON h.scotia_id = head.scotia_id
+                    WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
+                    AND h.process_access IN ('onboarding', 'lateral_movement')
+                    AND head.activo = 1
+                    AND h.app_access_name IS NOT NULL
+                    GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.area, h.record_date, h.status
+                    ORDER BY h.scotia_id, h.app_access_name
+                ''')
+            else:
+                # Sintaxis SQLite
+                cursor.execute('''
+                    CREATE VIEW IF NOT EXISTS vw_current_access AS
+                    SELECT 
+                        h.scotia_id,
+                        head.unit,
+                        head.position,
+                        h.app_access_name as logical_access_name,
+                        h.area as subunit,
+                        head.position as position_role,
+                        h.record_date,
+                        h.status
+                    FROM historico h
+                    INNER JOIN headcount head ON h.scotia_id = head.scotia_id
+                    WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
+                    AND h.process_access IN ('onboarding', 'lateral_movement')
+                    AND head.activo = 1
+                    AND h.app_access_name IS NOT NULL
+                    GROUP BY h.scotia_id, h.app_access_name
+                    ORDER BY h.scotia_id, h.app_access_name
+                ''')
             
             # Crear vista para deltas: accesos por otorgar
-            cursor.execute('''
-                CREATE VIEW IF NOT EXISTS vw_to_grant AS
-                SELECT 
-                    req.scotia_id,
-                    req.unit,
-                    req.position,
-                    req.logical_access_name,
-                    req.subunit,
-                    req.position_role,
-                    'onboarding' as process_type
-                FROM vw_required_apps req
-                LEFT JOIN vw_current_access curr ON 
-                    req.scotia_id = curr.scotia_id AND
-                    UPPER(TRIM(req.logical_access_name)) = UPPER(TRIM(curr.logical_access_name)) AND
-                    UPPER(TRIM(req.unit)) = UPPER(TRIM(curr.unit)) AND
-                    UPPER(TRIM(req.position)) = UPPER(TRIM(curr.position))
-                WHERE curr.scotia_id IS NULL
-                ORDER BY req.scotia_id, req.logical_access_name
-            ''')
+            if is_sql_server():
+                # Sintaxis SQL Server
+                cursor.execute('''
+                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_to_grant')
+                    CREATE VIEW vw_to_grant AS
+                    SELECT 
+                        req.scotia_id,
+                        req.unit,
+                        req.position,
+                        req.logical_access_name,
+                        req.subunit,
+                        req.position_role,
+                        'onboarding' as process_type
+                    FROM vw_required_apps req
+                    LEFT JOIN vw_current_access curr ON 
+                        req.scotia_id = curr.scotia_id AND
+                        UPPER(LTRIM(RTRIM(req.logical_access_name))) = UPPER(LTRIM(RTRIM(curr.logical_access_name))) AND
+                        UPPER(LTRIM(RTRIM(req.unit))) = UPPER(LTRIM(RTRIM(curr.unit))) AND
+                        UPPER(LTRIM(RTRIM(req.position))) = UPPER(LTRIM(RTRIM(curr.position)))
+                    WHERE curr.scotia_id IS NULL
+                    ORDER BY req.scotia_id, req.logical_access_name
+                ''')
+            else:
+                # Sintaxis SQLite
+                cursor.execute('''
+                    CREATE VIEW IF NOT EXISTS vw_to_grant AS
+                    SELECT 
+                        req.scotia_id,
+                        req.unit,
+                        req.position,
+                        req.logical_access_name,
+                        req.subunit,
+                        req.position_role,
+                        'onboarding' as process_type
+                    FROM vw_required_apps req
+                    LEFT JOIN vw_current_access curr ON 
+                        req.scotia_id = curr.scotia_id AND
+                        UPPER(TRIM(req.logical_access_name)) = UPPER(TRIM(curr.logical_access_name)) AND
+                        UPPER(TRIM(req.unit)) = UPPER(TRIM(curr.unit)) AND
+                        UPPER(TRIM(req.position)) = UPPER(TRIM(curr.position))
+                    WHERE curr.scotia_id IS NULL
+                    ORDER BY req.scotia_id, req.logical_access_name
+                ''')
             
             # Crear vista para deltas: accesos por revocar
-            cursor.execute('''
-                CREATE VIEW IF NOT EXISTS vw_to_revoke AS
-                SELECT 
-                    curr.scotia_id,
-                    curr.unit,
-                    curr.position,
-                    curr.logical_access_name,
-                    curr.subunit,
-                    curr.position_role,
-                    curr.record_date,
-                    'offboarding' as process_type
-                FROM vw_current_access curr
-                LEFT JOIN vw_required_apps req ON 
-                    curr.scotia_id = req.scotia_id AND
-                    UPPER(TRIM(curr.logical_access_name)) = UPPER(TRIM(req.logical_access_name)) AND
-                    UPPER(TRIM(curr.unit)) = UPPER(TRIM(req.unit)) AND
-                    UPPER(TRIM(curr.position)) = UPPER(TRIM(req.position))
-                WHERE req.scotia_id IS NULL
-                ORDER BY curr.scotia_id, curr.logical_access_name
-            ''')
+            if is_sql_server():
+                # Sintaxis SQL Server
+                cursor.execute('''
+                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_to_revoke')
+                    CREATE VIEW vw_to_revoke AS
+                    SELECT 
+                        curr.scotia_id,
+                        curr.unit,
+                        curr.position,
+                        curr.logical_access_name,
+                        curr.subunit,
+                        curr.position_role,
+                        curr.record_date,
+                        'offboarding' as process_type
+                    FROM vw_current_access curr
+                    LEFT JOIN vw_required_apps req ON 
+                        curr.scotia_id = req.scotia_id AND
+                        UPPER(LTRIM(RTRIM(curr.logical_access_name))) = UPPER(LTRIM(RTRIM(req.logical_access_name))) AND
+                        UPPER(LTRIM(RTRIM(curr.unit))) = UPPER(LTRIM(RTRIM(req.unit))) AND
+                        UPPER(LTRIM(RTRIM(curr.position))) = UPPER(LTRIM(RTRIM(req.position)))
+                    WHERE req.scotia_id IS NULL
+                    ORDER BY curr.scotia_id, curr.logical_access_name
+                ''')
+            else:
+                # Sintaxis SQLite
+                cursor.execute('''
+                    CREATE VIEW IF NOT EXISTS vw_to_revoke AS
+                    SELECT 
+                        curr.scotia_id,
+                        curr.unit,
+                        curr.position,
+                        curr.logical_access_name,
+                        curr.subunit,
+                        curr.position_role,
+                        curr.record_date,
+                        'offboarding' as process_type
+                    FROM vw_current_access curr
+                    LEFT JOIN vw_required_apps req ON 
+                        curr.scotia_id = req.scotia_id AND
+                        UPPER(TRIM(curr.logical_access_name)) = UPPER(TRIM(req.logical_access_name)) AND
+                        UPPER(TRIM(curr.unit)) = UPPER(TRIM(req.unit)) AND
+                        UPPER(TRIM(curr.position)) = UPPER(TRIM(req.position))
+                    WHERE req.scotia_id IS NULL
+                    ORDER BY curr.scotia_id, curr.logical_access_name
+                ''')
             
             conn.commit()
             conn.close()
@@ -845,6 +981,42 @@ class AccessManagementService:
             print(f"Error obteniendo historial: {e}")
             return []
 
+    def get_employee_current_access(self, scotia_id: str) -> List[Dict[str, Any]]:
+        """Obtiene los accesos actuales del empleado (completados y pendientes)"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT DISTINCT
+                    h.scotia_id,
+                    h.area as unit,
+                    h.subunit,
+                    h.app_access_name as logical_access_name,
+                    h.record_date,
+                    h.status,
+                    h.process_access,
+                    a.position_role
+                FROM historico h
+                LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
+                WHERE h.scotia_id = ?
+                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                AND h.process_access IN ('onboarding', 'lateral_movement')
+                AND h.app_access_name IS NOT NULL
+                ORDER BY h.record_date DESC
+            ''', (scotia_id,))
+
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            current_access = [dict(zip(columns, row)) for row in rows]
+
+            conn.close()
+            return current_access
+
+        except Exception as e:
+            print(f"Error obteniendo accesos actuales del empleado: {e}")
+            return []
+
     # ==============================
     # MÉTODOS DE LÓGICA DE NEGOCIO
     # ==============================
@@ -985,7 +1157,13 @@ class AccessManagementService:
 
     def process_lateral_movement(self, scotia_id: str, new_position: str, new_unit: str, 
                                 responsible: str = "Sistema", new_subunit: Optional[str] = None) -> Tuple[bool, str, List[Dict[str, Any]]]:
-        """Procesa un movimiento lateral comparando por clave (unit, subunit, position_role, logical_access_name)."""
+        """Procesa un movimiento lateral de forma ADITIVA: mantiene accesos actuales y agrega nuevos.
+        
+        Lógica corregida:
+        - NO revoca accesos existentes (mantiene aplicaciones de posición anterior)
+        - SOLO otorga nuevos accesos de la nueva posición
+        - Permite que coexistan aplicaciones con mismo logical_access_name pero diferente subunit
+        """
         try:
             employee = self.get_employee_by_id(scotia_id)
             if not employee:
@@ -994,44 +1172,24 @@ class AccessManagementService:
             old_position = (employee.get('position') or '').strip()
             old_unit = (employee.get('unit') or '').strip()
 
-            # Accesos definidos por malla (no el historial), antes y después
-            current_mesh_apps = self.get_applications_by_position(old_position, old_unit)
+            # Obtener accesos actuales del empleado (desde historial, no desde malla)
+            current_access = self.get_employee_current_access(scotia_id)
+            current_access_keys = {self._access_key(acc.get('unit'), acc.get('subunit'), acc.get('position_role'), acc.get('logical_access_name')) for acc in current_access}
+
+            # Obtener accesos requeridos para la nueva posición
             new_mesh_apps = self.get_applications_by_position(new_position, new_unit, subunit=new_subunit)
+            new_required_keys = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')) for app in new_mesh_apps}
 
-            current_keys = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')) for app in current_mesh_apps}
-            new_keys = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')) for app in new_mesh_apps}
-
-            to_revoke_keys = current_keys - new_keys
-            to_grant_keys = new_keys - current_keys
+            # Solo otorgar accesos que NO tiene actualmente
+            to_grant_keys = new_required_keys - current_access_keys
 
             # Mapear para generar descripciones
-            app_index = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')): app for app in (current_mesh_apps + new_mesh_apps)}
+            app_index = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')): app for app in new_mesh_apps}
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
 
-            # Revocar
-            for (unit, subunit, position_role, lan) in to_revoke_keys:
-                record_data = {
-                    'scotia_id': scotia_id,
-                    'case_id': case_id,
-                    'responsible': responsible,
-                    'process_access': 'offboarding',
-                    'sid': scotia_id,
-                    'area': unit,
-                    'subunit': subunit,
-                    'event_description': f"Revocación de acceso para {lan} (lateral movement)",
-                    'ticket_email': f"{responsible}@empresa.com",
-                    'app_access_name': lan,
-                    'computer_system_type': 'Desktop',
-                    'status': 'Pendiente',
-                    'general_status': 'En Proceso'
-                }
-                ok, _ = self.create_historical_record(record_data)
-                if ok:
-                    created_records.append(record_data)
-
-            # Otorgar
+            # Solo otorgar nuevos accesos (NO revocar existentes)
             for (unit, subunit, position_role, lan) in to_grant_keys:
                 record_data = {
                     'scotia_id': scotia_id,
@@ -1041,7 +1199,7 @@ class AccessManagementService:
                     'sid': scotia_id,
                     'area': unit,
                     'subunit': subunit,
-                    'event_description': f"Otorgamiento de acceso para {lan} (lateral movement)",
+                    'event_description': f"Otorgamiento de acceso para {lan} (lateral movement - nueva posición)",
                     'ticket_email': f"{responsible}@empresa.com",
                     'app_access_name': lan,
                     'computer_system_type': 'Desktop',
@@ -1052,14 +1210,14 @@ class AccessManagementService:
                 if ok:
                     created_records.append(record_data)
 
-            # Actualizar posición/unidad
+            # Actualizar posición/unidad del empleado
             success, message = self.update_employee_position(scotia_id, new_position, new_unit)
             if not success:
                 return False, f"Error actualizando posición: {message}", []
 
             return True, (
                 f"Movimiento lateral procesado para {scotia_id}. "
-                f"{len(to_revoke_keys)} accesos a revocar, {len(to_grant_keys)} accesos a otorgar."), created_records
+                f"0 accesos revocados (mantenidos), {len(to_grant_keys)} accesos otorgados (nuevos)."), created_records
 
         except Exception as e:
             return False, f"Error procesando movimiento lateral: {str(e)}", []

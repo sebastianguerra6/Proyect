@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
 import os
-import sqlite3
+import pyodbc
 from PIL import Image, ImageTk
 
 from services import export_service, history_service, access_service, search_service
