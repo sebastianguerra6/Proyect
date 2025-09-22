@@ -750,14 +750,23 @@ class ConciliacionFrame:
                     return
             
             # Usar el nuevo servicio de conciliación
+            print(f"DEBUG: Obteniendo reporte de conciliación para {sid}")
             reporte = access_service.get_access_reconciliation_report(sid)
             
             if "error" in reporte:
+                print(f"DEBUG: Error en conciliación: {reporte['error']}")
                 messagebox.showerror("Error", reporte["error"])
                 return
             
+            print(f"DEBUG: Reporte obtenido exitosamente")
+            print(f"DEBUG: Accesos actuales: {len(reporte.get('current_access', []))}")
+            print(f"DEBUG: Accesos a otorgar: {len(reporte.get('to_grant', []))}")
+            print(f"DEBUG: Accesos a revocar: {len(reporte.get('to_revoke', []))}")
+            
             self.resultado_conciliacion = reporte
+            print("DEBUG: Mostrando resultados en UI...")
             self._mostrar_resultados_nuevos(reporte)
+            print("DEBUG: Resultados mostrados en UI")
             messagebox.showinfo("Éxito", f"Conciliación completada para {sid}")
             
         except Exception as e:
@@ -831,8 +840,17 @@ class ConciliacionFrame:
                 
                 messagebox.showinfo("Asignación Completada", resultado_texto)
                 
+                # Debug: Verificar historial después de assign_accesses
+                print(f"DEBUG: Después de assign_accesses para {sid}")
+                history = access_service.get_employee_history(sid)
+                print(f"DEBUG: Historial tiene {len(history)} registros")
+                for i, record in enumerate(history[:3]):  # Mostrar solo los primeros 3
+                    print(f"DEBUG: {i+1}. {record.get('process_access')} - {record.get('app_access_name')} - {record.get('status')}")
+                
                 # Actualizar la conciliación para mostrar los cambios
+                print("DEBUG: Ejecutando _conciliar_accesos...")
                 self._conciliar_accesos()
+                print("DEBUG: _conciliar_accesos completado")
                 
             else:
                 messagebox.showerror("Error", f"Error en la asignación automática: {message}")
@@ -1031,7 +1049,7 @@ class AplicacionesFrame:
         }
         
         self._crear_interfaz()
-        self._cargar_aplicaciones()
+        self._cargar_aplicaciones() 
     
     def _crear_interfaz(self):
         """Crea la interfaz de gestión de aplicaciones"""

@@ -313,3 +313,6 @@ Para contribuir al proyecto:
 3. Probar cambios antes de enviar
 4. Documentar nuevas funcionalidades
 5. Actualizar este README cuando sea necesario
+
+
+

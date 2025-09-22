@@ -11,6 +11,7 @@ Cambios clave:
 - process_lateral_movement y get_access_reconciliation_report usan la clave completa para decidir mantener/quitar/otorgar.
 """
 import pyodbc
+import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import sys
@@ -142,7 +143,6 @@ class AccessManagementService:
                     WHERE h.activo = 1
                     GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.position, a.subunit, a.position_role, 
                              a.role_name, a.system_owner, a.access_type, a.category, a.description
-                    ORDER BY h.scotia_id, a.logical_access_name
                 ''')
             else:
                 # Sintaxis SQLite
@@ -204,7 +204,6 @@ class AccessManagementService:
                     AND head.activo = 1
                     AND h.app_access_name IS NOT NULL
                     GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.area, h.record_date, h.status
-                    ORDER BY h.scotia_id, h.app_access_name
                 ''')
             else:
                 # Sintaxis SQLite
@@ -250,7 +249,6 @@ class AccessManagementService:
                         UPPER(LTRIM(RTRIM(req.unit))) = UPPER(LTRIM(RTRIM(curr.unit))) AND
                         UPPER(LTRIM(RTRIM(req.position))) = UPPER(LTRIM(RTRIM(curr.position)))
                     WHERE curr.scotia_id IS NULL
-                    ORDER BY req.scotia_id, req.logical_access_name
                 ''')
             else:
                 # Sintaxis SQLite
@@ -296,7 +294,6 @@ class AccessManagementService:
                         UPPER(LTRIM(RTRIM(curr.unit))) = UPPER(LTRIM(RTRIM(req.unit))) AND
                         UPPER(LTRIM(RTRIM(curr.position))) = UPPER(LTRIM(RTRIM(req.position)))
                     WHERE req.scotia_id IS NULL
-                    ORDER BY curr.scotia_id, curr.logical_access_name
                 ''')
             else:
                 # Sintaxis SQLite
@@ -1157,12 +1154,12 @@ class AccessManagementService:
 
     def process_lateral_movement(self, scotia_id: str, new_position: str, new_unit: str, 
                                 responsible: str = "Sistema", new_subunit: Optional[str] = None) -> Tuple[bool, str, List[Dict[str, Any]]]:
-        """Procesa un movimiento lateral de forma ADITIVA: mantiene accesos actuales y agrega nuevos.
+        """Procesa un movimiento lateral: revoca accesos de posición anterior y otorga nuevos.
         
-        Lógica corregida:
-        - NO revoca accesos existentes (mantiene aplicaciones de posición anterior)
-        - SOLO otorga nuevos accesos de la nueva posición
-        - Permite que coexistan aplicaciones con mismo logical_access_name pero diferente subunit
+        Lógica mejorada:
+        - REVOCA solo accesos específicos de la posición anterior que no son necesarios en la nueva
+        - OTORGA nuevos accesos de la nueva posición
+        - Evita duplicados comparando por logical_access_name y unidad
         """
         try:
             employee = self.get_employee_by_id(scotia_id)
@@ -1172,36 +1169,78 @@ class AccessManagementService:
             old_position = (employee.get('position') or '').strip()
             old_unit = (employee.get('unit') or '').strip()
 
-            # Obtener accesos actuales del empleado (desde historial, no desde malla)
+            # Obtener accesos actuales del empleado (solo los de la posición anterior)
             current_access = self.get_employee_current_access(scotia_id)
-            current_access_keys = {self._access_key(acc.get('unit'), acc.get('subunit'), acc.get('position_role'), acc.get('logical_access_name')) for acc in current_access}
-
+            
             # Obtener accesos requeridos para la nueva posición
             new_mesh_apps = self.get_applications_by_position(new_position, new_unit, subunit=new_subunit)
-            new_required_keys = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')) for app in new_mesh_apps}
+            
+            # Crear índices para comparación más inteligente
+            current_apps_by_name = {}
+            for acc in current_access:
+                app_name = acc.get('logical_access_name', '')
+                unit = acc.get('unit', '')
+                key = f"{app_name}_{unit}"
+                current_apps_by_name[key] = acc
+            
+            new_apps_by_name = {}
+            for app in new_mesh_apps:
+                app_name = app.get('logical_access_name', '')
+                unit = app.get('unit', '')
+                key = f"{app_name}_{unit}"
+                new_apps_by_name[key] = app
 
-            # Solo otorgar accesos que NO tiene actualmente
-            to_grant_keys = new_required_keys - current_access_keys
-
-            # Mapear para generar descripciones
-            app_index = {self._access_key(app.get('unit'), app.get('subunit'), app.get('position_role'), app.get('logical_access_name')): app for app in new_mesh_apps}
+            # Calcular qué revocar y qué otorgar
+            to_revoke = []
+            to_grant = []
+            
+            # Revocar accesos de la posición anterior que no están en la nueva posición
+            for key, acc in current_apps_by_name.items():
+                if key not in new_apps_by_name:
+                    to_revoke.append(acc)
+            
+            # Otorgar accesos de la nueva posición que no tiene actualmente
+            for key, app in new_apps_by_name.items():
+                if key not in current_apps_by_name:
+                    to_grant.append(app)
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
 
-            # Solo otorgar nuevos accesos (NO revocar existentes)
-            for (unit, subunit, position_role, lan) in to_grant_keys:
+            # 1. REVOCAR accesos de la posición anterior que ya no son necesarios
+            for acc in to_revoke:
+                record_data = {
+                    'scotia_id': scotia_id,
+                    'case_id': case_id,
+                    'responsible': responsible,
+                    'process_access': 'offboarding',
+                    'sid': scotia_id,
+                    'area': acc.get('unit', ''),
+                    'subunit': acc.get('subunit', ''),
+                    'event_description': f"Revocación de acceso para {acc.get('logical_access_name', '')} (lateral movement - cambio de posición)",
+                    'ticket_email': f"{responsible}@empresa.com",
+                    'app_access_name': acc.get('logical_access_name', ''),
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso'
+                }
+                ok, _ = self.create_historical_record(record_data)
+                if ok:
+                    created_records.append(record_data)
+
+            # 2. OTORGAR nuevos accesos de la nueva posición
+            for app in to_grant:
                 record_data = {
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'onboarding',
                     'sid': scotia_id,
-                    'area': unit,
-                    'subunit': subunit,
-                    'event_description': f"Otorgamiento de acceso para {lan} (lateral movement - nueva posición)",
+                    'area': app.get('unit', ''),
+                    'subunit': app.get('subunit', ''),
+                    'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name', '')} (lateral movement - nueva posición)",
                     'ticket_email': f"{responsible}@empresa.com",
-                    'app_access_name': lan,
+                    'app_access_name': app.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
                     'general_status': 'En Proceso'
@@ -1217,13 +1256,13 @@ class AccessManagementService:
 
             return True, (
                 f"Movimiento lateral procesado para {scotia_id}. "
-                f"0 accesos revocados (mantenidos), {len(to_grant_keys)} accesos otorgados (nuevos)."), created_records
+                f"{len(to_revoke)} accesos revocados (posición anterior), {len(to_grant)} accesos otorgados (nueva posición)."), created_records
 
         except Exception as e:
             return False, f"Error procesando movimiento lateral: {str(e)}", []
 
     def get_access_reconciliation_report(self, scotia_id: str) -> Dict[str, Any]:
-        """Genera un reporte de conciliación estricta por (unit, subunit, position_role, logical_access_name)."""
+        """Genera un reporte de conciliación mejorado que maneja mejor los cambios de posición."""
         try:
             # 1) Empleado
             employee = self.get_employee_by_id(scotia_id)
@@ -1279,26 +1318,43 @@ class AccessManagementService:
                 for app in filtered_required_apps
             }
 
-            # 4) Historial/actuales: considerar TODOS los registros (onboarding o lateral)
-            # Y que coincidan con la unidad actual del empleado, independientemente del estado
-            current_records = [
-                h for h in history
-                if (h.get('process_access') in ('onboarding', 'lateral_movement') and
-                    h.get('area') == emp_unit)  # Solo comparar por unidad
-            ]
+            # 4) Historial/actuales: considerar registros de la unidad actual
+            # MEJORA: Ser más flexible con las posiciones del historial
+            current_records = []
+            for h in history:
+                if h.get('process_access') in ('onboarding', 'lateral_movement'):
+                    hist_unit = h.get('app_unit') or h.get('area', '')
+                    hist_position = h.get('app_position_role') or h.get('position', '')
+                    hist_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
+                    
+                    # Solo considerar registros de la unidad actual
+                    if hist_unit == emp_unit and hist_name:
+                        # Si no hay posición en el historial, usar la posición actual
+                        if not hist_position:
+                            hist_position = emp_position
+                        
+                        # Agregar el registro con la posición actualizada si es necesario
+                        h_updated = h.copy()
+                        h_updated['app_position_role'] = hist_position
+                        h_updated['app_unit'] = hist_unit
+                        h_updated['app_logical_access_name'] = hist_name
+                        current_records.append(h_updated)
 
             # Claves actuales - usar tripleta normalizada: unit, position_role, logical_access_name (ignora subunit)
-            # Solo considerar registros que coincidan con la unidad actual del empleado
+            # MEJORA: Normalizar posiciones del historial para comparar con la posición actual
             current_keys = set()
             for h in current_records:
-                # Usar datos de la aplicación si están disponibles, sino usar datos del historial
                 app_unit = h.get('app_unit') or h.get('area', '')
                 app_position = h.get('app_position_role') or h.get('position', '')
                 app_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                 
-                # Solo agregar si coincide con la unidad actual del empleado y tiene position válido
                 # Si no hay position en el historial, usar la posición actual del empleado
                 if not app_position:
+                    app_position = emp_position
+                
+                # MEJORA: Si la posición del historial es diferente a la actual, 
+                # usar la posición actual para la comparación (esto evita falsos positivos)
+                if app_position != emp_position:
                     app_position = emp_position
                 
                 if (app_unit == emp_unit and app_position and app_name):
