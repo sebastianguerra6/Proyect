@@ -341,7 +341,6 @@ class AppEmpleadosRefactorizada:
             ("💾 Guardar", self.guardar_datos, "Success.TButton"),
             ("🧹 Limpiar", self.limpiar_campos, "Info.TButton"),
             ("📊 Estadísticas", self.mostrar_estadisticas, "Warning.TButton"),
-            ("🔍 Probar Deduplicación", self.probar_deduplicacion, "Info.TButton"),
             ("🚪 Salir", self.root.quit, "Danger.TButton")
         ]
         
@@ -543,51 +542,6 @@ class AppEmpleadosRefactorizada:
             messagebox.showerror("Error", f"Error obteniendo estadísticas: {str(e)}")
             print(f"Error en mostrar_estadisticas: {e}")
 
-    def probar_deduplicacion(self):
-        """Método de prueba para verificar la deduplicación de aplicaciones"""
-        try:
-            # Obtener un empleado de ejemplo para probar
-            empleados = access_service.get_all_employees()
-            if not empleados:
-                messagebox.showwarning("Advertencia", "No hay empleados para probar")
-                return
-            
-            empleado = empleados[0]
-            position = empleado.get('position', '')
-            unit = empleado.get('unit', '')
-            
-            if not position or not unit:
-                messagebox.showwarning("Advertencia", f"Empleado {empleado.get('scotia_id')} no tiene posición o unidad válida")
-                return
-            
-            # Probar deduplicación
-            debug_info = access_service.debug_applications_by_position(position, unit)
-            
-            if "error" in debug_info:
-                messagebox.showerror("Error", f"Error en debug: {debug_info['error']}")
-                return
-            
-            mensaje = f"Prueba de Deduplicación para {empleado.get('scotia_id')}:\n\n"
-            mensaje += f"Posición: {position}\n"
-            mensaje += f"Unidad: {unit}\n\n"
-            mensaje += f"Total sin deduplicación: {debug_info['total_without_dedup']}\n"
-            mensaje += f"Total con deduplicación: {debug_info['total_with_dedup']}\n"
-            mensaje += f"Duplicados encontrados: {debug_info['duplicates_found']}\n\n"
-            
-            if debug_info['duplicates_found'] > 0:
-                mensaje += "Aplicaciones duplicadas encontradas:\n"
-                for row in debug_info['all_rows']:
-                    mensaje += f"- {row[0]} (Unit: {row[1]}, Subunit: {row[2]}, Position: {row[3]})\n"
-            else:
-                mensaje += "✅ No se encontraron duplicados"
-            
-            messagebox.showinfo("Prueba de Deduplicación", mensaje)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error en prueba de deduplicación: {str(e)}")
-            print(f"Error en probar_deduplicacion: {e}")
-
-
 class ConciliacionFrame:
     """Frame simplificado para la conciliación de accesos"""
     
@@ -655,23 +609,30 @@ class ConciliacionFrame:
         acciones_frame = ttk.LabelFrame(parent, text="⚡ Acciones y Resultados", padding="20")
         acciones_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=(0, 20))
         acciones_frame.columnconfigure(0, weight=1)
-        acciones_frame.rowconfigure(1, weight=1)
+        acciones_frame.rowconfigure(2, weight=1)
         
         # Botones de acción
         botones_frame = ttk.Frame(acciones_frame)
-        botones_frame.grid(row=0, column=0, pady=(0, 20), sticky="ew")
+        botones_frame.grid(row=0, column=0, pady=(0, 15), sticky="ew")
         botones_frame.columnconfigure(0, weight=1)
         botones_frame.columnconfigure(1, weight=1)
+        botones_frame.columnconfigure(2, weight=1)
         
         ttk.Button(botones_frame, text="📤 Exportar Excel", 
                   command=self._exportar_excel, style="Warning.TButton").grid(row=0, column=0, padx=(0, 5), sticky="ew")
         
-        ttk.Button(botones_frame, text="🎫 Registrar Tickets", 
-                  command=self._registrar_tickets, style="Danger.TButton").grid(row=0, column=1, padx=(5, 0), sticky="ew")
+        ttk.Button(botones_frame, text="👁️ Ver Accesos Actuales", 
+                  command=self._ver_accesos_actuales, style="Success.TButton").grid(row=0, column=1, padx=5, sticky="ew")
+        
+        ttk.Button(botones_frame, text="🔍 Debug", 
+                  command=self.debug_conciliacion, style="Info.TButton").grid(row=0, column=2, padx=(5, 0), sticky="ew")
+        
+        # Panel de estadísticas resumidas
+        self._crear_panel_estadisticas(acciones_frame)
         
         # Área de resultados
         resultados_frame = ttk.LabelFrame(acciones_frame, text="📊 Resultados de Conciliación", padding="15")
-        resultados_frame.grid(row=1, column=0, sticky="nsew")
+        resultados_frame.grid(row=2, column=0, sticky="nsew")
         resultados_frame.columnconfigure(0, weight=1)
         resultados_frame.rowconfigure(0, weight=1)
         
@@ -860,24 +821,181 @@ class ConciliacionFrame:
     
     
     def _exportar_excel(self):
-        """Exporta los resultados de conciliación a Excel"""
-        if not self.resultado_conciliacion:
-            messagebox.showwarning("Advertencia", "No hay resultados para exportar")
+        """Exporta los resultados de conciliación a Excel con información detallada"""
+        # Verificar si hay un SID ingresado
+        sid = self.sid_var.get().strip()
+        if not sid:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un SID antes de exportar")
             return
         
+        # Si no hay resultados de conciliación, ejecutar conciliación primero
+        if not self.resultado_conciliacion:
+            respuesta = messagebox.askyesno("Sin resultados", 
+                                          "No hay resultados de conciliación. ¿Desea ejecutar la conciliación primero?")
+            if respuesta:
+                self._conciliar_accesos()
+                # Verificar si ahora hay resultados
+                if not self.resultado_conciliacion:
+                    messagebox.showwarning("Advertencia", "No se pudieron obtener resultados de conciliación")
+                    return
+            else:
+                return
+        
         try:
-            # Adaptar la estructura de datos para el servicio de exportación
-            adapted_data = self._adapt_data_for_export(self.resultado_conciliacion)
-            
-            output_path = export_service.export_reconciliation_tickets(
-                [adapted_data],
-                "Sistema Integrado"
-            )
+            # Crear archivo Excel personalizado con información detallada
+            output_path = self._crear_excel_detallado()
             
             messagebox.showinfo("Éxito", f"Archivo exportado exitosamente a:\n{output_path}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar: {str(e)}")
+    
+    def _crear_excel_detallado(self):
+        """Crea un archivo Excel detallado con la conciliación de accesos"""
+        import pandas as pd
+        from datetime import datetime
+        import os
+        
+        # Crear directorio de salida si no existe
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generar nombre de archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        sid = self.sid_var.get().strip()
+        filename = f"conciliacion_accesos_{sid}_{timestamp}.xlsx"
+        filepath = os.path.join(output_dir, filename)
+        
+        # Obtener datos del reporte
+        reporte = self.resultado_conciliacion
+        employee = reporte.get('employee', {})
+        current_access = reporte.get('current_access', [])
+        to_grant = reporte.get('to_grant', [])
+        to_revoke = reporte.get('to_revoke', [])
+        
+        # Crear DataFrame para accesos actuales
+        current_df = pd.DataFrame([
+            {
+                'Acceso': acceso.get('app_name', ''),
+                'Unidad': acceso.get('unit', ''),
+                'Subunidad': acceso.get('subunit', ''),
+                'Posición': acceso.get('position_role', ''),
+                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Estado': '✅ Activo',
+                'Acción': 'Mantener',
+                'Descripción': acceso.get('description', '')
+            }
+            for acceso in current_access
+        ])
+        
+        # Crear DataFrame para accesos a otorgar
+        grant_df = pd.DataFrame([
+            {
+                'Acceso': acceso.get('app_name', ''),
+                'Unidad': acceso.get('unit', ''),
+                'Subunidad': acceso.get('subunit', ''),
+                'Posición': acceso.get('position_role', ''),
+                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Estado': '❌ Faltante',
+                'Acción': '🟢 Otorgar',
+                'Descripción': acceso.get('description', '')
+            }
+            for acceso in to_grant
+        ])
+        
+        # Crear DataFrame para accesos a revocar
+        revoke_df = pd.DataFrame([
+            {
+                'Acceso': acceso.get('app_name', ''),
+                'Unidad': acceso.get('unit', ''),
+                'Subunidad': acceso.get('subunit', ''),
+                'Posición': acceso.get('position_role', ''),
+                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Estado': '⚠️ Excesivo',
+                'Acción': '🔴 Revocar',
+                'Descripción': acceso.get('description', '')
+            }
+            for acceso in to_revoke
+        ])
+        
+        # Crear DataFrame de resumen
+        total_actions = len(to_grant) + len(to_revoke)
+        summary_data = {
+            'Métrica': [
+                'Total Accesos Activos',
+                'Accesos a Otorgar',
+                'Accesos a Revocar',
+                'Total Acciones Requeridas',
+                'Estado de Conciliación'
+            ],
+            'Cantidad': [
+                len(current_access),
+                len(to_grant),
+                len(to_revoke),
+                total_actions,
+                '✅ Conciliado' if total_actions == 0 else '⚠️ Requiere Acción'
+            ],
+            'Descripción': [
+                'Accesos que el empleado tiene actualmente y debe mantener',
+                'Accesos que faltan y deben ser otorgados',
+                'Accesos excesivos que deben ser revocados',
+                'Total de cambios requeridos en los accesos',
+                'Estado general de la conciliación de accesos'
+            ]
+        }
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Crear archivo Excel con múltiples hojas
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            # Hoja de resumen
+            summary_df.to_excel(writer, sheet_name='Resumen', index=False)
+            
+            # Hoja de accesos actuales
+            if not current_df.empty:
+                current_df.to_excel(writer, sheet_name='Accesos Activos', index=False)
+            else:
+                pd.DataFrame(columns=['Acceso', 'Unidad', 'Subunidad', 'Posición', 'Rol', 'Estado', 'Acción', 'Descripción']).to_excel(writer, sheet_name='Accesos Activos', index=False)
+            
+            # Hoja de accesos a otorgar
+            if not grant_df.empty:
+                grant_df.to_excel(writer, sheet_name='A Otorgar', index=False)
+            else:
+                pd.DataFrame(columns=['Acceso', 'Unidad', 'Subunidad', 'Posición', 'Rol', 'Estado', 'Acción', 'Descripción']).to_excel(writer, sheet_name='A Otorgar', index=False)
+            
+            # Hoja de accesos a revocar
+            if not revoke_df.empty:
+                revoke_df.to_excel(writer, sheet_name='A Revocar', index=False)
+            else:
+                pd.DataFrame(columns=['Acceso', 'Unidad', 'Subunidad', 'Posición', 'Rol', 'Estado', 'Acción', 'Descripción']).to_excel(writer, sheet_name='A Revocar', index=False)
+            
+            # Hoja de información del empleado
+            employee_info = pd.DataFrame([
+                {'Campo': 'SID', 'Valor': employee.get('scotia_id', '')},
+                {'Campo': 'Nombre', 'Valor': employee.get('full_name', '')},
+                {'Campo': 'Email', 'Valor': employee.get('email', '')},
+                {'Campo': 'Unidad', 'Valor': employee.get('unit', '')},
+                {'Campo': 'Subunidad', 'Valor': employee.get('subunit', '')},
+                {'Campo': 'Posición', 'Valor': employee.get('position', '')},
+                {'Campo': 'Fecha Conciliación', 'Valor': datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            ])
+            employee_info.to_excel(writer, sheet_name='Info Empleado', index=False)
+            
+            # Ajustar ancho de columnas
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 50)
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        return filepath
     
     def _adapt_data_for_export(self, reconciliation_data):
         """Adapta los datos de conciliación para el formato esperado por el servicio de exportación"""
@@ -916,23 +1034,6 @@ class ConciliacionFrame:
             }
             adapted_list.append(adapted_item)
         return adapted_list
-    
-    def _registrar_tickets(self):
-        """Registra los tickets de conciliación en el historial"""
-        if not self.resultado_conciliacion:
-            messagebox.showwarning("Advertencia", "No hay resultados para registrar")
-            return
-        
-        try:
-            resultado = history_service.register_reconciliation_tickets(
-                self.resultado_conciliacion, "Sistema Integrado"
-            )
-            
-            tickets_creados = resultado.get('tickets_created', 0)
-            messagebox.showinfo("Éxito", f"Se registraron {tickets_creados} tickets exitosamente")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al registrar tickets: {str(e)}")
     
     def _mostrar_resultados(self, resultado):
         """Muestra los resultados de conciliación en el treeview"""
@@ -1013,6 +1114,232 @@ class ConciliacionFrame:
         # Si no hay datos, mostrar mensaje
         if not current_access and not to_grant and not to_revoke:
             self.tree_resultados.insert('', 'end', values=('', '', '', '', '', 'Sin datos', ''))
+        
+        # Actualizar estadísticas
+        self._actualizar_estadisticas(reporte)
+    
+    def _crear_panel_estadisticas(self, parent):
+        """Crea el panel de estadísticas resumidas"""
+        stats_frame = ttk.LabelFrame(parent, text="📈 Resumen de Conciliación", padding="10")
+        stats_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
+        stats_frame.columnconfigure(0, weight=1)
+        stats_frame.columnconfigure(1, weight=1)
+        stats_frame.columnconfigure(2, weight=1)
+        
+        # Labels para estadísticas
+        self.label_activos = ttk.Label(stats_frame, text="✅ Activos: 0", 
+                                      style="Success.TLabel", font=("Arial", 10, "bold"))
+        self.label_activos.grid(row=0, column=0, padx=5, pady=5)
+        
+        self.label_otorgar = ttk.Label(stats_frame, text="🟢 A Otorgar: 0", 
+                                      style="Info.TLabel", font=("Arial", 10, "bold"))
+        self.label_otorgar.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.label_revocar = ttk.Label(stats_frame, text="🔴 A Revocar: 0", 
+                                      style="Danger.TLabel", font=("Arial", 10, "bold"))
+        self.label_revocar.grid(row=0, column=2, padx=5, pady=5)
+    
+    def _actualizar_estadisticas(self, reporte):
+        """Actualiza las estadísticas del panel"""
+        current_access = reporte.get('current_access', [])
+        to_grant = reporte.get('to_grant', [])
+        to_revoke = reporte.get('to_revoke', [])
+        
+        self.label_activos.config(text=f"✅ Activos: {len(current_access)}")
+        self.label_otorgar.config(text=f"🟢 A Otorgar: {len(to_grant)}")
+        self.label_revocar.config(text=f"🔴 A Revocar: {len(to_revoke)}")
+    
+    def actualizar_conciliacion_empleado(self, scotia_id):
+        """Actualiza la conciliación para un empleado específico"""
+        if scotia_id and scotia_id.strip():
+            self.sid_var.set(scotia_id.strip())
+            self._conciliar_accesos()
+    
+    def debug_conciliacion(self):
+        """Función de debug para entender por qué no aparecen datos en la conciliación"""
+        sid = self.sid_var.get().strip()
+        if not sid:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un SID")
+            return
+        
+        try:
+            # Obtener información del empleado
+            empleado = access_service.get_employee_by_id(sid)
+            if not empleado:
+                messagebox.showerror("Error", f"Empleado {sid} no encontrado")
+                return
+            
+            # Obtener historial
+            historial = access_service.get_employee_history(sid)
+            
+            # Obtener aplicaciones requeridas
+            aplicaciones_requeridas = access_service.get_applications_by_position(
+                position=empleado.get('position', ''),
+                unit=empleado.get('unit', '')
+            )
+            
+            # Construir mensaje de debug
+            debug_msg = f"🔍 DEBUG CONCILIACIÓN PARA {sid}\n\n"
+            debug_msg += f"📋 EMPLEADO:\n"
+            debug_msg += f"  • Nombre: {empleado.get('full_name', 'N/A')}\n"
+            debug_msg += f"  • Unidad: {empleado.get('unit', 'N/A')}\n"
+            debug_msg += f"  • Posición: {empleado.get('position', 'N/A')}\n\n"
+            
+            debug_msg += f"📊 HISTORIAL ({len(historial)} registros):\n"
+            for i, h in enumerate(historial[:5]):  # Mostrar solo los primeros 5
+                debug_msg += f"  {i+1}. {h.get('process_access', 'N/A')} - {h.get('app_access_name', 'N/A')} - {h.get('area', 'N/A')}\n"
+            if len(historial) > 5:
+                debug_msg += f"  ... y {len(historial) - 5} más\n"
+            debug_msg += "\n"
+            
+            debug_msg += f"🎯 APLICACIONES REQUERIDAS ({len(aplicaciones_requeridas)} encontradas):\n"
+            for i, app in enumerate(aplicaciones_requeridas[:5]):  # Mostrar solo las primeras 5
+                debug_msg += f"  {i+1}. {app.get('logical_access_name', 'N/A')} - {app.get('unit', 'N/A')} - {app.get('position_role', 'N/A')}\n"
+            if len(aplicaciones_requeridas) > 5:
+                debug_msg += f"  ... y {len(aplicaciones_requeridas) - 5} más\n"
+            debug_msg += "\n"
+            
+            # Obtener reporte de conciliación
+            reporte = access_service.get_access_reconciliation_report(sid)
+            if "error" in reporte:
+                debug_msg += f"❌ ERROR EN CONCILIACIÓN: {reporte['error']}\n"
+            else:
+                debug_msg += f"✅ CONCILIACIÓN EXITOSA:\n"
+                debug_msg += f"  • Accesos actuales: {len(reporte.get('current_access', []))}\n"
+                debug_msg += f"  • Accesos a otorgar: {len(reporte.get('to_grant', []))}\n"
+                debug_msg += f"  • Accesos a revocar: {len(reporte.get('to_revoke', []))}\n"
+            
+            messagebox.showinfo("Debug Conciliación", debug_msg)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error en debug: {str(e)}")
+
+    def _ver_accesos_actuales(self):
+        """Muestra los accesos actuales del empleado en una ventana separada"""
+        sid = self.sid_var.get().strip()
+        if not sid:
+            messagebox.showwarning("Advertencia", "Por favor ingrese un SID")
+            return
+        
+        try:
+            # Obtener información del empleado
+            empleado = access_service.get_employee_by_id(sid)
+            if not empleado:
+                messagebox.showerror("Error", f"Empleado {sid} no encontrado")
+                return
+            
+            # Obtener historial completo
+            historial = access_service.get_employee_history(sid)
+            
+            # Filtrar solo registros de onboarding y lateral_movement
+            accesos_actuales = []
+            for h in historial:
+                if h.get('process_access') in ('onboarding', 'lateral_movement'):
+                    hist_unit = h.get('app_unit') or h.get('area', '')
+                    hist_position = h.get('app_position_role') or h.get('position', '')
+                    hist_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
+                    
+                    if hist_name:  # Solo incluir si tiene nombre de aplicación
+                        accesos_actuales.append({
+                            'app_name': hist_name,
+                            'unit': hist_unit,
+                            'position': hist_position,
+                            'process': h.get('process_access', ''),
+                            'date': h.get('date', ''),
+                            'description': h.get('description', '')
+                        })
+            
+            # Crear ventana de accesos actuales
+            self._crear_ventana_accesos_actuales(sid, empleado, accesos_actuales)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error obteniendo accesos actuales: {str(e)}")
+
+    def _crear_ventana_accesos_actuales(self, sid, empleado, accesos_actuales):
+        """Crea una ventana para mostrar los accesos actuales del empleado"""
+        # Crear ventana
+        ventana = tk.Toplevel(self.parent)
+        ventana.title(f"Accesos Actuales - {sid}")
+        ventana.geometry("800x600")
+        ventana.resizable(True, True)
+        
+        # Configurar grid
+        ventana.columnconfigure(0, weight=1)
+        ventana.rowconfigure(1, weight=1)
+        
+        # Header con información del empleado
+        header_frame = ttk.Frame(ventana, padding="15")
+        header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+        header_frame.columnconfigure(1, weight=1)
+        
+        ttk.Label(header_frame, text="👤 Empleado:", font=("Arial", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(header_frame, text=f"{empleado.get('full_name', 'N/A')} ({sid})", 
+                 font=("Arial", 10)).grid(row=0, column=1, sticky="w", padx=(10, 0))
+        
+        ttk.Label(header_frame, text="🏢 Unidad:", font=("Arial", 10, "bold")).grid(row=1, column=0, sticky="w")
+        ttk.Label(header_frame, text=empleado.get('unit', 'N/A'), 
+                 font=("Arial", 10)).grid(row=1, column=1, sticky="w", padx=(10, 0))
+        
+        ttk.Label(header_frame, text="💼 Posición:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="w")
+        ttk.Label(header_frame, text=empleado.get('position', 'N/A'), 
+                 font=("Arial", 10)).grid(row=2, column=1, sticky="w", padx=(10, 0))
+        
+        # Separador
+        ttk.Separator(ventana, orient='horizontal').grid(row=1, column=0, sticky="ew", padx=10)
+        
+        # Frame principal con treeview
+        main_frame = ttk.Frame(ventana, padding="10")
+        main_frame.grid(row=2, column=0, sticky="nsew")
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+        
+        # Treeview para mostrar accesos
+        columns = ('Aplicación', 'Unidad', 'Posición', 'Proceso', 'Fecha', 'Descripción')
+        tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
+        
+        # Configurar columnas
+        column_widths = {
+            'Aplicación': 150,
+            'Unidad': 100,
+            'Posición': 120,
+            'Proceso': 100,
+            'Fecha': 100,
+            'Descripción': 200
+        }
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=column_widths.get(col, 120), anchor="w")
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Grid
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        
+        # Insertar datos
+        for acceso in accesos_actuales:
+            tree.insert('', 'end', values=(
+                acceso.get('app_name', ''),
+                acceso.get('unit', ''),
+                acceso.get('position', ''),
+                acceso.get('process', ''),
+                acceso.get('date', ''),
+                acceso.get('description', '')
+            ))
+        
+        # Footer con estadísticas
+        footer_frame = ttk.Frame(ventana, padding="10")
+        footer_frame.grid(row=3, column=0, sticky="ew")
+        
+        ttk.Label(footer_frame, text=f"📊 Total de accesos actuales: {len(accesos_actuales)}", 
+                 font=("Arial", 10, "bold")).pack(side="left")
+        
+        # Botón cerrar
+        ttk.Button(footer_frame, text="Cerrar", 
+                  command=ventana.destroy).pack(side="right")
 
 
 class AplicacionesFrame:

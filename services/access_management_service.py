@@ -17,14 +17,16 @@ from datetime import datetime
 import sys
 import os
 
-# Agregar el directorio database al path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
-from database_manager import DatabaseManager
-
 # Importar configuración
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from config import is_sql_server
-from sql_server_connection_config import SQLServerDatabaseManager
+from config import is_sql_server, get_database_connection
+
+# Agregar el directorio database al path para SQLite
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
+try:
+    from database_manager import DatabaseManager
+except ImportError:
+    DatabaseManager = None
 
 
 class AccessManagementService:
@@ -61,9 +63,12 @@ class AccessManagementService:
             use_sql_server = is_sql_server()
         
         if use_sql_server:
-            self.db_manager = SQLServerDatabaseManager()
+            self.db_manager = get_database_connection()
         else:
-            self.db_manager = DatabaseManager()
+            if DatabaseManager:
+                self.db_manager = DatabaseManager()
+            else:
+                raise ImportError("DatabaseManager no está disponible para SQLite")
         self._ensure_views_and_indexes()
 
     def get_connection(self) -> pyodbc.Connection:
@@ -588,75 +593,6 @@ class AccessManagementService:
         except Exception as e:
             print(f"Error obteniendo aplicaciones: {e}")
             return []
-
-    def debug_applications_by_position(self, position: str, unit: str, subunit: Optional[str] = None, title: Optional[str] = None) -> Dict[str, Any]:
-        """Método de debug para verificar la deduplicación de aplicaciones"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-
-            # Query sin deduplicación para comparar
-            where_conditions = [
-                "UPPER(TRIM(position_role)) = UPPER(TRIM(?))",
-                "UPPER(TRIM(unit)) = UPPER(TRIM(?))"
-            ]
-            params = [position, unit]
-
-            if subunit is not None and subunit != '':
-                where_conditions.append("UPPER(TRIM(subunit)) = UPPER(TRIM(?))")
-                params.append(subunit)
-
-            if title is not None and title != '':
-                where_conditions.append("UPPER(TRIM(role_name)) = UPPER(TRIM(?))")
-                params.append(title)
-
-            # Query sin GROUP BY para ver duplicados
-            query_all = f"""
-                SELECT 
-                    a.logical_access_name, a.unit, a.subunit, a.position_role,
-                    UPPER(TRIM(a.unit)) as unit_norm,
-                    UPPER(TRIM(a.position_role)) as pos_norm,
-                    UPPER(TRIM(a.logical_access_name)) as app_norm
-                FROM applications a
-                WHERE {' AND '.join(where_conditions)}
-                ORDER BY a.logical_access_name
-            """
-
-            cursor.execute(query_all, params)
-            all_rows = cursor.fetchall()
-
-            # Query con GROUP BY para ver deduplicados
-            query_dedup = f"""
-                SELECT 
-                    a.logical_access_name, a.unit, a.subunit, a.position_role,
-                    UPPER(TRIM(a.unit)) as unit_norm,
-                    UPPER(TRIM(a.position_role)) as pos_norm,
-                    UPPER(TRIM(a.logical_access_name)) as app_norm
-                FROM applications a
-                WHERE {' AND '.join(where_conditions)}
-                GROUP BY 
-                    UPPER(TRIM(a.unit)), 
-                    UPPER(TRIM(a.position_role)), 
-                    UPPER(TRIM(a.logical_access_name))
-                ORDER BY a.logical_access_name
-            """
-
-            cursor.execute(query_dedup, params)
-            dedup_rows = cursor.fetchall()
-
-            conn.close()
-
-            return {
-                "total_without_dedup": len(all_rows),
-                "total_with_dedup": len(dedup_rows),
-                "all_rows": all_rows,
-                "dedup_rows": dedup_rows,
-                "duplicates_found": len(all_rows) - len(dedup_rows)
-            }
-
-        except Exception as e:
-            print(f"Error en debug: {e}")
-            return {"error": str(e)}
 
     def _get_application_by_name(self, logical_access_name: str) -> Optional[Dict[str, Any]]:
         """Obtiene una aplicación por su logical_access_name"""
@@ -1319,7 +1255,8 @@ class AccessManagementService:
             }
 
             # 4) Historial/actuales: considerar registros de la unidad actual
-            # MEJORA: Ser más flexible con las posiciones del historial
+            # MEJORA: Considerar todos los accesos de onboarding como actuales
+            # Esto evita que aparezcan como "onboarding" cuando se cambia de unidad
             current_records = []
             for h in history:
                 if h.get('process_access') in ('onboarding', 'lateral_movement'):
@@ -1327,8 +1264,8 @@ class AccessManagementService:
                     hist_position = h.get('app_position_role') or h.get('position', '')
                     hist_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                     
-                    # Solo considerar registros de la unidad actual
-                    if hist_unit == emp_unit and hist_name:
+                    # Considerar todos los registros de onboarding, independientemente de la unidad
+                    if hist_name:
                         # Si no hay posición en el historial, usar la posición actual
                         if not hist_position:
                             hist_position = emp_position
@@ -1341,7 +1278,7 @@ class AccessManagementService:
                         current_records.append(h_updated)
 
             # Claves actuales - usar tripleta normalizada: unit, position_role, logical_access_name (ignora subunit)
-            # MEJORA: Normalizar posiciones del historial para comparar con la posición actual
+            # MEJORA: Considerar accesos de todas las unidades, pero normalizar posiciones
             current_keys = set()
             for h in current_records:
                 app_unit = h.get('app_unit') or h.get('area', '')
@@ -1357,7 +1294,8 @@ class AccessManagementService:
                 if app_position != emp_position:
                     app_position = emp_position
                 
-                if (app_unit == emp_unit and app_position and app_name):
+                # Considerar todos los accesos, independientemente de la unidad
+                if app_position and app_name:
                     current_keys.add(self._triplet_key(app_unit, app_position, app_name))
 
             # 4) Deltas estrictos por clave completa
