@@ -636,37 +636,70 @@ class AccessManagementService:
             if not app_data.get('logical_access_name'):
                 return False, "Campo requerido faltante: logical_access_name"
 
-            cursor.execute('''
-                INSERT INTO applications 
-                (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
-                 exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
-                 category, additional_data, ad_code, access_status, last_update_date, 
-                 require_licensing, description, authentication_method)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                app_data.get('jurisdiction'),
-                app_data.get('unit'),
-                app_data.get('subunit'),
-                app_data.get('logical_access_name'),
-                app_data.get('alias'),
-                app_data.get('path_email_url'),
-                app_data.get('position_role'),
-                app_data.get('exception_tracking'),
-                app_data.get('fulfillment_action'),
-                app_data.get('system_owner'),
-                app_data.get('role_name'),
-                app_data.get('access_type'),
-                app_data.get('category'),
-                app_data.get('additional_data'),
-                app_data.get('ad_code'),
-                app_data.get('access_status', 'Activo'),
-                datetime.now().isoformat(),
-                app_data.get('require_licensing'),
-                app_data.get('description'),
-                app_data.get('authentication_method')
-            ))
-
-            app_id = cursor.lastrowid
+            # Usar OUTPUT INSERTED.id para SQL Server o lastrowid para SQLite
+            if is_sql_server():
+                cursor.execute('''
+                    INSERT INTO applications 
+                    (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
+                     exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
+                     category, additional_data, ad_code, access_status, last_update_date, 
+                     require_licensing, description, authentication_method)
+                    OUTPUT INSERTED.id
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    app_data.get('jurisdiction'),
+                    app_data.get('unit'),
+                    app_data.get('subunit'),
+                    app_data.get('logical_access_name'),
+                    app_data.get('alias'),
+                    app_data.get('path_email_url'),
+                    app_data.get('position_role'),
+                    app_data.get('exception_tracking'),
+                    app_data.get('fulfillment_action'),
+                    app_data.get('system_owner'),
+                    app_data.get('role_name'),
+                    app_data.get('access_type'),
+                    app_data.get('category'),
+                    app_data.get('additional_data'),
+                    app_data.get('ad_code'),
+                    app_data.get('access_status', 'Activo'),
+                    datetime.now().isoformat(),
+                    app_data.get('require_licensing'),
+                    app_data.get('description'),
+                    app_data.get('authentication_method')
+                ))
+                app_id = cursor.fetchone()[0]
+            else:
+                cursor.execute('''
+                    INSERT INTO applications 
+                    (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
+                     exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
+                     category, additional_data, ad_code, access_status, last_update_date, 
+                     require_licensing, description, authentication_method)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    app_data.get('jurisdiction'),
+                    app_data.get('unit'),
+                    app_data.get('subunit'),
+                    app_data.get('logical_access_name'),
+                    app_data.get('alias'),
+                    app_data.get('path_email_url'),
+                    app_data.get('position_role'),
+                    app_data.get('exception_tracking'),
+                    app_data.get('fulfillment_action'),
+                    app_data.get('system_owner'),
+                    app_data.get('role_name'),
+                    app_data.get('access_type'),
+                    app_data.get('category'),
+                    app_data.get('additional_data'),
+                    app_data.get('ad_code'),
+                    app_data.get('access_status', 'Activo'),
+                    datetime.now().isoformat(),
+                    app_data.get('require_licensing'),
+                    app_data.get('description'),
+                    app_data.get('authentication_method')
+                ))
+                app_id = cursor.lastrowid
 
             conn.commit()
             conn.close()
@@ -954,12 +987,49 @@ class AccessManagementService:
     # MÉTODOS DE LÓGICA DE NEGOCIO
     # ==============================
 
+    def update_employee_status(self, scotia_id: str, active: bool) -> Tuple[bool, str]:
+        """Actualiza el estado activo/inactivo de un empleado"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar que el empleado existe
+            cursor.execute('SELECT scotia_id FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            if not cursor.fetchone():
+                conn.close()
+                return False, f"Empleado {scotia_id} no encontrado"
+            
+            # Actualizar estado
+            if active:
+                cursor.execute('''
+                    UPDATE headcount 
+                    SET activo = TRUE, inactivation_date = NULL
+                    WHERE scotia_id = ?
+                ''', (scotia_id,))
+                status_text = "activo"
+            else:
+                cursor.execute('''
+                    UPDATE headcount 
+                    SET activo = FALSE, inactivation_date = ?
+                    WHERE scotia_id = ?
+                ''', (datetime.now().isoformat(), scotia_id))
+                status_text = "inactivo"
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Estado del empleado {scotia_id} cambiado a {status_text}"
+            
+        except Exception as e:
+            return False, f"Error actualizando estado del empleado: {str(e)}"
+
     def process_employee_onboarding(self, scotia_id: str, position: str, unit: str, 
                                    responsible: str = "Sistema",
                                    subunit: Optional[str] = None) -> Tuple[bool, str, List[Dict[str, Any]]]:
         """Procesa el onboarding de un empleado y determina qué accesos necesita.
         Crea registros por cada app que coincida con (unit, subunit?, position_role) **sin duplicados**.
         Actualiza la posición y unidad del empleado si están vacías.
+        Cambia el estado del empleado de inactivo a activo automáticamente.
         """
         try:
             # 1. Verificar que el empleado existe
@@ -967,7 +1037,14 @@ class AccessManagementService:
             if not employee:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
-            # 2. Actualizar posición y unidad del empleado si están vacías
+            # 2. Actualizar estado del empleado a activo
+            success, message = self.update_employee_status(scotia_id, True)
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"⚠️ {message}")
+
+            # 3. Actualizar posición y unidad del empleado si están vacías
             current_position = employee.get('position', '').strip()
             current_unit = employee.get('unit', '').strip()
             
@@ -980,17 +1057,15 @@ class AccessManagementService:
                     WHERE scotia_id = ?
                 ''', (position, unit, scotia_id))
                 conn.commit()
-                pass
-            else:
-                conn = self.get_connection()
+                conn.close()
+                print(f"✅ Posición y unidad actualizadas para {scotia_id}")
 
-            # 3. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
+            # 4. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
             required_apps = self.get_applications_by_position(position, unit, subunit=subunit)
-            conn.close()
             if not required_apps:
                 return False, f"No se encontraron aplicaciones para la posición {position} en {unit}", []
 
-            # 4. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
+            # 5. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{scotia_id}"
             created_records = []
             seen_triplets = set()

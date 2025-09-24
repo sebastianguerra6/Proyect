@@ -15,7 +15,7 @@ from datetime import datetime
 
 # Configuración de la base de datos
 # Cambiar a False para usar SQLite, True para usar SQL Server
-USE_SQL_SERVER = False
+USE_SQL_SERVER = True
 
 # Configuración de SQL Server
 SQL_SERVER_CONFIG = {
