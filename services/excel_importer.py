@@ -12,14 +12,14 @@ import os
 
 # Agregar el directorio database al path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
-from database_manager import DatabaseManager
+from config import get_database_connection
 
 
 class ExcelToSQLiteImporter:
     """Importador de Excel a SQLite"""
     
-    def __init__(self, db_path: str = None):
-        self.db_manager = DatabaseManager(db_path)
+    def __init__(self):
+        self.db_manager = get_database_connection()
         self.connection = self.db_manager.get_connection()
     
     def import_from_excel(self, excel_path: str, sheet_name: str, table_name: str, 

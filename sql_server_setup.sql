@@ -460,19 +460,21 @@ GO
 -- =====================================================
 
 -- Función para normalizar texto
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fn_NormalizeText]') AND type in (N'FN'))
+IF EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fn_NormalizeText]') AND type in (N'FN'))
+    DROP FUNCTION [dbo].[fn_NormalizeText];
+GO
+
+CREATE FUNCTION [dbo].[fn_NormalizeText](@text VARCHAR(MAX))
+RETURNS VARCHAR(MAX)
+AS
 BEGIN
-    EXEC('CREATE FUNCTION [dbo].[fn_NormalizeText](@text VARCHAR(MAX))
-    RETURNS VARCHAR(MAX)
-    AS
-    BEGIN
-        DECLARE @result VARCHAR(MAX);
-        SET @result = UPPER(LTRIM(RTRIM(ISNULL(@text, '''''))));
-        RETURN @result;
-    END');
-    PRINT 'Función fn_NormalizeText creada exitosamente';
+    DECLARE @result VARCHAR(MAX);
+    SET @result = UPPER(LTRIM(RTRIM(ISNULL(@text, ''))));
+    RETURN @result;
 END
 GO
+
+PRINT 'Función fn_NormalizeText creada exitosamente';
 
 -- =====================================================
 -- DATOS DE EJEMPLO
@@ -538,6 +540,341 @@ END
 GO
 
 -- =====================================================
+-- PROCEDIMIENTOS DE CONCILIACIÓN Y LÓGICA DE NEGOCIO
+-- =====================================================
+
+-- Procedimiento para obtener reporte de conciliación completo
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetAccessReconciliationReport')
+    DROP PROCEDURE [dbo].[sp_GetAccessReconciliationReport];
+GO
+
+CREATE PROCEDURE [dbo].[sp_GetAccessReconciliationReport]
+    @scotia_id VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Variables para almacenar resultados
+    DECLARE @emp_unit VARCHAR(100), @emp_position VARCHAR(100);
+    
+    -- Obtener datos del empleado
+    SELECT @emp_unit = unit, @emp_position = position 
+    FROM [dbo].[headcount] 
+    WHERE scotia_id = @scotia_id AND activo = 1;
+    
+    IF @emp_unit IS NULL OR @emp_position IS NULL
+    BEGIN
+        SELECT 'error' as status, 'Empleado no encontrado o inactivo' as message;
+        RETURN;
+    END
+    
+    -- Crear tabla temporal para resultados
+    CREATE TABLE #ReconciliationResults (
+        access_type VARCHAR(20),
+        app_name VARCHAR(150),
+        unit VARCHAR(100),
+        subunit VARCHAR(100),
+        position_role VARCHAR(100),
+        role_name VARCHAR(100),
+        description NVARCHAR(MAX),
+        record_date DATETIME2,
+        status VARCHAR(50)
+    );
+    
+    -- 1. Accesos actuales (del historial)
+    INSERT INTO #ReconciliationResults
+    SELECT 
+        'current' as access_type,
+        h.app_access_name as app_name,
+        h.area as unit,
+        h.subunit,
+        @emp_position as position_role,
+        a.role_name,
+        a.description,
+        h.record_date,
+        h.status
+    FROM [dbo].[historico] h
+    LEFT JOIN [dbo].[applications] a ON h.app_access_name = a.logical_access_name
+    WHERE h.scotia_id = @scotia_id
+    AND h.process_access IN ('onboarding', 'lateral_movement')
+    AND h.app_access_name IS NOT NULL
+    AND h.status IN ('Completado', 'Pendiente', 'En Proceso');
+    
+    -- 2. Accesos requeridos (de la malla de aplicaciones)
+    INSERT INTO #ReconciliationResults
+    SELECT 
+        'required' as access_type,
+        a.logical_access_name as app_name,
+        a.unit,
+        a.subunit,
+        a.position_role,
+        a.role_name,
+        a.description,
+        NULL as record_date,
+        'Required' as status
+    FROM [dbo].[applications] a
+    WHERE a.access_status = 'Activo'
+    AND a.unit = @emp_unit
+    AND a.position_role = @emp_position;
+    
+    -- 3. Calcular accesos a otorgar (requeridos - actuales)
+    INSERT INTO #ReconciliationResults
+    SELECT 
+        'to_grant' as access_type,
+        req.app_name,
+        req.unit,
+        req.subunit,
+        req.position_role,
+        req.role_name,
+        req.description,
+        NULL as record_date,
+        'To Grant' as status
+    FROM (
+        SELECT DISTINCT app_name, unit, subunit, position_role, role_name, description
+        FROM #ReconciliationResults 
+        WHERE access_type = 'required'
+    ) req
+    LEFT JOIN (
+        SELECT DISTINCT app_name
+        FROM #ReconciliationResults 
+        WHERE access_type = 'current'
+    ) curr ON req.app_name = curr.app_name
+    WHERE curr.app_name IS NULL;
+    
+    -- 4. Calcular accesos a revocar (actuales - requeridos)
+    INSERT INTO #ReconciliationResults
+    SELECT 
+        'to_revoke' as access_type,
+        curr.app_name,
+        curr.unit,
+        curr.subunit,
+        curr.position_role,
+        curr.role_name,
+        curr.description,
+        curr.record_date,
+        'To Revoke' as status
+    FROM (
+        SELECT DISTINCT app_name, unit, subunit, position_role, role_name, description, record_date
+        FROM #ReconciliationResults 
+        WHERE access_type = 'current'
+    ) curr
+    LEFT JOIN (
+        SELECT DISTINCT app_name
+        FROM #ReconciliationResults 
+        WHERE access_type = 'required'
+    ) req ON curr.app_name = req.app_name
+    WHERE req.app_name IS NULL;
+    
+    -- Retornar resultados
+    SELECT * FROM #ReconciliationResults
+    WHERE access_type IN ('current', 'to_grant', 'to_revoke')
+    ORDER BY access_type, app_name;
+    
+    -- Limpiar tabla temporal
+    DROP TABLE #ReconciliationResults;
+END
+GO
+
+PRINT 'Procedimiento sp_GetAccessReconciliationReport creado exitosamente';
+
+-- Procedimiento para procesar onboarding
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_ProcessEmployeeOnboarding')
+    DROP PROCEDURE [dbo].[sp_ProcessEmployeeOnboarding];
+GO
+
+CREATE PROCEDURE [dbo].[sp_ProcessEmployeeOnboarding]
+    @scotia_id VARCHAR(20),
+    @position VARCHAR(100),
+    @unit VARCHAR(100),
+    @responsible VARCHAR(100) = 'Sistema',
+    @subunit VARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @case_id VARCHAR(100);
+    DECLARE @records_created INT = 0;
+    
+    -- Generar case_id único
+    SET @case_id = 'CASE-' + FORMAT(GETDATE(), 'yyyyMMddHHmmssfff') + '-' + @scotia_id;
+    
+    -- Actualizar estado del empleado a activo
+    UPDATE [dbo].[headcount] 
+    SET activo = 1, inactivation_date = NULL
+    WHERE scotia_id = @scotia_id;
+    
+    -- Actualizar posición y unidad si están vacías
+    UPDATE [dbo].[headcount] 
+    SET position = @position, unit = @unit
+    WHERE scotia_id = @scotia_id 
+    AND (position IS NULL OR position = '' OR unit IS NULL OR unit = '');
+    
+    -- Obtener aplicaciones requeridas y crear registros históricos
+    INSERT INTO [dbo].[historico] (
+        scotia_id, case_id, responsible, record_date, process_access, 
+        sid, area, subunit, event_description, ticket_email, 
+        app_access_name, computer_system_type, status, general_status
+    )
+    SELECT 
+        @scotia_id,
+        @case_id,
+        @responsible,
+        GETDATE(),
+        'onboarding',
+        @scotia_id,
+        a.unit,
+        ISNULL(@subunit, a.subunit),
+        'Otorgamiento de acceso para ' + a.logical_access_name,
+        @responsible + '@empresa.com',
+        a.logical_access_name,
+        'Desktop',
+        'Pendiente',
+        'En Proceso'
+    FROM [dbo].[applications] a
+    WHERE a.access_status = 'Activo'
+    AND a.unit = @unit
+    AND a.position_role = @position
+    AND NOT EXISTS (
+        SELECT 1 FROM [dbo].[historico] h 
+        WHERE h.scotia_id = @scotia_id 
+        AND h.app_access_name = a.logical_access_name 
+        AND h.status = 'Pendiente'
+    );
+    
+    SET @records_created = @@ROWCOUNT;
+    
+    -- Retornar resultado
+    SELECT 'success' as status, 
+           'Onboarding procesado para ' + @scotia_id + '. ' + 
+           CAST(@records_created AS VARCHAR(10)) + ' accesos requeridos.' as message,
+           @records_created as records_created;
+END
+GO
+
+PRINT 'Procedimiento sp_ProcessEmployeeOnboarding creado exitosamente';
+
+-- Procedimiento para procesar offboarding
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_ProcessEmployeeOffboarding')
+    DROP PROCEDURE [dbo].[sp_ProcessEmployeeOffboarding];
+GO
+
+CREATE PROCEDURE [dbo].[sp_ProcessEmployeeOffboarding]
+    @scotia_id VARCHAR(20),
+    @responsible VARCHAR(100) = 'Sistema'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @case_id VARCHAR(100);
+    DECLARE @records_created INT = 0;
+    
+    -- Generar case_id único
+    SET @case_id = 'CASE-' + FORMAT(GETDATE(), 'yyyyMMddHHmmssfff') + '-' + @scotia_id;
+    
+    -- Actualizar estado del empleado a inactivo
+    UPDATE [dbo].[headcount] 
+    SET activo = 0, inactivation_date = GETDATE()
+    WHERE scotia_id = @scotia_id;
+    
+    -- Crear registros de offboarding para accesos activos
+    INSERT INTO [dbo].[historico] (
+        scotia_id, case_id, responsible, record_date, process_access, 
+        sid, area, subunit, event_description, ticket_email, 
+        app_access_name, computer_system_type, status, general_status
+    )
+    SELECT DISTINCT
+        @scotia_id,
+        @case_id,
+        @responsible,
+        GETDATE(),
+        'offboarding',
+        @scotia_id,
+        h.area,
+        h.subunit,
+        'Revocación de acceso para ' + h.app_access_name,
+        @responsible + '@empresa.com',
+        h.app_access_name,
+        'Desktop',
+        'Pendiente',
+        'En Proceso'
+    FROM [dbo].[historico] h
+    WHERE h.scotia_id = @scotia_id
+    AND h.process_access IN ('onboarding', 'lateral_movement')
+    AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+    AND h.app_access_name IS NOT NULL;
+    
+    SET @records_created = @@ROWCOUNT;
+    
+    -- Retornar resultado
+    SELECT 'success' as status, 
+           'Offboarding procesado para ' + @scotia_id + '. ' + 
+           CAST(@records_created AS VARCHAR(10)) + ' accesos a revocar.' as message,
+           @records_created as records_created;
+END
+GO
+
+PRINT 'Procedimiento sp_ProcessEmployeeOffboarding creado exitosamente';
+
+-- Procedimiento para obtener estadísticas de conciliación
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetReconciliationStats')
+    DROP PROCEDURE [dbo].[sp_GetReconciliationStats];
+GO
+
+CREATE PROCEDURE [dbo].[sp_GetReconciliationStats]
+    @scotia_id VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF @scotia_id IS NULL
+    BEGIN
+        -- Estadísticas globales
+        SELECT 
+            'Global' as scope,
+            (SELECT COUNT(*) FROM [dbo].[headcount] WHERE activo = 1) as empleados_activos,
+            (SELECT COUNT(*) FROM [dbo].[applications] WHERE access_status = 'Activo') as aplicaciones_activas,
+            (SELECT COUNT(*) FROM [dbo].[historico] WHERE status = 'Pendiente') as tickets_pendientes,
+            (SELECT COUNT(*) FROM [dbo].[historico] WHERE status = 'Completado') as tickets_completados,
+            (SELECT COUNT(*) FROM [dbo].[historico]) as total_historico;
+    END
+    ELSE
+    BEGIN
+        -- Estadísticas del empleado específico
+        DECLARE @current_access INT, @to_grant INT, @to_revoke INT;
+        
+        SELECT @current_access = COUNT(DISTINCT app_access_name)
+        FROM [dbo].[historico] 
+        WHERE scotia_id = @scotia_id 
+        AND process_access IN ('onboarding', 'lateral_movement')
+        AND status IN ('Completado', 'Pendiente', 'En Proceso');
+        
+        -- Usar el procedimiento de conciliación para obtener to_grant y to_revoke
+        CREATE TABLE #TempReconciliation (
+            access_type VARCHAR(20),
+            app_name VARCHAR(150)
+        );
+        
+        INSERT INTO #TempReconciliation
+        EXEC [dbo].[sp_GetAccessReconciliationReport] @scotia_id;
+        
+        SELECT @to_grant = COUNT(*) FROM #TempReconciliation WHERE access_type = 'to_grant';
+        SELECT @to_revoke = COUNT(*) FROM #TempReconciliation WHERE access_type = 'to_revoke';
+        
+        SELECT 
+            @scotia_id as scope,
+            @current_access as accesos_actuales,
+            @to_grant as accesos_a_otorgar,
+            @to_revoke as accesos_a_revocar,
+            (@current_access + @to_grant - @to_revoke) as accesos_finales;
+        
+        DROP TABLE #TempReconciliation;
+    END
+END
+GO
+
+PRINT 'Procedimiento sp_GetReconciliationStats creado exitosamente';
+
+-- =====================================================
 -- VERIFICACIÓN FINAL
 -- =====================================================
 
@@ -561,12 +898,27 @@ SELECT 'vw_to_revoke' as vista, COUNT(*) as registros FROM [dbo].[vw_to_revoke]
 UNION ALL
 SELECT 'vw_system_stats' as vista, COUNT(*) as registros FROM [dbo].[vw_system_stats];
 
+-- =====================================================
+-- ARQUITECTURA HÍBRIDA: SOLO PROCEDIMIENTOS COMPLEJOS EN SQL SERVER
+-- Las consultas simples se manejan directamente en Python
+-- =====================================================
+
+-- NOTA: Los procedimientos simples como sp_GetEmployeeById, sp_GetAllEmployees, etc.
+-- se han movido de vuelta al código Python para mantener una arquitectura híbrida
+-- que balancea la complejidad entre SQL Server y Python.
+
 PRINT '=====================================================';
 PRINT 'CONFIGURACIÓN COMPLETADA EXITOSAMENTE';
 PRINT 'Base de datos: GAMLO_Empleados';
 PRINT 'Tablas creadas: headcount, applications, historico, procesos';
 PRINT 'Vistas creadas: vw_required_apps, vw_current_access, vw_to_grant, vw_to_revoke, vw_system_stats';
-PRINT 'Procedimientos creados: sp_GetDatabaseStats, sp_GetEmployeeHistory, sp_GetApplicationsByPosition';
+PRINT 'Procedimientos básicos: sp_GetDatabaseStats, sp_GetEmployeeHistory, sp_GetApplicationsByPosition';
+PRINT 'Procedimientos de conciliación: sp_GetAccessReconciliationReport, sp_ProcessEmployeeOnboarding, sp_ProcessEmployeeOffboarding, sp_GetReconciliationStats';
 PRINT 'Función creada: fn_NormalizeText';
 PRINT 'Datos de ejemplo insertados correctamente';
+PRINT '=====================================================';
+PRINT 'ARQUITECTURA HÍBRIDA IMPLEMENTADA:';
+PRINT '  - Consultas simples: Manejadas directamente en Python';
+PRINT '  - Lógica compleja: Procedimientos almacenados en SQL Server';
+PRINT '  - Balance óptimo entre flexibilidad y rendimiento';
 PRINT '=====================================================';

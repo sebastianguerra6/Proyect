@@ -4,14 +4,9 @@ Servicio para gestionar la lógica de negocio entre las tablas:
 - applications (aplicaciones y accesos)
 - historico (historial de procesos)
 
-Cambios clave:
-- Reconciliación estricta por (unit, subunit, position_role, logical_access_name).
-- Nuevas utilidades para construir claves de acceso y comparar conjuntos.
-- get_employee_history ahora trae unit/subunit/position_role de la app para poder comparar correctamente.
-- process_lateral_movement y get_access_reconciliation_report usan la clave completa para decidir mantener/quitar/otorgar.
+Sistema optimizado para SQL Server únicamente.
 """
 import pyodbc
-import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import sys
@@ -19,14 +14,7 @@ import os
 
 # Importar configuración
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from config import is_sql_server, get_database_connection
-
-# Agregar el directorio database al path para SQLite
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
-try:
-    from database_manager import DatabaseManager
-except ImportError:
-    DatabaseManager = None
+from config import get_database_connection
 
 
 class AccessManagementService:
@@ -58,17 +46,9 @@ class AccessManagementService:
             (logical_access_name or '').strip().upper(),
         )
 
-    def __init__(self, use_sql_server=None):
-        if use_sql_server is None:
-            use_sql_server = is_sql_server()
-        
-        if use_sql_server:
-            self.db_manager = get_database_connection()
-        else:
-            if DatabaseManager:
-                self.db_manager = DatabaseManager()
-            else:
-                raise ImportError("DatabaseManager no está disponible para SQLite")
+    def __init__(self):
+        """Inicializa el servicio con conexión a SQL Server"""
+        self.db_manager = get_database_connection()
         self._ensure_views_and_indexes()
 
     def get_connection(self) -> pyodbc.Connection:
@@ -76,252 +56,24 @@ class AccessManagementService:
         return self.db_manager.get_connection()
 
     def _ensure_views_and_indexes(self):
-        """Asegura que existan las vistas e índices necesarios (idempotente)"""
+        """Asegura que existan los índices necesarios para SQL Server"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # Eliminar vistas existentes si hay problemas
-            views_to_drop = ['vw_to_revoke', 'vw_to_grant', 'vw_current_access', 'vw_required_apps']
-            for view in views_to_drop:
-                try:
-                    cursor.execute(f"DROP VIEW IF EXISTS {view}")
-                except:
-                    pass  # Ignorar errores si la vista no existe
-            
-            # Crear índices adicionales para optimizar las consultas
-            if is_sql_server():
-                # Sintaxis SQL Server
-                indexes = [
-                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_applications_unit_position' AND object_id = OBJECT_ID('applications')) CREATE INDEX idx_applications_unit_position ON applications (unit, position_role)",
-                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_scotia_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_scotia_status ON historico (scotia_id, status)",
-                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_process_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_process_status ON historico (process_access, status)",
-                    "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_headcount_unit_position' AND object_id = OBJECT_ID('headcount')) CREATE INDEX idx_headcount_unit_position ON headcount (unit, position)"
-                ]
-            else:
-                # Sintaxis SQLite
-                indexes = [
-                    "CREATE INDEX IF NOT EXISTS idx_applications_unit_position ON applications (unit, position_role)",
-                    "CREATE INDEX IF NOT EXISTS idx_historico_scotia_status ON historico (scotia_id, status)",
-                    "CREATE INDEX IF NOT EXISTS idx_historico_process_status ON historico (process_access, status)",
-                    "CREATE INDEX IF NOT EXISTS idx_headcount_unit_position ON headcount (unit, position)"
-                ]
+            # Crear índices para optimizar las consultas (sintaxis SQL Server)
+            indexes = [
+                "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_applications_unit_position' AND object_id = OBJECT_ID('applications')) CREATE INDEX idx_applications_unit_position ON applications (unit, position_role)",
+                "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_scotia_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_scotia_status ON historico (scotia_id, status)",
+                "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_historico_process_status' AND object_id = OBJECT_ID('historico')) CREATE INDEX idx_historico_process_status ON historico (process_access, status)",
+                "IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_headcount_unit_position' AND object_id = OBJECT_ID('headcount')) CREATE INDEX idx_headcount_unit_position ON headcount (unit, position)"
+            ]
             
             for index_sql in indexes:
-                cursor.execute(index_sql)
-            
-            # Crear vista para aplicaciones requeridas por (unit, position)
-            if is_sql_server():
-                # Sintaxis SQL Server
-                cursor.execute('''
-                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_required_apps')
-                    CREATE VIEW vw_required_apps AS
-                    SELECT 
-                        h.scotia_id,
-                        h.unit,
-                        h.position,
-                        a.logical_access_name,
-                        a.subunit,
-                        a.position_role,
-                        a.role_name,
-                        a.system_owner,
-                        a.access_type,
-                        a.category,
-                        a.description
-                    FROM headcount h
-                    INNER JOIN (
-                        SELECT DISTINCT
-                            logical_access_name,
-                            unit,
-                            position_role,
-                            subunit,
-                            role_name,
-                            system_owner,
-                            access_type,
-                            category,
-                            description
-                        FROM applications
-                        WHERE access_status = 'Activo'
-                    ) a ON 
-                        UPPER(LTRIM(RTRIM(h.unit))) = UPPER(LTRIM(RTRIM(a.unit))) AND
-                        UPPER(LTRIM(RTRIM(h.position))) = UPPER(LTRIM(RTRIM(a.position_role)))
-                    WHERE h.activo = 1
-                    GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.position, a.subunit, a.position_role, 
-                             a.role_name, a.system_owner, a.access_type, a.category, a.description
-                ''')
-            else:
-                # Sintaxis SQLite
-                cursor.execute('''
-                    CREATE VIEW IF NOT EXISTS vw_required_apps AS
-                    SELECT 
-                        h.scotia_id,
-                        h.unit,
-                        h.position,
-                        a.logical_access_name,
-                        a.subunit,
-                        a.position_role,
-                        a.role_name,
-                        a.system_owner,
-                        a.access_type,
-                        a.category,
-                        a.description
-                    FROM headcount h
-                    INNER JOIN (
-                        SELECT DISTINCT
-                            logical_access_name,
-                            unit,
-                            position_role,
-                            subunit,
-                            role_name,
-                            system_owner,
-                            access_type,
-                            category,
-                            description
-                        FROM applications
-                        WHERE access_status = 'Activo'
-                    ) a ON 
-                        UPPER(TRIM(h.unit)) = UPPER(TRIM(a.unit)) AND
-                        UPPER(TRIM(h.position)) = UPPER(TRIM(a.position_role))
-                    WHERE h.activo = 1
-                    GROUP BY h.scotia_id, a.logical_access_name
-                    ORDER BY h.scotia_id, a.logical_access_name
-                ''')
-            
-            # Crear vista para accesos actuales (completados y pendientes)
-            if is_sql_server():
-                # Sintaxis SQL Server
-                cursor.execute('''
-                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_current_access')
-                    CREATE VIEW vw_current_access AS
-                    SELECT 
-                        h.scotia_id,
-                        head.unit,
-                        head.position,
-                        h.app_access_name as logical_access_name,
-                        h.area as subunit,
-                        head.position as position_role,
-                        h.record_date,
-                        h.status
-                    FROM historico h
-                    INNER JOIN headcount head ON h.scotia_id = head.scotia_id
-                    WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
-                    AND h.process_access IN ('onboarding', 'lateral_movement')
-                    AND head.activo = 1
-                    AND h.app_access_name IS NOT NULL
-                    GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.area, h.record_date, h.status
-                ''')
-            else:
-                # Sintaxis SQLite
-                cursor.execute('''
-                    CREATE VIEW IF NOT EXISTS vw_current_access AS
-                    SELECT 
-                        h.scotia_id,
-                        head.unit,
-                        head.position,
-                        h.app_access_name as logical_access_name,
-                        h.area as subunit,
-                        head.position as position_role,
-                        h.record_date,
-                        h.status
-                    FROM historico h
-                    INNER JOIN headcount head ON h.scotia_id = head.scotia_id
-                    WHERE h.status IN ('Completado', 'Pendiente', 'En Proceso', 'Cancelado', 'Rechazado')
-                    AND h.process_access IN ('onboarding', 'lateral_movement')
-                    AND head.activo = 1
-                    AND h.app_access_name IS NOT NULL
-                    GROUP BY h.scotia_id, h.app_access_name
-                    ORDER BY h.scotia_id, h.app_access_name
-                ''')
-            
-            # Crear vista para deltas: accesos por otorgar
-            if is_sql_server():
-                # Sintaxis SQL Server
-                cursor.execute('''
-                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_to_grant')
-                    CREATE VIEW vw_to_grant AS
-                    SELECT 
-                        req.scotia_id,
-                        req.unit,
-                        req.position,
-                        req.logical_access_name,
-                        req.subunit,
-                        req.position_role,
-                        'onboarding' as process_type
-                    FROM vw_required_apps req
-                    LEFT JOIN vw_current_access curr ON 
-                        req.scotia_id = curr.scotia_id AND
-                        UPPER(LTRIM(RTRIM(req.logical_access_name))) = UPPER(LTRIM(RTRIM(curr.logical_access_name))) AND
-                        UPPER(LTRIM(RTRIM(req.unit))) = UPPER(LTRIM(RTRIM(curr.unit))) AND
-                        UPPER(LTRIM(RTRIM(req.position))) = UPPER(LTRIM(RTRIM(curr.position)))
-                    WHERE curr.scotia_id IS NULL
-                ''')
-            else:
-                # Sintaxis SQLite
-                cursor.execute('''
-                    CREATE VIEW IF NOT EXISTS vw_to_grant AS
-                    SELECT 
-                        req.scotia_id,
-                        req.unit,
-                        req.position,
-                        req.logical_access_name,
-                        req.subunit,
-                        req.position_role,
-                        'onboarding' as process_type
-                    FROM vw_required_apps req
-                    LEFT JOIN vw_current_access curr ON 
-                        req.scotia_id = curr.scotia_id AND
-                        UPPER(TRIM(req.logical_access_name)) = UPPER(TRIM(curr.logical_access_name)) AND
-                        UPPER(TRIM(req.unit)) = UPPER(TRIM(curr.unit)) AND
-                        UPPER(TRIM(req.position)) = UPPER(TRIM(curr.position))
-                    WHERE curr.scotia_id IS NULL
-                    ORDER BY req.scotia_id, req.logical_access_name
-                ''')
-            
-            # Crear vista para deltas: accesos por revocar
-            if is_sql_server():
-                # Sintaxis SQL Server
-                cursor.execute('''
-                    IF NOT EXISTS (SELECT * FROM sys.views WHERE name = 'vw_to_revoke')
-                    CREATE VIEW vw_to_revoke AS
-                    SELECT 
-                        curr.scotia_id,
-                        curr.unit,
-                        curr.position,
-                        curr.logical_access_name,
-                        curr.subunit,
-                        curr.position_role,
-                        curr.record_date,
-                        'offboarding' as process_type
-                    FROM vw_current_access curr
-                    LEFT JOIN vw_required_apps req ON 
-                        curr.scotia_id = req.scotia_id AND
-                        UPPER(LTRIM(RTRIM(curr.logical_access_name))) = UPPER(LTRIM(RTRIM(req.logical_access_name))) AND
-                        UPPER(LTRIM(RTRIM(curr.unit))) = UPPER(LTRIM(RTRIM(req.unit))) AND
-                        UPPER(LTRIM(RTRIM(curr.position))) = UPPER(LTRIM(RTRIM(req.position)))
-                    WHERE req.scotia_id IS NULL
-                ''')
-            else:
-                # Sintaxis SQLite
-                cursor.execute('''
-                    CREATE VIEW IF NOT EXISTS vw_to_revoke AS
-                    SELECT 
-                        curr.scotia_id,
-                        curr.unit,
-                        curr.position,
-                        curr.logical_access_name,
-                        curr.subunit,
-                        curr.position_role,
-                        curr.record_date,
-                        'offboarding' as process_type
-                    FROM vw_current_access curr
-                    LEFT JOIN vw_required_apps req ON 
-                        curr.scotia_id = req.scotia_id AND
-                        UPPER(TRIM(curr.logical_access_name)) = UPPER(TRIM(req.logical_access_name)) AND
-                        UPPER(TRIM(curr.unit)) = UPPER(TRIM(req.unit)) AND
-                        UPPER(TRIM(curr.position)) = UPPER(TRIM(req.position))
-                    WHERE req.scotia_id IS NULL
-                    ORDER BY curr.scotia_id, curr.logical_access_name
-                ''')
+                try:
+                    cursor.execute(index_sql)
+                except Exception as e:
+                    print(f"Advertencia: No se pudo crear índice: {e}")
             
             conn.commit()
             conn.close()
@@ -379,13 +131,13 @@ class AccessManagementService:
 
             return True, f"Empleado {employee_data.get('scotia_id')} creado exitosamente"
 
-        except sqlite3.IntegrityError:
+        except pyodbc.IntegrityError:
             return False, f"Error de integridad: El empleado {employee_data.get('scotia_id')} ya existe"
         except Exception as e:
             return False, f"Error creando empleado: {str(e)}"
 
     def get_employee_by_id(self, scotia_id: str) -> Optional[Dict[str, Any]]:
-        """Obtiene un empleado por su scotia_id"""
+        """Obtiene un empleado por su scotia_id usando consulta directa"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -407,7 +159,7 @@ class AccessManagementService:
             return None
 
     def get_all_employees(self) -> List[Dict[str, Any]]:
-        """Obtiene todos los empleados activos"""
+        """Obtiene todos los empleados activos usando consulta directa"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -529,39 +281,28 @@ class AccessManagementService:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            # Construir condiciones WHERE con normalización
-            where_conditions = [
-                "UPPER(TRIM(position_role)) = UPPER(TRIM(?))",
-                "UPPER(TRIM(unit)) = UPPER(TRIM(?))"
-            ]
-            params = [position, unit]
-
-            if subunit is not None and subunit != '':
-                where_conditions.append("UPPER(TRIM(subunit)) = UPPER(TRIM(?))")
+            # Construir consulta dinámicamente
+            query = 'SELECT logical_access_name, jurisdiction, unit, subunit, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method FROM applications WHERE 1=1'
+            params = []
+            
+            if unit:
+                query += ' AND UPPER(LTRIM(RTRIM(unit))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(unit)
+            
+            if subunit:
+                query += ' AND UPPER(LTRIM(RTRIM(subunit))) = UPPER(LTRIM(RTRIM(?)))'
                 params.append(subunit)
-
-            if title is not None and title != '':
-                where_conditions.append("UPPER(TRIM(role_name)) = UPPER(TRIM(?))")
+            
+            if position:
+                query += ' AND UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(position)
+            
+            if title:
+                query += ' AND UPPER(LTRIM(RTRIM(role_name))) = UPPER(LTRIM(RTRIM(?)))'
                 params.append(title)
-
-            # Query principal con deduplicación por tripleta normalizada
-            query = f"""
-                SELECT 
-                    a.logical_access_name, a.jurisdiction, a.unit, a.subunit, 
-                    a.alias, a.path_email_url, a.position_role, a.exception_tracking, 
-                    a.fulfillment_action, a.system_owner, a.role_name, a.access_type, 
-                    a.category, a.additional_data, a.ad_code, a.access_status, 
-                    a.last_update_date, a.require_licensing, a.description, 
-                    a.authentication_method
-                FROM applications a
-                WHERE {' AND '.join(where_conditions)}
-                GROUP BY 
-                    UPPER(TRIM(a.unit)), 
-                    UPPER(TRIM(a.position_role)), 
-                    UPPER(TRIM(a.logical_access_name))
-                ORDER BY a.logical_access_name
-            """
-
+            
+            query += ' ORDER BY logical_access_name'
+            
             cursor.execute(query, params)
 
             rows = cursor.fetchall()
@@ -636,77 +377,45 @@ class AccessManagementService:
             if not app_data.get('logical_access_name'):
                 return False, "Campo requerido faltante: logical_access_name"
 
-            # Usar OUTPUT INSERTED.id para SQL Server o lastrowid para SQLite
-            if is_sql_server():
-                cursor.execute('''
-                    INSERT INTO applications 
-                    (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
-                     exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
-                     category, additional_data, ad_code, access_status, last_update_date, 
-                     require_licensing, description, authentication_method)
-                    OUTPUT INSERTED.id
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    app_data.get('jurisdiction'),
-                    app_data.get('unit'),
-                    app_data.get('subunit'),
-                    app_data.get('logical_access_name'),
-                    app_data.get('alias'),
-                    app_data.get('path_email_url'),
-                    app_data.get('position_role'),
-                    app_data.get('exception_tracking'),
-                    app_data.get('fulfillment_action'),
-                    app_data.get('system_owner'),
-                    app_data.get('role_name'),
-                    app_data.get('access_type'),
-                    app_data.get('category'),
-                    app_data.get('additional_data'),
-                    app_data.get('ad_code'),
-                    app_data.get('access_status', 'Activo'),
-                    datetime.now().isoformat(),
-                    app_data.get('require_licensing'),
-                    app_data.get('description'),
-                    app_data.get('authentication_method')
-                ))
-                app_id = cursor.fetchone()[0]
-            else:
-                cursor.execute('''
-                    INSERT INTO applications 
-                    (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
-                     exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
-                     category, additional_data, ad_code, access_status, last_update_date, 
-                     require_licensing, description, authentication_method)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    app_data.get('jurisdiction'),
-                    app_data.get('unit'),
-                    app_data.get('subunit'),
-                    app_data.get('logical_access_name'),
-                    app_data.get('alias'),
-                    app_data.get('path_email_url'),
-                    app_data.get('position_role'),
-                    app_data.get('exception_tracking'),
-                    app_data.get('fulfillment_action'),
-                    app_data.get('system_owner'),
-                    app_data.get('role_name'),
-                    app_data.get('access_type'),
-                    app_data.get('category'),
-                    app_data.get('additional_data'),
-                    app_data.get('ad_code'),
-                    app_data.get('access_status', 'Activo'),
-                    datetime.now().isoformat(),
-                    app_data.get('require_licensing'),
-                    app_data.get('description'),
-                    app_data.get('authentication_method')
-                ))
-                app_id = cursor.lastrowid
+            # Usar OUTPUT INSERTED.id para SQL Server
+            cursor.execute('''
+                INSERT INTO applications 
+                (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
+                 exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
+                 category, additional_data, ad_code, access_status, last_update_date, 
+                 require_licensing, description, authentication_method)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                app_data.get('jurisdiction'),
+                app_data.get('unit'),
+                app_data.get('subunit'),
+                app_data.get('logical_access_name'),
+                app_data.get('alias'),
+                app_data.get('path_email_url'),
+                app_data.get('position_role'),
+                app_data.get('exception_tracking'),
+                app_data.get('fulfillment_action'),
+                app_data.get('system_owner'),
+                app_data.get('role_name'),
+                app_data.get('access_type'),
+                app_data.get('category'),
+                app_data.get('additional_data'),
+                app_data.get('ad_code'),
+                app_data.get('access_status', 'Activo'),
+                datetime.now().isoformat(),
+                app_data.get('require_licensing'),
+                app_data.get('description'),
+                app_data.get('authentication_method')
+            ))
+            app_id = cursor.fetchone()[0]
 
             conn.commit()
             conn.close()
 
             return True, f"Aplicación {app_data.get('logical_access_name')} creada exitosamente con ID {app_id}"
 
-        except sqlite3.IntegrityError:
+        except pyodbc.IntegrityError:
             return False, "Error de integridad: La aplicación ya existe"
         except Exception as e:
             return False, f"Error creando aplicación: {str(e)}"
@@ -717,8 +426,9 @@ class AccessManagementService:
             conn = self.get_connection()
             cursor = conn.cursor()
 
-            cursor.execute('SELECT id FROM applications WHERE id = ?', (app_id,))
-            if not cursor.fetchone():
+            cursor.execute('SELECT COUNT(*) FROM applications WHERE id = ?', (app_id,))
+            result = cursor.fetchone()
+            if not result or result[0] == 0:
                 return False, f"Aplicación con ID {app_id} no encontrada"
 
             set_clauses = []
@@ -917,10 +627,10 @@ class AccessManagementService:
                 SELECT 
                     h.*, 
                     a.logical_access_name AS app_logical_access_name,
-                    a.description         AS app_description,
-                    a.unit                AS app_unit,
-                    a.subunit             AS app_subunit,
-                    a.position_role       AS app_position_role
+                    a.description AS app_description,
+                    a.unit AS app_unit,
+                    a.subunit AS app_subunit,
+                    a.position_role AS app_position_role
                 FROM historico h
                 LEFT JOIN (
                     SELECT 
@@ -994,8 +704,9 @@ class AccessManagementService:
             cursor = conn.cursor()
             
             # Verificar que el empleado existe
-            cursor.execute('SELECT scotia_id FROM headcount WHERE scotia_id = ?', (scotia_id,))
-            if not cursor.fetchone():
+            cursor.execute('SELECT COUNT(*) FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            result = cursor.fetchone()
+            if not result or result[0] == 0:
                 conn.close()
                 return False, f"Empleado {scotia_id} no encontrado"
             
@@ -1003,14 +714,14 @@ class AccessManagementService:
             if active:
                 cursor.execute('''
                     UPDATE headcount 
-                    SET activo = TRUE, inactivation_date = NULL
+                    SET activo = 1, inactivation_date = NULL
                     WHERE scotia_id = ?
                 ''', (scotia_id,))
                 status_text = "activo"
             else:
                 cursor.execute('''
                     UPDATE headcount 
-                    SET activo = FALSE, inactivation_date = ?
+                    SET activo = 0, inactivation_date = ?
                     WHERE scotia_id = ?
                 ''', (datetime.now().isoformat(), scotia_id))
                 status_text = "inactivo"
@@ -1467,10 +1178,7 @@ class AccessManagementService:
                 
                 # Si se proporciona app_access_name, eliminar solo ese registro específico
                 if app_access_name:
-                    cursor.execute(
-                        "SELECT id FROM historico WHERE scotia_id = ? AND case_id = ? AND app_access_name = ?",
-                        (scotia_id, case_id, app_access_name)
-                    )
+                    cursor.execute('SELECT id FROM historico WHERE scotia_id = ? AND case_id = ? AND app_access_name = ?', (scotia_id, case_id, app_access_name))
                     
                     if not cursor.fetchone():
                         return False
@@ -1482,10 +1190,7 @@ class AccessManagementService:
                     )
                 else:
                     # Si no se proporciona app_access_name, eliminar solo el primer registro encontrado
-                    cursor.execute(
-                        "SELECT id FROM historico WHERE scotia_id = ? AND case_id = ? LIMIT 1",
-                        (scotia_id, case_id)
-                    )
+                    cursor.execute('SELECT TOP 1 id FROM historico WHERE scotia_id = ? AND case_id = ?', (scotia_id, case_id))
                     
                     if not cursor.fetchone():
                         return False
@@ -1613,11 +1318,10 @@ class AccessManagementService:
                     COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
                     COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos,
                     COUNT(CASE WHEN position IS NOT NULL AND position != '' THEN 1 END) as con_posicion,
-                    COUNT(CASE WHEN unit IS NOT NULL AND unit != '' THEN 1 END) as con_unidad,
                     COUNT(CASE WHEN start_date IS NOT NULL AND start_date != '' THEN 1 END) as con_fecha_inicio,
-                    COUNT(CASE WHEN inactivation_date IS NOT NULL THEN 1 END) as con_fecha_inactivacion,
-                    COUNT(DISTINCT unit) as unidades_unicas,
-                    COUNT(DISTINCT position) as puestos_unicos
+                    COUNT(CASE WHEN manager IS NOT NULL AND manager != '' THEN 1 END) as con_manager,
+                    COUNT(CASE WHEN senior_manager IS NOT NULL AND senior_manager != '' THEN 1 END) as con_senior_manager,
+                    COUNT(CASE WHEN inactivation_date IS NOT NULL THEN 1 END) as con_fecha_inactivacion
                 FROM headcount
             ''')
             stats['generales'] = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
@@ -1746,9 +1450,7 @@ class AccessManagementService:
                     COUNT(CASE WHEN h.status = 'Pendiente' THEN 1 END) as pendientes,
                     COUNT(CASE WHEN h.status = 'En Proceso' THEN 1 END) as en_proceso,
                     COUNT(CASE WHEN h.status = 'Cancelado' THEN 1 END) as cancelados,
-                    COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados,
-                    COUNT(DISTINCT h.scotia_id) as empleados_unicos,
-                    COUNT(DISTINCT h.app_access_name) as aplicaciones_unicas
+                    COUNT(CASE WHEN h.status = 'Rechazado' THEN 1 END) as rechazados
                 FROM historico h
             ''')
             stats['generales'] = dict(zip([col[0] for col in cursor.description], cursor.fetchone()))
@@ -1856,32 +1558,22 @@ class AccessManagementService:
             # Verificar si ya hay registros pendientes para este empleado
             conn = self.get_connection()
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT COUNT(*) FROM historico 
-                WHERE scotia_id = ? AND status = 'Pendiente'
-            ''', (scotia_id,))
+            cursor.execute('SELECT COUNT(*) FROM historico WHERE scotia_id = ? AND status = \'Pendiente\'', (scotia_id,))
             existing_pending = cursor.fetchone()[0]
             
             if existing_pending > 0:
                 conn.close()
                 return False, f"Ya existen {existing_pending} registros pendientes para {scotia_id}. Complete los procesos pendientes antes de crear nuevos.", {'granted': 0, 'revoked': 0}
             
-            conn = self.get_connection()
-            cursor = conn.cursor()
+            # Obtener reporte de conciliación usando el procedimiento almacenado
+            reconciliation_report = self.get_access_reconciliation_report(scotia_id)
             
-            # Obtener accesos por otorgar desde la vista
-            cursor.execute('''
-                SELECT * FROM vw_to_grant 
-                WHERE scotia_id = ?
-            ''', (scotia_id,))
-            to_grant_rows = cursor.fetchall()
+            if not reconciliation_report.get('success', False):
+                return False, reconciliation_report.get('message', 'Error obteniendo reporte de conciliación'), {'granted': 0, 'revoked': 0}
             
-            # Obtener accesos por revocar desde la vista
-            cursor.execute('''
-                SELECT * FROM vw_to_revoke 
-                WHERE scotia_id = ?
-            ''', (scotia_id,))
-            to_revoke_rows = cursor.fetchall()
+            data = reconciliation_report.get('data', {})
+            to_grant = data.get('to_grant', [])
+            to_revoke = data.get('to_revoke', [])
             
             # Contadores
             granted_count = 0
@@ -1890,73 +1582,59 @@ class AccessManagementService:
             # Generar un solo case_id para todo el proceso
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             
-            # Deduplicar accesos por otorgar por logical_access_name
-            to_grant_unique = {}
-            for row in to_grant_rows:
-                columns = [description[0] for description in cursor.description]
-                access_data = dict(zip(columns, row))
-                app_name = access_data.get('logical_access_name')
-                if app_name and app_name not in to_grant_unique:
-                    to_grant_unique[app_name] = access_data
+            # Procesar accesos por otorgar
+            for access_data in to_grant:
+                app_name = access_data.get('app_name', '')
+                if app_name:
+                    # Crear registro histórico para otorgamiento
+                    record_data = {
+                        'scotia_id': scotia_id,
+                        'case_id': case_id,
+                        'responsible': responsable,
+                        'process_access': 'onboarding',
+                        'sid': scotia_id,
+                        'area': access_data.get('unit', ''),
+                        'subunit': access_data.get('subunit', ''),
+                        'event_description': f"Otorgamiento automático de acceso para {app_name}",
+                        'ticket_email': f"{responsable}@empresa.com",
+                        'app_access_name': app_name,
+                        'computer_system_type': 'Desktop',
+                        'status': 'Pendiente',
+                        'general_status': 'En Proceso'
+                    }
+                    
+                    success, message = self.create_historical_record(record_data)
+                    if success:
+                        granted_count += 1
+                    else:
+                        print(f"Error creando registro de otorgamiento: {message}")
             
-            # Procesar accesos por otorgar (ya deduplicados)
-            for app_name, access_data in to_grant_unique.items():
-                # Crear registro histórico para otorgamiento
-                record_data = {
-                    'scotia_id': scotia_id,
-                    'case_id': case_id,
-                    'responsible': responsable,
-                    'process_access': 'onboarding',
-                    'sid': scotia_id,
-                    'area': access_data.get('unit', ''),
-                    'subunit': access_data.get('subunit', ''),
-                    'event_description': f"Otorgamiento automático de acceso para {app_name}",
-                    'ticket_email': f"{responsable}@empresa.com",
-                    'app_access_name': app_name,
-                    'computer_system_type': 'Desktop',
-                    'status': 'Pendiente',
-                    'general_status': 'En Proceso'
-                }
-                
-                success, message = self.create_historical_record(record_data)
-                if success:
-                    granted_count += 1
-                else:
-                    print(f"Error creando registro de otorgamiento: {message}")
-            
-            # Deduplicar accesos por revocar por logical_access_name
-            to_revoke_unique = {}
-            for row in to_revoke_rows:
-                columns = [description[0] for description in cursor.description]
-                access_data = dict(zip(columns, row))
-                app_name = access_data.get('logical_access_name')
-                if app_name and app_name not in to_revoke_unique:
-                    to_revoke_unique[app_name] = access_data
-            
-            # Procesar accesos por revocar (ya deduplicados)
-            for app_name, access_data in to_revoke_unique.items():
-                # Crear registro histórico para revocación
-                record_data = {
-                    'scotia_id': scotia_id,
-                    'case_id': case_id,
-                    'responsible': responsable,
-                    'process_access': 'offboarding',
-                    'sid': scotia_id,
-                    'area': access_data.get('unit', ''),
-                    'subunit': access_data.get('subunit', ''),
-                    'event_description': f"Revocación automática de acceso para {app_name}",
-                    'ticket_email': f"{responsable}@empresa.com",
-                    'app_access_name': app_name,
-                    'computer_system_type': 'Desktop',
-                    'status': 'Pendiente',
-                    'general_status': 'En Proceso'
-                }
-                
-                success, message = self.create_historical_record(record_data)
-                if success:
-                    revoked_count += 1
-                else:
-                    print(f"Error creando registro de revocación: {message}")
+            # Procesar accesos por revocar
+            for access_data in to_revoke:
+                app_name = access_data.get('app_name', '')
+                if app_name:
+                    # Crear registro histórico para revocación
+                    record_data = {
+                        'scotia_id': scotia_id,
+                        'case_id': case_id,
+                        'responsible': responsable,
+                        'process_access': 'offboarding',
+                        'sid': scotia_id,
+                        'area': access_data.get('unit', ''),
+                        'subunit': access_data.get('subunit', ''),
+                        'event_description': f"Revocación automática de acceso para {app_name}",
+                        'ticket_email': f"{responsable}@empresa.com",
+                        'app_access_name': app_name,
+                        'computer_system_type': 'Desktop',
+                        'status': 'Pendiente',
+                        'general_status': 'En Proceso'
+                    }
+                    
+                    success, message = self.create_historical_record(record_data)
+                    if success:
+                        revoked_count += 1
+                    else:
+                        print(f"Error creando registro de revocación: {message}")
             
             conn.close()
             
@@ -1967,6 +1645,96 @@ class AccessManagementService:
             
         except Exception as e:
             return False, f"Error en assign_accesses: {str(e)}", {'granted': 0, 'revoked': 0}
+
+    def get_access_reconciliation_report(self, scotia_id: str) -> Dict[str, Any]:
+        """Obtiene el reporte de conciliación de accesos para un empleado usando procedimiento almacenado"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Ejecutar procedimiento almacenado
+            cursor.execute("EXEC sp_GetAccessReconciliationReport ?", (scotia_id,))
+            results = cursor.fetchall()
+            
+            if not results:
+                return {
+                    'success': False,
+                    'message': f'No se encontraron datos para el empleado {scotia_id}',
+                    'data': {}
+                }
+            
+            # Verificar si hay error
+            first_row = results[0]
+            if len(first_row) >= 2 and first_row[0] == 'error':
+                return {
+                    'success': False,
+                    'message': first_row[1],
+                    'data': {}
+                }
+            
+            # Procesar resultados
+            current_access = []
+            to_grant = []
+            to_revoke = []
+            
+            for row in results:
+                access_type = row[0]
+                app_name = row[1]
+                unit = row[2]
+                subunit = row[3]
+                position_role = row[4]
+                role_name = row[5]
+                description = row[6]
+                record_date = row[7]
+                status = row[8]
+                
+                access_data = {
+                    'app_name': app_name,
+                    'unit': unit,
+                    'subunit': subunit,
+                    'position_role': position_role,
+                    'role_name': role_name,
+                    'description': description,
+                    'status': status
+                }
+                
+                if access_type == 'current':
+                    access_data['date'] = record_date
+                    current_access.append(access_data)
+                elif access_type == 'to_grant':
+                    to_grant.append(access_data)
+                elif access_type == 'to_revoke':
+                    access_data['date'] = record_date
+                    to_revoke.append(access_data)
+            
+            # Obtener información del empleado
+            employee = self.get_employee_by_id(scotia_id)
+            
+            conn.close()
+            
+            return {
+                'success': True,
+                'message': f'Reporte de conciliación generado para {scotia_id}',
+                'data': {
+                    'employee': employee,
+                    'current_access': current_access,
+                    'to_grant': to_grant,
+                    'to_revoke': to_revoke,
+                    'summary': {
+                        'current_count': len(current_access),
+                        'to_grant_count': len(to_grant),
+                        'to_revoke_count': len(to_revoke),
+                        'final_count': len(current_access) + len(to_grant) - len(to_revoke)
+                    }
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error generando reporte de conciliación: {str(e)}',
+                'data': {}
+            }
 
 
 # Instancia global del servicio

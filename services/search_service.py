@@ -1,23 +1,24 @@
 """
 Servicio de búsqueda para el sistema de gestión de empleados
+Sistema optimizado para SQL Server únicamente
 """
-import sqlite3
+import pyodbc
 from typing import List, Dict, Any, Optional
 import sys
 import os
 
-# Agregar el directorio database al path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
-from database_manager import DatabaseManager
+# Agregar el directorio padre al path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from config import get_database_connection
 
 
 class SearchService:
     """Servicio para realizar búsquedas en la base de datos"""
     
     def __init__(self):
-        self.db_manager = DatabaseManager()
+        self.db_manager = get_database_connection()
     
-    def get_connection(self) -> sqlite3.Connection:
+    def get_connection(self) -> pyodbc.Connection:
         """Obtiene una conexión a la base de datos"""
         return self.db_manager.get_connection()
     

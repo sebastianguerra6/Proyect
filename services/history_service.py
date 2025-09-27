@@ -1,20 +1,20 @@
 """
 Servicio de historial para registrar tickets de conciliación
+Sistema optimizado para SQL Server únicamente
 """
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
-# Importaciones actualizadas para usar la nueva estructura
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'database'))
-from database_manager import DatabaseManager
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from config import get_database_connection
 
 
 class HistoryService:
     """Servicio para manejar el historial de accesos"""
     
     def __init__(self):
-        self.db_manager = DatabaseManager()
+        self.db_manager = get_database_connection()
     
     def register_reconciliation_tickets(self, 
                                      reconciliation_data: Dict[str, Any],
