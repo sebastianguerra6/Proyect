@@ -8,7 +8,7 @@ Sistema optimizado para SQL Server únicamente.
 """
 import pyodbc
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import os
 
@@ -693,6 +693,65 @@ class AccessManagementService:
             print(f"Error obteniendo accesos actuales del empleado: {e}")
             return []
 
+    def get_employee_current_position_access(self, scotia_id: str) -> List[Dict[str, Any]]:
+        """Obtiene solo los accesos de la posición actual del empleado"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Primero obtener la posición actual del empleado
+            cursor.execute('''
+                SELECT unit, position FROM headcount 
+                WHERE scotia_id = ? AND activo = 1
+            ''', (scotia_id,))
+            
+            emp_data = cursor.fetchone()
+            if not emp_data:
+                return []
+            
+            current_unit, current_position = emp_data
+
+            # Obtener accesos que coincidan con la posición actual
+            cursor.execute('''
+                SELECT DISTINCT
+                    h.scotia_id,
+                    h.area as unit,
+                    h.subunit,
+                    h.app_access_name as logical_access_name,
+                    h.record_date,
+                    h.status,
+                    h.process_access,
+                    h.event_description,
+                    a.position_role,
+                    a.role_name,
+                    a.description
+                FROM historico h
+                LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
+                WHERE h.scotia_id = ?
+                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff')
+                AND h.app_access_name IS NOT NULL
+                AND (
+                    -- Accesos de la posición actual
+                    (a.unit = ? AND a.position_role = ?)
+                    OR
+                    -- Accesos flex staff (temporales)
+                    h.process_access = 'flex_staff'
+                )
+                ORDER BY h.record_date DESC
+            ''', (scotia_id, current_unit, current_position))
+
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            current_access = [dict(zip(columns, row)) for row in rows]
+
+            conn.close()
+            return current_access
+
+        except Exception as e:
+            print(f"Error obteniendo accesos de posición actual: {e}")
+            return []
+
     # ==============================
     # MÉTODOS DE LÓGICA DE NEGOCIO
     # ==============================
@@ -898,32 +957,31 @@ class AccessManagementService:
             new_mesh_apps = self.get_applications_by_position(new_position, new_unit, subunit=new_subunit)
             
             # Crear índices para comparación más inteligente
+            # Usar solo logical_access_name para la comparación, ya que el mismo acceso puede tener diferentes roles entre posiciones
             current_apps_by_name = {}
             for acc in current_access:
-                app_name = acc.get('logical_access_name', '')
-                unit = acc.get('unit', '')
-                key = f"{app_name}_{unit}"
-                current_apps_by_name[key] = acc
+                app_name = acc.get('logical_access_name', '').strip().upper()
+                if app_name:  # Solo agregar si tiene nombre
+                    current_apps_by_name[app_name] = acc
             
             new_apps_by_name = {}
             for app in new_mesh_apps:
-                app_name = app.get('logical_access_name', '')
-                unit = app.get('unit', '')
-                key = f"{app_name}_{unit}"
-                new_apps_by_name[key] = app
+                app_name = app.get('logical_access_name', '').strip().upper()
+                if app_name:  # Solo agregar si tiene nombre
+                    new_apps_by_name[app_name] = app
 
             # Calcular qué revocar y qué otorgar
             to_revoke = []
             to_grant = []
             
-            # Revocar accesos de la posición anterior que no están en la nueva posición
-            for key, acc in current_apps_by_name.items():
-                if key not in new_apps_by_name:
+            # Revocar accesos de la posición anterior que NO están en la nueva posición
+            for app_name, acc in current_apps_by_name.items():
+                if app_name not in new_apps_by_name:
                     to_revoke.append(acc)
             
             # Otorgar accesos de la nueva posición que no tiene actualmente
-            for key, app in new_apps_by_name.items():
-                if key not in current_apps_by_name:
+            for app_name, app in new_apps_by_name.items():
+                if app_name not in current_apps_by_name:
                     to_grant.append(app)
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
@@ -976,12 +1034,202 @@ class AccessManagementService:
             if not success:
                 return False, f"Error actualizando posición: {message}", []
 
-            return True, (
-                f"Movimiento lateral procesado para {scotia_id}. "
-                f"{len(to_revoke)} accesos revocados (posición anterior), {len(to_grant)} accesos otorgados (nueva posición)."), created_records
+            # Crear mensaje detallado
+            revoke_details = []
+            if to_revoke:
+                revoke_details = [acc.get('logical_access_name', '') for acc in to_revoke]
+            
+            grant_details = []
+            if to_grant:
+                grant_details = [app.get('logical_access_name', '') for app in to_grant]
+            
+            message = f"Movimiento lateral procesado para {scotia_id}.\n"
+            message += f"- Accesos revocados ({len(to_revoke)}): {', '.join(revoke_details) if revoke_details else 'Ninguno'}\n"
+            message += f"- Accesos otorgados ({len(to_grant)}): {', '.join(grant_details) if grant_details else 'Ninguno'}\n"
+            message += f"- Accesos mantenidos: {len(current_apps_by_name) - len(to_revoke)}"
+
+            return True, message, created_records
 
         except Exception as e:
             return False, f"Error procesando movimiento lateral: {str(e)}", []
+
+    def process_flex_staff_assignment(self, scotia_id: str, temporary_position: str, temporary_unit: str, 
+                                    temporary_subunit: Optional[str] = None, duration_days: Optional[int] = None,
+                                    responsible: str = "Sistema") -> Tuple[bool, str, List[Dict[str, Any]]]:
+        """Procesa una asignación de flex staff: otorga accesos temporales sin revocar los originales.
+        
+        Lógica de flex staff:
+        - MANTIENE todos los accesos de la posición original
+        - OTORGA accesos adicionales de la posición temporal
+        - Marca los accesos temporales con fecha de expiración
+        - NO revoca ningún acceso existente
+        """
+        try:
+            employee = self.get_employee_by_id(scotia_id)
+            if not employee:
+                return False, f"Empleado {scotia_id} no encontrado", []
+
+            original_position = (employee.get('position') or '').strip()
+            original_unit = (employee.get('unit') or '').strip()
+
+            # Obtener accesos actuales del empleado (posición original)
+            current_access = self.get_employee_current_access(scotia_id)
+            
+            # Obtener accesos requeridos para la posición temporal
+            temp_mesh_apps = self.get_applications_by_position(temporary_position, temporary_unit, subunit=temporary_subunit)
+            
+            # Crear índices para comparación
+            current_apps_by_name = {}
+            for acc in current_access:
+                app_name = acc.get('logical_access_name', '').strip().upper()
+                if app_name:
+                    current_apps_by_name[app_name] = acc
+            
+            temp_apps_by_name = {}
+            for app in temp_mesh_apps:
+                app_name = app.get('logical_access_name', '').strip().upper()
+                if app_name:
+                    temp_apps_by_name[app_name] = app
+
+            # Calcular qué accesos temporales otorgar (solo los que no tiene)
+            to_grant_temp = []
+            for app_name, app in temp_apps_by_name.items():
+                if app_name not in current_apps_by_name:
+                    to_grant_temp.append(app)
+
+            case_id = f"FLEX-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
+            created_records = []
+
+            # OTORGAR accesos temporales de la nueva posición
+            for app in to_grant_temp:
+                # Calcular fecha de expiración si se especifica duración
+                expiration_date = None
+                if duration_days:
+                    expiration_date = datetime.now().replace(hour=23, minute=59, second=59) + timedelta(days=duration_days)
+                
+                record_data = {
+                    'scotia_id': scotia_id,
+                    'case_id': case_id,
+                    'responsible': responsible,
+                    'process_access': 'flex_staff',
+                    'sid': scotia_id,
+                    'area': app.get('unit', ''),
+                    'subunit': app.get('subunit', ''),
+                    'event_description': f"Otorgamiento temporal de acceso para {app.get('logical_access_name', '')} (flex staff - {temporary_position})",
+                    'ticket_email': f"{responsible}@empresa.com",
+                    'app_access_name': app.get('logical_access_name', ''),
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso',
+                    'expiration_date': expiration_date.isoformat() if expiration_date else None
+                }
+                ok, _ = self.create_historical_record(record_data)
+                if ok:
+                    created_records.append(record_data)
+
+            # Crear mensaje detallado
+            grant_details = [app.get('logical_access_name', '') for app in to_grant_temp]
+            maintained_count = len(current_apps_by_name)
+            
+            message = f"Asignación flex staff procesada para {scotia_id}.\n"
+            message += f"- Posición original: {original_position} ({original_unit})\n"
+            message += f"- Posición temporal: {temporary_position} ({temporary_unit})\n"
+            message += f"- Accesos originales mantenidos: {maintained_count}\n"
+            message += f"- Accesos temporales otorgados ({len(to_grant_temp)}): {', '.join(grant_details) if grant_details else 'Ninguno'}\n"
+            if duration_days:
+                message += f"- Duración: {duration_days} días\n"
+                message += f"- Fecha de expiración: {expiration_date.strftime('%Y-%m-%d') if expiration_date else 'No especificada'}"
+
+            return True, message, created_records
+
+        except Exception as e:
+            return False, f"Error procesando asignación flex staff: {str(e)}", []
+
+    def process_flex_staff_return(self, scotia_id: str, responsible: str = "Sistema") -> Tuple[bool, str, List[Dict[str, Any]]]:
+        """Procesa el retorno de flex staff: revoca solo los accesos temporales.
+        
+        Lógica de retorno:
+        - REVOCA solo accesos marcados como 'flex_staff'
+        - MANTIENE todos los accesos de la posición original
+        - Restaura la posición original del empleado
+        """
+        try:
+            employee = self.get_employee_by_id(scotia_id)
+            if not employee:
+                return False, f"Empleado {scotia_id} no encontrado", []
+
+            # Obtener accesos temporales (flex_staff) del empleado
+            temp_access = self.get_employee_flex_staff_access(scotia_id)
+            
+            case_id = f"RETURN-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
+            created_records = []
+
+            # REVOCAR accesos temporales
+            for acc in temp_access:
+                record_data = {
+                    'scotia_id': scotia_id,
+                    'case_id': case_id,
+                    'responsible': responsible,
+                    'process_access': 'flex_staff_return',
+                    'sid': scotia_id,
+                    'area': acc.get('unit', ''),
+                    'subunit': acc.get('subunit', ''),
+                    'event_description': f"Revocación de acceso temporal para {acc.get('logical_access_name', '')} (retorno flex staff)",
+                    'ticket_email': f"{responsible}@empresa.com",
+                    'app_access_name': acc.get('logical_access_name', ''),
+                    'computer_system_type': 'Desktop',
+                    'status': 'Pendiente',
+                    'general_status': 'En Proceso'
+                }
+                ok, _ = self.create_historical_record(record_data)
+                if ok:
+                    created_records.append(record_data)
+
+            # Crear mensaje detallado
+            revoke_details = [acc.get('logical_access_name', '') for acc in temp_access]
+            
+            message = f"Retorno flex staff procesado para {scotia_id}.\n"
+            message += f"- Accesos temporales revocados ({len(temp_access)}): {', '.join(revoke_details) if revoke_details else 'Ninguno'}\n"
+            message += f"- Accesos originales mantenidos: Todos los de la posición original"
+
+            return True, message, created_records
+
+        except Exception as e:
+            return False, f"Error procesando retorno flex staff: {str(e)}", []
+
+    def get_employee_flex_staff_access(self, scotia_id: str) -> List[Dict[str, Any]]:
+        """Obtiene los accesos temporales (flex_staff) de un empleado"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT
+                    h.app_access_name as logical_access_name,
+                    h.area as unit,
+                    h.subunit,
+                    h.event_description,
+                    h.record_date,
+                    h.status,
+                    h.expiration_date
+                FROM historico h
+                WHERE h.scotia_id = ?
+                AND h.process_access = 'flex_staff'
+                AND h.app_access_name IS NOT NULL
+                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                ORDER BY h.app_access_name
+            ''', (scotia_id,))
+            
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            access_list = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
+            return access_list
+            
+        except Exception as e:
+            print(f"Error obteniendo accesos flex staff: {e}")
+            return []
 
     def get_access_reconciliation_report(self, scotia_id: str) -> Dict[str, Any]:
         """Genera un reporte de conciliación mejorado que maneja mejor los cambios de posición."""

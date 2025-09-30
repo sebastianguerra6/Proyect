@@ -7,7 +7,7 @@ from PIL import Image, ImageTk
 
 from services import export_service, history_service, access_service, search_service
 from ui import (CamposGeneralesFrame, OnboardingFrame, OffboardingFrame, 
-                LateralMovementFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
+                LateralMovementFrame, FlexStaffFrame, EdicionBusquedaFrame, CreacionPersonaFrame)
 from ui.styles import aplicar_estilos_personalizados
 
 
@@ -286,7 +286,7 @@ class AppEmpleadosRefactorizada:
                  style="Normal.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
         
         # Opciones de proceso
-        opciones = [("Onboarding", "onboarding"), ("Offboarding", "offboarding"), ("Lateral Movement", "lateral")]
+        opciones = [("Onboarding", "onboarding"), ("Offboarding", "offboarding"), ("Lateral Movement", "lateral"), ("Flex Staff", "flex_staff")]
         for i, (texto, valor) in enumerate(opciones):
             ttk.Radiobutton(seleccion_frame, text=texto, variable=self.tipo_proceso_var, 
                            value=valor, command=self.cambiar_pestana).grid(row=i+1, column=0, pady=8, sticky="ew")
@@ -315,7 +315,8 @@ class AppEmpleadosRefactorizada:
             frame_classes = {
                 'onboarding': OnboardingFrame,
                 'offboarding': OffboardingFrame,
-                'lateral': LateralMovementFrame
+                'lateral': LateralMovementFrame,
+                'flex_staff': FlexStaffFrame
             }
             
             if tipo in frame_classes:
@@ -490,6 +491,25 @@ class AppEmpleadosRefactorizada:
                 
                 if success:
                     messagebox.showinfo("Éxito", f"Movimiento lateral procesado exitosamente.\n{message}")
+                    self.limpiar_campos()
+                else:
+                    messagebox.showerror("Error", message)
+                    
+            elif tipo_proceso == 'flex_staff':
+                # Procesar asignación flex staff
+                datos_flex = self.componentes.get('flex_staff', {}).obtener_datos() if 'flex_staff' in self.componentes else {}
+                
+                success, message, records = access_service.process_flex_staff_assignment(
+                    scotia_id,
+                    datos_generales.get('nuevo_cargo', ''),
+                    datos_generales.get('nueva_sub_unidad', ''),
+                    datos_generales.get('nueva_sub_unidad', ''),  # subunit
+                    datos_flex.get('duracion_dias'),
+                    "Sistema"
+                )
+                
+                if success:
+                    messagebox.showinfo("Éxito", f"Asignación flex staff procesada exitosamente.\n{message}")
                     self.limpiar_campos()
                 else:
                     messagebox.showerror("Error", message)
@@ -1228,29 +1248,25 @@ class ConciliacionFrame:
                 messagebox.showerror("Error", f"Empleado {sid} no encontrado")
                 return
             
-            # Obtener historial completo
-            historial = access_service.get_employee_history(sid)
+            # Obtener solo accesos de la posición actual
+            accesos_actuales = access_service.get_employee_current_position_access(sid)
             
-            # Filtrar solo registros de onboarding y lateral_movement
-            accesos_actuales = []
-            for h in historial:
-                if h.get('process_access') in ('onboarding', 'lateral_movement'):
-                    hist_unit = h.get('app_unit') or h.get('area', '')
-                    hist_position = h.get('app_position_role') or h.get('position', '')
-                    hist_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
-                    
-                    if hist_name:  # Solo incluir si tiene nombre de aplicación
-                        accesos_actuales.append({
-                            'app_name': hist_name,
-                            'unit': hist_unit,
-                            'position': hist_position,
-                            'process': h.get('process_access', ''),
-                            'date': h.get('date', ''),
-                            'description': h.get('description', '')
-                        })
+            # Formatear datos para la ventana
+            accesos_formateados = []
+            for acceso in accesos_actuales:
+                accesos_formateados.append({
+                    'app_name': acceso.get('logical_access_name', ''),
+                    'unit': acceso.get('unit', ''),
+                    'position': acceso.get('position_role', ''),
+                    'process': acceso.get('process_access', ''),
+                    'date': acceso.get('record_date', ''),
+                    'description': acceso.get('event_description', ''),
+                    'status': acceso.get('status', ''),
+                    'role': acceso.get('role_name', '')
+                })
             
             # Crear ventana de accesos actuales
-            self._crear_ventana_accesos_actuales(sid, empleado, accesos_actuales)
+            self._crear_ventana_accesos_actuales(sid, empleado, accesos_formateados)
             
         except Exception as e:
             messagebox.showerror("Error", f"Error obteniendo accesos actuales: {str(e)}")
@@ -1280,9 +1296,20 @@ class ConciliacionFrame:
         ttk.Label(header_frame, text=empleado.get('unit', 'N/A'), 
                  font=("Arial", 10)).grid(row=1, column=1, sticky="w", padx=(10, 0))
         
-        ttk.Label(header_frame, text="💼 Posición:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="w")
+        ttk.Label(header_frame, text="💼 Posición Actual:", font=("Arial", 10, "bold")).grid(row=2, column=0, sticky="w")
         ttk.Label(header_frame, text=empleado.get('position', 'N/A'), 
-                 font=("Arial", 10)).grid(row=2, column=1, sticky="w", padx=(10, 0))
+                 font=("Arial", 10, "bold"), foreground="blue").grid(row=2, column=1, sticky="w", padx=(10, 0))
+        
+        # Información adicional sobre accesos
+        accesos_principales = [a for a in accesos_actuales if a.get('process') != 'flex_staff']
+        accesos_flex = [a for a in accesos_actuales if a.get('process') == 'flex_staff']
+        
+        ttk.Label(header_frame, text="📋 Accesos:", font=("Arial", 10, "bold")).grid(row=3, column=0, sticky="w")
+        info_text = f"Posición actual: {len(accesos_principales)}"
+        if accesos_flex:
+            info_text += f" | Flex staff: {len(accesos_flex)}"
+        ttk.Label(header_frame, text=info_text, 
+                 font=("Arial", 10)).grid(row=3, column=1, sticky="w", padx=(10, 0))
         
         # Separador
         ttk.Separator(ventana, orient='horizontal').grid(row=1, column=0, sticky="ew", padx=10)

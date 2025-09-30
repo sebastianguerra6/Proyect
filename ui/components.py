@@ -310,6 +310,102 @@ class LateralMovementFrame:
         for var in self.variables.values():
             var.set("")
 
+class FlexStaffFrame:
+    """Componente para la pestaña de flex staff"""
+    
+    def __init__(self, parent):
+        self.parent = parent
+        self.variables = {}
+        self._crear_variables()
+        self._crear_widgets()
+    
+    def _crear_variables(self):
+        """Crea las variables de control"""
+        self.variables = {
+            'tipo_flex_staff': tk.StringVar(),
+            'duracion_dias': tk.StringVar(),
+            'otro_tipo': tk.StringVar()
+        }
+    
+    def _crear_widgets(self):
+        """Crea los widgets de la interfaz"""
+        self.frame = ttk.Frame(self.parent)
+        self.frame.columnconfigure(0, weight=1)
+        self.frame.rowconfigure(0, weight=1)
+        
+        # Centrar el contenido
+        main_container = ttk.Frame(self.frame)
+        main_container.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        main_container.columnconfigure(1, weight=1)
+        
+        # Título
+        ttk.Label(main_container, text="Información de Flex Staff", 
+                  style="Section.TLabel").pack(pady=(0, 20))
+        
+        # Frame para campos
+        campos_frame = ttk.Frame(main_container)
+        campos_frame.pack(fill=tk.BOTH, expand=True)
+        campos_frame.columnconfigure(1, weight=1)
+        
+        # Tipo de flex staff
+        ttk.Label(campos_frame, text="Tipo de Asignación:", style="Subsection.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+        
+        opciones_flex = ["Apoyo Temporal", "Proyecto Específico", "Cobertura de Vacaciones", "Capacitación Cruzada"]
+        for i, opcion in enumerate(opciones_flex):
+            ttk.Radiobutton(campos_frame, text=opcion, 
+                           variable=self.variables['tipo_flex_staff'], 
+                           value=opcion).grid(row=1+i, column=0, columnspan=2, sticky="ew", pady=5)
+        
+        # Opción Other
+        other_row = 1 + len(opciones_flex)
+        other_frame = ttk.Frame(campos_frame)
+        other_frame.grid(row=other_row, column=0, columnspan=2, sticky="ew", pady=5)
+        
+        ttk.Radiobutton(other_frame, text="Other:", 
+                       variable=self.variables['tipo_flex_staff'], 
+                       value="other").pack(side=tk.LEFT)
+        
+        ttk.Entry(other_frame, textvariable=self.variables['otro_tipo'], 
+                 width=30).pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Duración
+        duracion_row = other_row + 1
+        ttk.Label(campos_frame, text="Duración (días):", style="Subsection.TLabel").grid(
+            row=duracion_row, column=0, sticky=tk.W, pady=(20, 5))
+        
+        duracion_entry = ttk.Entry(campos_frame, textvariable=self.variables['duracion_dias'], 
+                                  width=10)
+        duracion_entry.grid(row=duracion_row, column=1, sticky=tk.W, pady=(20, 5))
+        
+        # Información adicional
+        info_row = duracion_row + 1
+        info_text = ("Nota: Flex Staff mantiene accesos de su posición original\n"
+                    "y recibe accesos adicionales de la posición temporal.")
+        ttk.Label(campos_frame, text=info_text, style="Info.TLabel").grid(
+            row=info_row, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
+    
+    def obtener_datos(self):
+        """Obtiene los datos de los campos"""
+        datos = {name: var.get() for name, var in self.variables.items()}
+        
+        # Si se seleccionó "other", usar el valor del campo de texto
+        if datos['tipo_flex_staff'] == 'other':
+            datos['tipo_flex_staff'] = datos['otro_tipo']
+        
+        # Convertir duración a entero si es posible
+        try:
+            datos['duracion_dias'] = int(datos['duracion_dias']) if datos['duracion_dias'] else None
+        except ValueError:
+            datos['duracion_dias'] = None
+        
+        return datos
+    
+    def limpiar(self):
+        """Limpia todos los campos"""
+        for var in self.variables.values():
+            var.set("")
+
 class EdicionBusquedaFrame:
     """Componente para la pestaña de edición y búsqueda de registros"""
     

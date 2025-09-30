@@ -56,7 +56,8 @@ def aplicar_estilos_personalizados():
     estilos_labels = {
         'Title.TLabel': {'font': ('Arial', 20, 'bold'), 'foreground': '#d32f2f'},
         'Section.TLabel': {'font': ('Arial', 18, 'bold'), 'foreground': '#c62828'},
-        'Subsection.TLabel': {'font': ('Arial', 14, 'bold'), 'foreground': '#b71c1c'}
+        'Subsection.TLabel': {'font': ('Arial', 14, 'bold'), 'foreground': '#b71c1c'},
+        'Info.TLabel': {'font': ('Arial', 10, 'italic'), 'foreground': '#7f8c8d'}
     }
     
     for nombre, config in estilos_labels.items():
