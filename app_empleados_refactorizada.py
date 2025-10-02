@@ -92,41 +92,6 @@ class AppEmpleadosRefactorizada:
         # Footer con logo GAMLO (abajo a la izquierda)
         self.crear_footer_con_logo(self.main_frame)
     
-    def crear_logo_gamlo(self, parent):
-        """Crea el logo de GAMLO en la esquina izquierda"""
-        try:
-            # Intentar cargar imagen del logo
-            logo_path = os.path.join("images", "gamlo_logo.png")
-            if os.path.exists(logo_path):
-                # Cargar imagen real
-                image = Image.open(logo_path)
-                image = image.resize((64, 64), Image.Resampling.LANCZOS)
-                self.logo_photo = ImageTk.PhotoImage(image)
-                logo_label = ttk.Label(parent, image=self.logo_photo)
-            else:
-                # Crear logo de texto si no hay imagen
-                logo_label = ttk.Label(parent, text="GAMLO", 
-                                     font=("Arial", 16, "bold"),
-                                     foreground="#2E86AB",
-                                     background="#F8F9FA")
-                # Crear un frame con borde para simular un logo
-                logo_frame = ttk.Frame(parent, style="Logo.TFrame")
-                logo_frame.grid(row=0, column=0, padx=(0, 10), pady=5)
-                logo_label = ttk.Label(logo_frame, text="GAMLO", 
-                                     font=("Arial", 14, "bold"),
-                                     foreground="#2E86AB")
-                logo_label.pack(padx=10, pady=10)
-                return
-            
-            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
-            
-        except Exception as e:
-            # Fallback: crear logo de texto si hay error
-            logo_label = ttk.Label(parent, text="GAMLO", 
-                                 font=("Arial", 14, "bold"),
-                                 foreground="#2E86AB")
-            logo_label.grid(row=0, column=0, padx=(0, 10), pady=5)
-    
     def crear_footer_con_logo(self, parent):
         """Crea el footer con el logo GAMLO en la parte inferior izquierda"""
         # Frame para el footer
@@ -323,11 +288,10 @@ class AppEmpleadosRefactorizada:
                 self.componentes[tipo] = frame_classes[tipo](self.notebook)
                 self.pestanas_dinamicas[tipo] = self.componentes[tipo].frame
             else:
-                self._crear_pestana_fallback(f"Error: Tipo {tipo} no soportado")
+                print(f"Error: Tipo {tipo} no soportado")
                 
         except Exception as e:
             print(f"Error creando pestaña {tipo}: {e}")
-            self._crear_pestana_fallback(f"Error cargando {tipo}")
     
 
     
@@ -341,7 +305,6 @@ class AppEmpleadosRefactorizada:
         botones_info = [
             ("💾 Guardar", self.guardar_datos, "Success.TButton"),
             ("🧹 Limpiar", self.limpiar_campos, "Info.TButton"),
-            ("📊 Estadísticas", self.mostrar_estadisticas, "Warning.TButton"),
             ("🚪 Salir", self.root.quit, "Danger.TButton")
         ]
         
@@ -445,6 +408,11 @@ class AppEmpleadosRefactorizada:
                 messagebox.showerror("Error", "El SID es obligatorio")
                 return
             
+            # Obtener responsable del formulario
+            responsable = datos_generales.get('ingreso_por', 'Sistema')
+            if not responsable:
+                responsable = 'Sistema'
+            
             # Procesar según el tipo de proceso usando la nueva estructura
             if tipo_proceso == 'onboarding':
                 # Para onboarding, solo procesamos los accesos (el empleado debe existir previamente)
@@ -462,7 +430,8 @@ class AppEmpleadosRefactorizada:
                 success, message, records = access_service.process_employee_onboarding(
                     scotia_id, 
                     datos_generales.get('nuevo_cargo', ''), 
-                    datos_generales.get('nueva_sub_unidad', '')
+                    datos_generales.get('nueva_sub_unidad', ''),
+                    responsable
                 )
                 
                 if success:
@@ -473,7 +442,7 @@ class AppEmpleadosRefactorizada:
                     
             elif tipo_proceso == 'offboarding':
                 # Procesar offboarding
-                success, message, records = access_service.process_employee_offboarding(scotia_id)
+                success, message, records = access_service.process_employee_offboarding(scotia_id, responsable)
                 
                 if success:
                     messagebox.showinfo("Éxito", f"Offboarding procesado exitosamente.\n{message}")
@@ -486,7 +455,8 @@ class AppEmpleadosRefactorizada:
                 success, message, records = access_service.process_lateral_movement(
                     scotia_id,
                     datos_generales.get('nuevo_cargo', ''),
-                    datos_generales.get('nueva_sub_unidad', '')
+                    datos_generales.get('nueva_sub_unidad', ''),
+                    responsable
                 )
                 
                 if success:
@@ -501,11 +471,11 @@ class AppEmpleadosRefactorizada:
                 
                 success, message, records = access_service.process_flex_staff_assignment(
                     scotia_id,
-                    datos_generales.get('nuevo_cargo', ''),
-                    datos_generales.get('nueva_sub_unidad', ''),
-                    datos_generales.get('nueva_sub_unidad', ''),  # subunit
-                    datos_flex.get('duracion_dias'),
-                    "Sistema"
+                    datos_generales.get('nuevo_cargo', ''),  # temporary_position
+                    datos_generales.get('nueva_sub_unidad', ''),  # temporary_unit
+                    datos_generales.get('nueva_sub_unidad', ''),  # temporary_subunit
+                    datos_flex.get('duracion_dias'),  # duration_days
+                    responsable  # responsible
                 )
                 
                 if success:
@@ -544,24 +514,6 @@ class AppEmpleadosRefactorizada:
         except Exception as e:
             print(f"Error en limpiar_campos: {e}")
     
-    def mostrar_estadisticas(self):
-        """Muestra estadísticas de los datos almacenados usando la nueva estructura"""
-        try:
-            estadisticas = access_service.db_manager.get_database_stats()
-            
-            mensaje = "Estadísticas del Sistema (Nueva Estructura):\n\n"
-            mensaje += f"Empleados en Headcount: {estadisticas.get('headcount', 0)}\n"
-            mensaje += f"Empleados Activos: {estadisticas.get('empleados_activos', 0)}\n"
-            mensaje += f"Aplicaciones Registradas: {estadisticas.get('applications', 0)}\n"
-            mensaje += f"Aplicaciones Activas: {estadisticas.get('aplicaciones_activas', 0)}\n"
-            mensaje += f"Registros en Histórico: {estadisticas.get('historico', 0)}\n"
-            
-            messagebox.showinfo("Estadísticas", mensaje)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error obteniendo estadísticas: {str(e)}")
-            print(f"Error en mostrar_estadisticas: {e}")
-
 class ConciliacionFrame:
     """Frame simplificado para la conciliación de accesos"""
     
@@ -636,16 +588,12 @@ class ConciliacionFrame:
         botones_frame.grid(row=0, column=0, pady=(0, 15), sticky="ew")
         botones_frame.columnconfigure(0, weight=1)
         botones_frame.columnconfigure(1, weight=1)
-        botones_frame.columnconfigure(2, weight=1)
         
         ttk.Button(botones_frame, text="📤 Exportar Excel", 
                   command=self._exportar_excel, style="Warning.TButton").grid(row=0, column=0, padx=(0, 5), sticky="ew")
         
         ttk.Button(botones_frame, text="👁️ Ver Accesos Actuales", 
-                  command=self._ver_accesos_actuales, style="Success.TButton").grid(row=0, column=1, padx=5, sticky="ew")
-        
-        ttk.Button(botones_frame, text="🔍 Debug", 
-                  command=self.debug_conciliacion, style="Info.TButton").grid(row=0, column=2, padx=(5, 0), sticky="ew")
+                  command=self._ver_accesos_actuales, style="Success.TButton").grid(row=0, column=1, padx=(5, 0), sticky="ew")
         
         # Panel de estadísticas resumidas
         self._crear_panel_estadisticas(acciones_frame)
@@ -660,28 +608,30 @@ class ConciliacionFrame:
         columns = ('Acceso', 'Unidad', 'Subunidad', 'Posición', 'Rol', 'Estado', 'Acción')
         self.tree_resultados = ttk.Treeview(resultados_frame, columns=columns, show='headings', height=8)
         
-        # Configurar columnas con anchos específicos
+        # Configurar columnas con anchos específicos y minwidth
         column_widths = {
-            'Acceso': 150,
-            'Unidad': 100,
-            'Subunidad': 100,
-            'Posición': 120,
-            'Rol': 100,
-            'Estado': 80,
-            'Acción': 80
+            'Acceso': 200,
+            'Unidad': 150,
+            'Subunidad': 150,
+            'Posición': 150,
+            'Rol': 120,
+            'Estado': 100,
+            'Acción': 100
         }
         
         for col in columns:
             self.tree_resultados.heading(col, text=col)
-            self.tree_resultados.column(col, width=column_widths.get(col, 120), anchor="center")
+            self.tree_resultados.column(col, width=column_widths.get(col, 120), minwidth=100, anchor="center")
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree_resultados.yview)
-        self.tree_resultados.configure(yscrollcommand=scrollbar.set)
+        # Scrollbars (vertical y horizontal)
+        vsb = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree_resultados.yview)
+        hsb = ttk.Scrollbar(resultados_frame, orient="horizontal", command=self.tree_resultados.xview)
+        self.tree_resultados.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
         # Grid
         self.tree_resultados.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
         
         # Mensaje inicial
         self.tree_resultados.insert('', 'end', values=('', '', '', '', '', 'Sin datos', ''))
@@ -731,24 +681,19 @@ class ConciliacionFrame:
                     return
             
             # Usar el nuevo servicio de conciliación
-            print(f"DEBUG: Obteniendo reporte de conciliación para {sid}")
             reporte = access_service.get_access_reconciliation_report(sid)
             
             if "error" in reporte:
-                print(f"DEBUG: Error en conciliación: {reporte['error']}")
                 messagebox.showerror("Error", reporte["error"])
                 return
             
-            print(f"DEBUG: Reporte obtenido exitosamente")
-            print(f"DEBUG: Accesos actuales: {len(reporte.get('current_access', []))}")
-            print(f"DEBUG: Accesos a otorgar: {len(reporte.get('to_grant', []))}")
-            print(f"DEBUG: Accesos a revocar: {len(reporte.get('to_revoke', []))}")
-            
             self.resultado_conciliacion = reporte
-            print("DEBUG: Mostrando resultados en UI...")
-            self._mostrar_resultados_nuevos(reporte)
-            print("DEBUG: Resultados mostrados en UI")
-            messagebox.showinfo("Éxito", f"Conciliación completada para {sid}")
+            if reporte.get('success', False):
+                data = reporte.get('data', {})
+                self._mostrar_resultados_nuevos(data)
+                messagebox.showinfo("Éxito", f"Conciliación completada para {sid}")
+            else:
+                messagebox.showerror("Error", reporte.get('message', 'Error desconocido'))
             
         except Exception as e:
             messagebox.showerror("Error", f"Error durante la conciliación: {str(e)}")
@@ -821,17 +766,8 @@ class ConciliacionFrame:
                 
                 messagebox.showinfo("Asignación Completada", resultado_texto)
                 
-                # Debug: Verificar historial después de assign_accesses
-                print(f"DEBUG: Después de assign_accesses para {sid}")
-                history = access_service.get_employee_history(sid)
-                print(f"DEBUG: Historial tiene {len(history)} registros")
-                for i, record in enumerate(history[:3]):  # Mostrar solo los primeros 3
-                    print(f"DEBUG: {i+1}. {record.get('process_access')} - {record.get('app_access_name')} - {record.get('status')}")
-                
                 # Actualizar la conciliación para mostrar los cambios
-                print("DEBUG: Ejecutando _conciliar_accesos...")
                 self._conciliar_accesos()
-                print("DEBUG: _conciliar_accesos completado")
                 
             else:
                 messagebox.showerror("Error", f"Error en la asignación automática: {message}")
@@ -888,58 +824,88 @@ class ConciliacionFrame:
         
         # Obtener datos del reporte
         reporte = self.resultado_conciliacion
-        employee = reporte.get('employee', {})
-        current_access = reporte.get('current_access', [])
-        to_grant = reporte.get('to_grant', [])
-        to_revoke = reporte.get('to_revoke', [])
+        if reporte.get('success', False):
+            data = reporte.get('data', {})
+            employee = data.get('employee', {})
+            current_access = data.get('current_access', [])
+            to_grant = data.get('to_grant', [])
+            to_revoke = data.get('to_revoke', [])
+        else:
+            messagebox.showerror("Error", "No hay datos de conciliación para exportar")
+            return None
+        
+        # Función para agrupar accesos (misma lógica que en la tabla)
+        def agrupar_accesos_para_excel(accesos):
+            grupos = {}
+            for acceso in accesos:
+                app_name = acceso.get('app_name', '')
+                if app_name not in grupos:
+                    grupos[app_name] = {
+                        'app_name': app_name,
+                        'unit': acceso.get('unit', ''),
+                        'subunit': acceso.get('subunit', ''),
+                        'position_role': acceso.get('position_role', ''),
+                        'roles': set(),
+                        'description': acceso.get('description', '')
+                    }
+                # Agregar rol si existe
+                role_name = acceso.get('role_name', '')
+                if role_name and role_name != 'Sin rol':
+                    grupos[app_name]['roles'].add(role_name)
+            return list(grupos.values())
+        
+        # Agrupar accesos
+        current_grouped = agrupar_accesos_para_excel(current_access)
+        to_grant_grouped = agrupar_accesos_para_excel(to_grant)
+        to_revoke_grouped = agrupar_accesos_para_excel(to_revoke)
         
         # Crear DataFrame para accesos actuales
         current_df = pd.DataFrame([
             {
-                'Acceso': acceso.get('app_name', ''),
-                'Unidad': acceso.get('unit', ''),
-                'Subunidad': acceso.get('subunit', ''),
-                'Posición': acceso.get('position_role', ''),
-                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Acceso': acceso['app_name'],
+                'Unidad': acceso['unit'],
+                'Subunidad': acceso['subunit'],
+                'Posición': acceso['position_role'],
+                'Rol': ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol',
                 'Estado': '✅ Activo',
                 'Acción': 'Mantener',
-                'Descripción': acceso.get('description', '')
+                'Descripción': acceso['description']
             }
-            for acceso in current_access
+            for acceso in current_grouped
         ])
         
         # Crear DataFrame para accesos a otorgar
         grant_df = pd.DataFrame([
             {
-                'Acceso': acceso.get('app_name', ''),
-                'Unidad': acceso.get('unit', ''),
-                'Subunidad': acceso.get('subunit', ''),
-                'Posición': acceso.get('position_role', ''),
-                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Acceso': acceso['app_name'],
+                'Unidad': acceso['unit'],
+                'Subunidad': acceso['subunit'],
+                'Posición': acceso['position_role'],
+                'Rol': ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol',
                 'Estado': '❌ Faltante',
                 'Acción': '🟢 Otorgar',
-                'Descripción': acceso.get('description', '')
+                'Descripción': acceso['description']
             }
-            for acceso in to_grant
+            for acceso in to_grant_grouped
         ])
         
         # Crear DataFrame para accesos a revocar
         revoke_df = pd.DataFrame([
             {
-                'Acceso': acceso.get('app_name', ''),
-                'Unidad': acceso.get('unit', ''),
-                'Subunidad': acceso.get('subunit', ''),
-                'Posición': acceso.get('position_role', ''),
-                'Rol': acceso.get('role_name', 'Sin rol'),
+                'Acceso': acceso['app_name'],
+                'Unidad': acceso['unit'],
+                'Subunidad': acceso['subunit'],
+                'Posición': acceso['position_role'],
+                'Rol': ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol',
                 'Estado': '⚠️ Excesivo',
                 'Acción': '🔴 Revocar',
-                'Descripción': acceso.get('description', '')
+                'Descripción': acceso['description']
             }
-            for acceso in to_revoke
+            for acceso in to_revoke_grouped
         ])
         
         # Crear DataFrame de resumen
-        total_actions = len(to_grant) + len(to_revoke)
+        total_actions = len(to_grant_grouped) + len(to_revoke_grouped)
         summary_data = {
             'Métrica': [
                 'Total Accesos Activos',
@@ -949,9 +915,9 @@ class ConciliacionFrame:
                 'Estado de Conciliación'
             ],
             'Cantidad': [
-                len(current_access),
-                len(to_grant),
-                len(to_revoke),
+                len(current_grouped),
+                len(to_grant_grouped),
+                len(to_revoke_grouped),
                 total_actions,
                 '✅ Conciliado' if total_actions == 0 else '⚠️ Requiere Acción'
             ],
@@ -1017,116 +983,73 @@ class ConciliacionFrame:
         
         return filepath
     
-    def _adapt_data_for_export(self, reconciliation_data):
-        """Adapta los datos de conciliación para el formato esperado por el servicio de exportación"""
-        try:
-            employee = reconciliation_data.get('employee', {})
-            
-            # Adaptar estructura para el servicio de exportación
-            adapted = {
-                "person_info": {
-                    "sid": employee.get('scotia_id', ''),
-                    "area": employee.get('unit', ''),
-                    "subunit": employee.get('subunit', ''),
-                    "cargo": employee.get('position', '')
-                },
-                "current": reconciliation_data.get('current_access', []),
-                "target": [],  # No tenemos datos de target en la nueva estructura
-                "to_grant": self._adapt_access_list(reconciliation_data.get('to_grant', []), 'grant'),
-                "to_revoke": self._adapt_access_list(reconciliation_data.get('to_revoke', []), 'revoke')
-            }
-            
-            return adapted
-            
-        except Exception as e:
-            return reconciliation_data
-    
-    def _adapt_access_list(self, access_list, action_type):
-        """Adapta una lista de accesos para el formato de exportación"""
-        adapted_list = []
-        for access in access_list:
-            adapted_item = {
-                "sid": self.sid_var.get().strip(),
-                "app_name": access.get('app_name', ''),
-                "role_name": access.get('role_name', ''),
-                "accion": "GRANT" if action_type == 'grant' else "REVOKE",
-                "motivo": f"Acceso {'requerido' if action_type == 'grant' else 'excesivo'} para {access.get('app_name', '')}"
-            }
-            adapted_list.append(adapted_item)
-        return adapted_list
-    
-    def _mostrar_resultados(self, resultado):
-        """Muestra los resultados de conciliación en el treeview"""
-        # Limpiar treeview
-        self.tree_resultados.delete(*self.tree_resultados.get_children())
-        
-        # Mostrar accesos actuales
-        for acceso in resultado.get('current', []):
-            self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('role_name', 'Sin rol'),
-                '✅ Activo',
-                'Mantener'
-            ))
-        
-        # Mostrar accesos a otorgar
-        for acceso in resultado.get('to_grant', []):
-            self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('role_name', 'Sin rol'),
-                '❌ Faltante',
-                '🟢 Otorgar'
-            ))
-        
-        # Mostrar accesos a revocar
-        for acceso in resultado.get('to_revoke', []):
-            self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('role_name', 'Sin rol'),
-                '⚠️ Excesivo',
-                '🔴 Revocar'
-            ))
-    
     def _mostrar_resultados_nuevos(self, reporte):
         """Muestra los resultados de conciliación usando la nueva estructura con campos estrictos"""
         # Limpiar treeview
         self.tree_resultados.delete(*self.tree_resultados.get_children())
         
+        # Agrupar accesos por nombre para evitar duplicados
+        def agrupar_accesos(accesos):
+            grupos = {}
+            for acceso in accesos:
+                app_name = acceso.get('app_name', '')
+                if app_name not in grupos:
+                    grupos[app_name] = {
+                        'app_name': app_name,
+                        'unit': acceso.get('unit', ''),
+                        'subunit': acceso.get('subunit', ''),
+                        'position_role': acceso.get('position_role', ''),
+                        'roles': set(),
+                        'status': acceso.get('status', ''),
+                        'date': acceso.get('date')
+                    }
+                # Agregar rol si existe
+                role_name = acceso.get('role_name', '')
+                if role_name and role_name != 'Sin rol':
+                    grupos[app_name]['roles'].add(role_name)
+            return list(grupos.values())
+        
         # Mostrar accesos actuales
         current_access = reporte.get('current_access', [])
-        for acceso in current_access:
+        current_grouped = agrupar_accesos(current_access)
+        for acceso in current_grouped:
+            roles_text = ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol'
             self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('unit', ''),
-                acceso.get('subunit', ''),
-                acceso.get('position_role', ''),
-                acceso.get('role_name', 'Sin rol'),
+                acceso['app_name'],
+                acceso['unit'],
+                acceso['subunit'],
+                acceso['position_role'],
+                roles_text,
                 '✅ Activo',
                 'Mantener'
             ))
         
         # Mostrar accesos a otorgar
         to_grant = reporte.get('to_grant', [])
-        for acceso in to_grant:
+        to_grant_grouped = agrupar_accesos(to_grant)
+        for acceso in to_grant_grouped:
+            roles_text = ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol'
             self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('unit', ''),
-                acceso.get('subunit', ''),
-                acceso.get('position_role', ''),
-                acceso.get('role_name', 'Sin rol'),
+                acceso['app_name'],
+                acceso['unit'],
+                acceso['subunit'],
+                acceso['position_role'],
+                roles_text,
                 '❌ Faltante',
                 '🟢 Otorgar'
             ))
         
         # Mostrar accesos a revocar
         to_revoke = reporte.get('to_revoke', [])
-        for acceso in to_revoke:
+        to_revoke_grouped = agrupar_accesos(to_revoke)
+        for acceso in to_revoke_grouped:
+            roles_text = ', '.join(sorted(acceso['roles'])) if acceso['roles'] else 'Sin rol'
             self.tree_resultados.insert('', 'end', values=(
-                acceso.get('app_name', ''),
-                acceso.get('unit', ''),
-                acceso.get('subunit', ''),
-                acceso.get('position_role', ''),
-                acceso.get('role_name', 'Sin rol'),
+                acceso['app_name'],
+                acceso['unit'],
+                acceso['subunit'],
+                acceso['position_role'],
+                roles_text,
                 '⚠️ Excesivo',
                 '🔴 Revocar'
             ))
@@ -1175,65 +1098,6 @@ class ConciliacionFrame:
             self.sid_var.set(scotia_id.strip())
             self._conciliar_accesos()
     
-    def debug_conciliacion(self):
-        """Función de debug para entender por qué no aparecen datos en la conciliación"""
-        sid = self.sid_var.get().strip()
-        if not sid:
-            messagebox.showwarning("Advertencia", "Por favor ingrese un SID")
-            return
-        
-        try:
-            # Obtener información del empleado
-            empleado = access_service.get_employee_by_id(sid)
-            if not empleado:
-                messagebox.showerror("Error", f"Empleado {sid} no encontrado")
-                return
-            
-            # Obtener historial
-            historial = access_service.get_employee_history(sid)
-            
-            # Obtener aplicaciones requeridas
-            aplicaciones_requeridas = access_service.get_applications_by_position(
-                position=empleado.get('position', ''),
-                unit=empleado.get('unit', '')
-            )
-            
-            # Construir mensaje de debug
-            debug_msg = f"🔍 DEBUG CONCILIACIÓN PARA {sid}\n\n"
-            debug_msg += f"📋 EMPLEADO:\n"
-            debug_msg += f"  • Nombre: {empleado.get('full_name', 'N/A')}\n"
-            debug_msg += f"  • Unidad: {empleado.get('unit', 'N/A')}\n"
-            debug_msg += f"  • Posición: {empleado.get('position', 'N/A')}\n\n"
-            
-            debug_msg += f"📊 HISTORIAL ({len(historial)} registros):\n"
-            for i, h in enumerate(historial[:5]):  # Mostrar solo los primeros 5
-                debug_msg += f"  {i+1}. {h.get('process_access', 'N/A')} - {h.get('app_access_name', 'N/A')} - {h.get('area', 'N/A')}\n"
-            if len(historial) > 5:
-                debug_msg += f"  ... y {len(historial) - 5} más\n"
-            debug_msg += "\n"
-            
-            debug_msg += f"🎯 APLICACIONES REQUERIDAS ({len(aplicaciones_requeridas)} encontradas):\n"
-            for i, app in enumerate(aplicaciones_requeridas[:5]):  # Mostrar solo las primeras 5
-                debug_msg += f"  {i+1}. {app.get('logical_access_name', 'N/A')} - {app.get('unit', 'N/A')} - {app.get('position_role', 'N/A')}\n"
-            if len(aplicaciones_requeridas) > 5:
-                debug_msg += f"  ... y {len(aplicaciones_requeridas) - 5} más\n"
-            debug_msg += "\n"
-            
-            # Obtener reporte de conciliación
-            reporte = access_service.get_access_reconciliation_report(sid)
-            if "error" in reporte:
-                debug_msg += f"❌ ERROR EN CONCILIACIÓN: {reporte['error']}\n"
-            else:
-                debug_msg += f"✅ CONCILIACIÓN EXITOSA:\n"
-                debug_msg += f"  • Accesos actuales: {len(reporte.get('current_access', []))}\n"
-                debug_msg += f"  • Accesos a otorgar: {len(reporte.get('to_grant', []))}\n"
-                debug_msg += f"  • Accesos a revocar: {len(reporte.get('to_revoke', []))}\n"
-            
-            messagebox.showinfo("Debug Conciliación", debug_msg)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error en debug: {str(e)}")
-
     def _ver_accesos_actuales(self):
         """Muestra los accesos actuales del empleado en una ventana separada"""
         sid = self.sid_var.get().strip()
@@ -1248,21 +1112,33 @@ class ConciliacionFrame:
                 messagebox.showerror("Error", f"Empleado {sid} no encontrado")
                 return
             
-            # Obtener solo accesos de la posición actual
+            # Obtener todos los tipos de accesos actuales
             accesos_actuales = access_service.get_employee_current_position_access(sid)
             
             # Formatear datos para la ventana
             accesos_formateados = []
             for acceso in accesos_actuales:
+                # Formatear fecha
+                fecha = acceso.get('record_date', '')
+                try:
+                    if fecha:
+                        fecha_obj = datetime.fromisoformat(fecha.replace('Z', '+00:00'))
+                        fecha_formateada = fecha_obj.strftime('%d/%m/%Y %H:%M')
+                    else:
+                        fecha_formateada = 'N/A'
+                except:
+                    fecha_formateada = fecha or 'N/A'
+                
                 accesos_formateados.append({
                     'app_name': acceso.get('logical_access_name', ''),
                     'unit': acceso.get('unit', ''),
                     'position': acceso.get('position_role', ''),
                     'process': acceso.get('process_access', ''),
-                    'date': acceso.get('record_date', ''),
+                    'date': fecha_formateada,
                     'description': acceso.get('event_description', ''),
                     'status': acceso.get('status', ''),
-                    'role': acceso.get('role_name', '')
+                    'role': acceso.get('role_name', ''),
+                    'access_type': acceso.get('access_type', 'Otro')
                 })
             
             # Crear ventana de accesos actuales
@@ -1300,14 +1176,17 @@ class ConciliacionFrame:
         ttk.Label(header_frame, text=empleado.get('position', 'N/A'), 
                  font=("Arial", 10, "bold"), foreground="blue").grid(row=2, column=1, sticky="w", padx=(10, 0))
         
-        # Información adicional sobre accesos
-        accesos_principales = [a for a in accesos_actuales if a.get('process') != 'flex_staff']
-        accesos_flex = [a for a in accesos_actuales if a.get('process') == 'flex_staff']
+        # Información adicional sobre accesos por tipo
+        accesos_aplicacion = [a for a in accesos_actuales if a.get('access_type') == 'Aplicación']
+        accesos_manuales = [a for a in accesos_actuales if a.get('access_type') == 'Manual']
+        accesos_flex = [a for a in accesos_actuales if a.get('access_type') == 'Flex Staff']
         
         ttk.Label(header_frame, text="📋 Accesos:", font=("Arial", 10, "bold")).grid(row=3, column=0, sticky="w")
-        info_text = f"Posición actual: {len(accesos_principales)}"
+        info_text = f"Aplicación: {len(accesos_aplicacion)}"
+        if accesos_manuales:
+            info_text += f" | Manuales: {len(accesos_manuales)}"
         if accesos_flex:
-            info_text += f" | Flex staff: {len(accesos_flex)}"
+            info_text += f" | Flex Staff: {len(accesos_flex)}"
         ttk.Label(header_frame, text=info_text, 
                  font=("Arial", 10)).grid(row=3, column=1, sticky="w", padx=(10, 0))
         
@@ -1321,47 +1200,77 @@ class ConciliacionFrame:
         main_frame.rowconfigure(0, weight=1)
         
         # Treeview para mostrar accesos
-        columns = ('Aplicación', 'Unidad', 'Posición', 'Proceso', 'Fecha', 'Descripción')
+        columns = ('Aplicación', 'Tipo', 'Unidad', 'Posición', 'Proceso', 'Fecha', 'Descripción')
         tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
         
-        # Configurar columnas
+        # Configurar columnas con minwidth
         column_widths = {
-            'Aplicación': 150,
-            'Unidad': 100,
+            'Aplicación': 180,
+            'Tipo': 100,
+            'Unidad': 120,
             'Posición': 120,
             'Proceso': 100,
-            'Fecha': 100,
-            'Descripción': 200
+            'Fecha': 120,
+            'Descripción': 250
         }
         
         for col in columns:
             tree.heading(col, text=col)
-            tree.column(col, width=column_widths.get(col, 120), anchor="w")
+            tree.column(col, width=column_widths.get(col, 120), minwidth=100, anchor="w")
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        # Scrollbars (vertical y horizontal)
+        vsb = ttk.Scrollbar(main_frame, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(main_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
         # Grid
         tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
         
-        # Insertar datos
+        # Insertar datos con colores por tipo
         for acceso in accesos_actuales:
+            access_type = acceso.get('access_type', 'Otro')
+            
+            # Determinar tag basado en el tipo de acceso
+            if access_type == 'Aplicación':
+                tag = 'app_access'
+            elif access_type == 'Manual':
+                tag = 'manual_access'
+            elif access_type == 'Flex Staff':
+                tag = 'flex_access'
+            else:
+                tag = 'other_access'
+            
             tree.insert('', 'end', values=(
                 acceso.get('app_name', ''),
+                access_type,
                 acceso.get('unit', ''),
                 acceso.get('position', ''),
                 acceso.get('process', ''),
                 acceso.get('date', ''),
                 acceso.get('description', '')
-            ))
+            ), tags=(tag,))
         
-        # Footer con estadísticas
+        # Configurar colores de las filas
+        tree.tag_configure('app_access', background='#e8f5e8')  # Verde claro para aplicaciones
+        tree.tag_configure('manual_access', background='#fff3cd')  # Amarillo claro para manuales
+        tree.tag_configure('flex_access', background='#d1ecf1')  # Azul claro para flex staff
+        tree.tag_configure('other_access', background='#f8f9fa')  # Gris claro para otros
+        
+        # Footer con estadísticas detalladas
         footer_frame = ttk.Frame(ventana, padding="10")
         footer_frame.grid(row=3, column=0, sticky="ew")
         
-        ttk.Label(footer_frame, text=f"📊 Total de accesos actuales: {len(accesos_actuales)}", 
+        # Estadísticas por tipo
+        stats_text = f"📊 Total: {len(accesos_actuales)} | "
+        stats_text += f"🟢 Aplicación: {len(accesos_aplicacion)} | "
+        if accesos_manuales:
+            stats_text += f"🟡 Manual: {len(accesos_manuales)} | "
+        if accesos_flex:
+            stats_text += f"🔵 Flex Staff: {len(accesos_flex)}"
+        
+        ttk.Label(footer_frame, text=stats_text, 
                  font=("Arial", 10, "bold")).pack(side="left")
         
         # Botón cerrar
@@ -1878,141 +1787,6 @@ class AplicacionesFrame:
             self.db_info_label.config(text=f"Total aplicaciones: {total_apps}")
         except:
             self.db_info_label.config(text="Base de datos no disponible")
-
-
-class ApplicationManager:
-    """Clase para gestionar las aplicaciones en la base de datos"""
-    
-    def __init__(self, db_path: str = None):
-        import os
-        # Use the database file directly
-        self.db_path = db_path or os.path.join(os.path.dirname(__file__), 'database', 'empleados.db')
-    
-    def get_connection(self):
-        """Obtiene una conexión a la base de datos"""
-        if not os.path.exists(self.db_path):
-            raise FileNotFoundError(f"Base de datos no encontrada: {self.db_path}")
-        return sqlite3.connect(self.db_path)
-    
-    def get_all_applications(self) -> list:
-        """Obtiene todas las aplicaciones de la base de datos"""
-        try:    
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT id, app_name, description, category, owner, status, fecha_creacion
-                FROM applications
-                ORDER BY app_name
-            """)
-            
-            columns = [description[0] for description in cursor.description]
-            applications = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            
-            conn.close()
-            return applications
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al obtener aplicaciones: {str(e)}")
-            return []
-    
-    def add_application(self, app_name: str, description: str, category: str, owner: str) -> bool:
-        """Agrega una nueva aplicación a la base de datos"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                INSERT INTO applications (app_name, description, category, owner, status, fecha_creacion)
-                VALUES (?, ?, ?, ?, 'Activo', ?)
-            """, (app_name, description, category, owner, datetime.now().isoformat()))
-            
-            conn.commit()
-            conn.close()
-            return True
-            
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "Ya existe una aplicación con ese nombre")
-            return False
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al agregar aplicación: {str(e)}")
-            return False
-    
-    def update_application(self, app_id: int, app_name: str, description: str, category: str, owner: str, status: str) -> bool:
-        """Actualiza una aplicación existente"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                UPDATE applications 
-                SET app_name = ?, description = ?, category = ?, owner = ?, status = ?
-                WHERE id = ?
-            """, (app_name, description, category, owner, status, app_id))
-            
-            conn.commit()
-            conn.close()
-            return True
-            
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "Ya existe una aplicación con ese nombre")
-            return False
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al actualizar aplicación: {str(e)}")
-            return False
-    
-    def delete_application(self, app_id: int) -> bool:
-        """Elimina una aplicación de la base de datos"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Verificar dependencias
-            cursor.execute("SELECT COUNT(*) FROM roles WHERE app_name = (SELECT app_name FROM applications WHERE id = ?)", (app_id,))
-            roles_count = cursor.fetchone()[0]
-            
-            cursor.execute("SELECT COUNT(*) FROM procesos WHERE app_name = (SELECT app_name FROM applications WHERE id = ?)", (app_id,))
-            procesos_count = cursor.fetchone()[0]
-            
-            if roles_count > 0 or procesos_count > 0:
-                messagebox.showwarning("Advertencia", 
-                    f"No se puede eliminar la aplicación porque tiene {roles_count} roles y {procesos_count} procesos asociados.\n"
-                    "Elimine las dependencias primero o cambie el estado a 'Inactivo'.")
-                conn.close()
-                return False
-            
-            cursor.execute("DELETE FROM applications WHERE id = ?", (app_id,))
-            conn.commit()
-            conn.close()
-            return True
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al eliminar aplicación: {str(e)}")
-            return False
-    
-    def get_categories(self) -> list:
-        """Obtiene las categorías únicas de aplicaciones"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT category FROM applications ORDER BY category")
-            categories = [row[0] for row in cursor.fetchall()]
-            conn.close()
-            return categories
-        except Exception:
-            return ["RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
-    
-    def get_owners(self) -> list:
-        """Obtiene los propietarios únicos de aplicaciones"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT owner FROM applications ORDER BY owner")
-            owners = [row[0] for row in cursor.fetchall()]
-            conn.close()
-            return owners
-        except Exception:
-            return ["Admin", "RRHH", "Tecnología", "Finanzas", "Operaciones", "Marketing", "Comunicaciones"]
 
 
 class ApplicationDialog:

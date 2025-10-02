@@ -694,7 +694,7 @@ class AccessManagementService:
             return []
 
     def get_employee_current_position_access(self, scotia_id: str) -> List[Dict[str, Any]]:
-        """Obtiene solo los accesos de la posición actual del empleado"""
+        """Obtiene todos los accesos actuales del empleado: asignados por aplicación, manuales y flex staff"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -711,7 +711,7 @@ class AccessManagementService:
             
             current_unit, current_position = emp_data
 
-            # Obtener accesos que coincidan con la posición actual
+            # Obtener todos los tipos de accesos actuales
             cursor.execute('''
                 SELECT DISTINCT
                     h.scotia_id,
@@ -724,21 +724,30 @@ class AccessManagementService:
                     h.event_description,
                     a.position_role,
                     a.role_name,
-                    a.description
+                    a.description,
+                    CASE 
+                        WHEN h.process_access = 'manual_access' THEN 'Manual'
+                        WHEN h.process_access = 'flex_staff' THEN 'Flex Staff'
+                        WHEN h.process_access IN ('onboarding', 'lateral_movement') THEN 'Aplicación'
+                        ELSE 'Otro'
+                    END as access_type
                 FROM historico h
                 LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
                 WHERE h.scotia_id = ?
                 AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
-                AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff')
+                AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
                 AND (
-                    -- Accesos de la posición actual
-                    (a.unit = ? AND a.position_role = ?)
+                    -- Accesos asignados por aplicación (de la posición actual)
+                    (h.process_access IN ('onboarding', 'lateral_movement') AND a.unit = ? AND a.position_role = ?)
+                    OR
+                    -- Accesos manuales
+                    h.process_access = 'manual_access'
                     OR
                     -- Accesos flex staff (temporales)
                     h.process_access = 'flex_staff'
                 )
-                ORDER BY h.record_date DESC
+                ORDER BY h.process_access, h.record_date DESC
             ''', (scotia_id, current_unit, current_position))
 
             rows = cursor.fetchall()
@@ -749,7 +758,7 @@ class AccessManagementService:
             return current_access
 
         except Exception as e:
-            print(f"Error obteniendo accesos de posición actual: {e}")
+            print(f"Error obteniendo accesos actuales del empleado: {e}")
             return []
 
     # ==============================
@@ -1093,6 +1102,7 @@ class AccessManagementService:
 
             # Calcular qué accesos temporales otorgar (solo los que no tiene)
             to_grant_temp = []
+            
             for app_name, app in temp_apps_by_name.items():
                 if app_name not in current_apps_by_name:
                     to_grant_temp.append(app)

@@ -512,7 +512,7 @@ class EdicionBusquedaFrame:
         
         # Tabla de resultados - Actualizada para mostrar historial
         resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="nsew")
         
         # Crear Treeview para mostrar resultados del historial
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Descripción"), 
@@ -529,24 +529,26 @@ class EdicionBusquedaFrame:
         self.tree.heading("Responsable", text="Responsable")
         self.tree.heading("Descripción", text="Descripción")
         
-        # Configurar anchos de columna
-        self.tree.column("SID", width=100)
-        self.tree.column("Caso", width=120)
-        self.tree.column("Proceso", width=120)
-        self.tree.column("Aplicación", width=150)
-        self.tree.column("Estado", width=100)
-        self.tree.column("Fecha", width=120)
-        self.tree.column("Fecha Solicitud", width=120)
-        self.tree.column("Responsable", width=120)
-        self.tree.column("Descripción", width=200)
+        # Configurar anchos de columna con minwidth
+        self.tree.column("SID", width=120, minwidth=100)
+        self.tree.column("Caso", width=150, minwidth=120)
+        self.tree.column("Proceso", width=150, minwidth=120)
+        self.tree.column("Aplicación", width=200, minwidth=150)
+        self.tree.column("Estado", width=120, minwidth=100)
+        self.tree.column("Fecha", width=150, minwidth=120)
+        self.tree.column("Fecha Solicitud", width=150, minwidth=120)
+        self.tree.column("Responsable", width=150, minwidth=120)
+        self.tree.column("Descripción", width=300, minwidth=200)
         
-        # Scrollbar para la tabla
-        tree_scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+        # Scrollbars (vertical y horizontal)
+        vsb = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(resultados_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
-        # Empaquetar tabla y scrollbar
+        # Empaquetar tabla y scrollbars
         self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
         
         # Configurar grid para que la tabla se expanda
         resultados_frame.columnconfigure(0, weight=1)
@@ -1671,7 +1673,7 @@ class CreacionPersonaFrame:
         
         # Tabla de resultados
         resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="ew")
+        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="nsew")
         
         # Crear Treeview para mostrar resultados
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
@@ -1687,21 +1689,23 @@ class CreacionPersonaFrame:
         self.tree.heading("Estado", text="Estado")
         
         # Configurar anchos de columna
-        self.tree.column("SID", width=100)
-        self.tree.column("Nombre", width=120)
-        self.tree.column("Apellido", width=120)
-        self.tree.column("Email", width=200)
-        self.tree.column("Departamento", width=150)
-        self.tree.column("Cargo", width=150)
-        self.tree.column("Estado", width=100)
+        self.tree.column("SID", width=120, minwidth=100)
+        self.tree.column("Nombre", width=150, minwidth=120)
+        self.tree.column("Apellido", width=150, minwidth=120)
+        self.tree.column("Email", width=250, minwidth=200)
+        self.tree.column("Departamento", width=180, minwidth=150)
+        self.tree.column("Cargo", width=180, minwidth=150)
+        self.tree.column("Estado", width=120, minwidth=100)
         
-        # Scrollbar para la tabla
-        tree_scrollbar = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+        # Scrollbars (vertical y horizontal)
+        vsb = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(resultados_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
-        # Empaquetar tabla y scrollbar
+        # Empaquetar tabla y scrollbars
         self.tree.grid(row=0, column=0, sticky="nsew")
-        tree_scrollbar.grid(row=0, column=1, sticky="ns")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
         
         # Configurar grid para que la tabla se expanda
         resultados_frame.columnconfigure(0, weight=1)
