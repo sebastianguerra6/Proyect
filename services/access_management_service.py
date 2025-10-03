@@ -1539,14 +1539,13 @@ class AccessManagementService:
             # 6. Estadísticas por año de inicio (si hay fecha de inicio)
             cursor.execute('''
                 SELECT 
-                    SUBSTR(start_date, 1, 4) as año_inicio,
+                    YEAR(start_date) as año_inicio,
                     COUNT(*) as total_empleados,
                     COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
                     COUNT(CASE WHEN activo = 0 THEN 1 END) as inactivos
                 FROM headcount
-                WHERE start_date IS NOT NULL AND start_date != '' 
-                AND LENGTH(start_date) >= 4
-                GROUP BY SUBSTR(start_date, 1, 4)
+                WHERE start_date IS NOT NULL
+                GROUP BY YEAR(start_date)
                 ORDER BY año_inicio DESC
             ''')
             stats['por_año_inicio'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 from tkinter import messagebox
+from services.dropdown_service import dropdown_service
 
 class CamposGeneralesFrame:
     """Componente para los campos generales del empleado"""
@@ -36,19 +37,14 @@ class CamposGeneralesFrame:
         main_container.grid(row=0, column=1, sticky="ew", padx=20)  # Aumentar padx de 15 a 20
         main_container.columnconfigure(1, weight=1)
         
+        # Obtener valores únicos de la base de datos
+        dropdown_values = dropdown_service.get_all_dropdown_values()
+        
         # Campos
         campos = [
             ("SID:", "sid", "entry"),
-            ("Nueva Sub Unidad:", "nueva_sub_unidad", "combobox", [
-                "Sub Unidad 1 - Desarrollo Frontend",
-                "Sub Unidad 2 - Desarrollo Backend", 
-                "Sub Unidad 3 - DevOps e Infraestructura",
-                "Sub Unidad 4 - QA y Testing",
-                "Sub Unidad 5 - Diseño UX/UI",
-                "Sub Unidad 6 - Gestión de Proyectos",
-                "Sub Unidad 7 - Soporte Técnico"
-            ]),
-            ("Nuevo Cargo:", "nuevo_cargo", "entry"),
+            ("Nueva Sub Unidad:", "nueva_sub_unidad", "combobox", dropdown_values['units']),
+            ("Nuevo Cargo:", "nuevo_cargo", "combobox", dropdown_values['positions']),
             ("Request Date:", "request_date", "entry"),
             ("Quien hace el ingreso:", "ingreso_por", "combobox", ["Juan Pérez", "María García"]),
             ("Fecha:", "fecha", "entry"),
@@ -2319,7 +2315,13 @@ Puestos Únicos: {generales.get('puestos_unicos', 0)}
                             row=row_idx+1, column=3, padx=3, pady=1, sticky="w")
                         ttk.Label(emp_frame, text=emp.get('estado', '')[:8]).grid(
                             row=row_idx+1, column=4, padx=3, pady=1, sticky="w")
-                        ttk.Label(emp_frame, text=emp.get('start_date', '')[:10]).grid(
+                        # Formatear fecha correctamente
+                        start_date = emp.get('start_date', '')
+                        if start_date and hasattr(start_date, 'strftime'):
+                            start_date_str = start_date.strftime('%Y-%m-%d')
+                        else:
+                            start_date_str = str(start_date)[:10] if start_date else ''
+                        ttk.Label(emp_frame, text=start_date_str).grid(
                             row=row_idx+1, column=5, padx=3, pady=1, sticky="w")
                     
                     if len(empleados) > 10:

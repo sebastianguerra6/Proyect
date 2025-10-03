@@ -1653,6 +1653,8 @@ class AplicacionesFrame:
             if success:
                 self._actualizar_estado("✅ Aplicación agregada correctamente")
                 self._cargar_aplicaciones()
+                # Actualizar dropdowns para futuras aplicaciones
+                self._actualizar_dropdowns()
             else:
                 self._actualizar_estado(f"❌ Error al agregar aplicación: {message}", error=True)
     
@@ -1734,6 +1736,16 @@ class AplicacionesFrame:
         """Actualiza los datos desde la base de datos"""
         self._cargar_aplicaciones()
         self._actualizar_estado("🔄 Datos actualizados")
+    
+    def _actualizar_dropdowns(self):
+        """Actualiza los valores de los dropdowns con los datos más recientes de la base de datos"""
+        try:
+            # Forzar actualización de los valores únicos
+            from services.dropdown_service import dropdown_service
+            dropdown_service.get_all_dropdown_values()  # Esto actualiza la caché si existe
+            self._actualizar_estado("🔄 Dropdowns actualizados con valores de la base de datos")
+        except Exception as e:
+            print(f"Error actualizando dropdowns: {e}")
     
     def _exportar_datos(self):
         """Exporta los datos a un archivo CSV"""
@@ -1834,27 +1846,31 @@ class ApplicationDialog:
         title_label = ttk.Label(scrollable_frame, text="Información de la Aplicación", font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
+        # Obtener valores únicos de la base de datos
+        from services.dropdown_service import dropdown_service
+        dropdown_values = dropdown_service.get_all_dropdown_values()
+        
         # Campos actualizados para coincidir con tabla applications
         campos = [
-            ("Jurisdiction:", "jurisdiction", "entry"),
-            ("Unit:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
-            ("Subunit:", "subunit", "entry"),
+            ("Jurisdiction:", "jurisdiction", "combobox", dropdown_values['jurisdictions']),
+            ("Unit:", "unit", "combobox", dropdown_values['units']),
+            ("Subunit:", "subunit", "combobox", dropdown_values['subunits']),
             ("Logical Access Name:", "logical_access_name", "entry"),
             ("Alias:", "alias", "entry"),
             ("Path/Email/URL:", "path_email_url", "entry"),
-            ("Position Role:", "position_role", "entry"),
+            ("Position Role:", "position_role", "combobox", dropdown_values['positions']),
             ("Exception Tracking:", "exception_tracking", "entry"),
             ("Fulfillment Action:", "fulfillment_action", "entry"),
-            ("System Owner:", "system_owner", "entry"),
-            ("Role Name:", "role_name", "entry"),
-            ("Access Type:", "access_type", "combobox", ["Aplicación", "Sistema", "Base de Datos", "Red", "Hardware"]),
-            ("Category:", "category", "combobox", ["Sistemas", "Desarrollo", "RRHH", "ERP", "Analytics", "DevOps", "Recursos"]),
+            ("System Owner:", "system_owner", "combobox", dropdown_values['system_owners']),
+            ("Role Name:", "role_name", "combobox", dropdown_values['roles']),
+            ("Access Type:", "access_type", "combobox", dropdown_values['access_types']),
+            ("Category:", "category", "combobox", dropdown_values['categories']),
             ("Additional Data:", "additional_data", "entry"),
             ("AD Code:", "ad_code", "entry"),
-            ("Access Status:", "access_status", "combobox", ["Activo", "Inactivo", "Mantenimiento"]),
+            ("Access Status:", "access_status", "combobox", dropdown_values['access_statuses']),
             ("Require Licensing:", "require_licensing", "entry"),
             ("Description:", "description", "text"),
-            ("Authentication Method:", "authentication_method", "combobox", ["LDAP", "SSO", "Local", "OAuth", "SAML"])
+            ("Authentication Method:", "authentication_method", "combobox", dropdown_values['authentication_methods'])
         ]
         
         # Crear campos dinámicamente
