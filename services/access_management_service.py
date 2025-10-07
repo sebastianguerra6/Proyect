@@ -1993,6 +1993,137 @@ class AccessManagementService:
                 'data': {}
             }
 
+    def revoke_specific_access(self, scotia_id: str, app_name: str, access_type: str, responsible: str = "Sistema") -> Dict[str, Any]:
+        """
+        Revoca un acceso específico (flex staff o manual) de un empleado
+        
+        Args:
+            scotia_id: ID del empleado
+            app_name: Nombre de la aplicación
+            access_type: Tipo de acceso ('flex_staff' o 'manual_access')
+            responsible: Persona responsable de la revocación
+            
+        Returns:
+            Dict con el resultado de la operación
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Verificar que el acceso existe y es del tipo correcto
+            cursor.execute('''
+                SELECT h.id, h.app_access_name, h.process_access, h.event_description
+                FROM historico h
+                WHERE h.scotia_id = ? 
+                AND h.app_access_name = ?
+                AND h.process_access = ?
+                AND h.status = 'Pendiente'
+                ORDER BY h.record_date DESC
+            ''', (scotia_id, app_name, access_type))
+            
+            access_record = cursor.fetchone()
+            
+            if not access_record:
+                return {
+                    'success': False,
+                    'message': f'No se encontró acceso {access_type} activo para {app_name}'
+                }
+            
+            # Crear registro de revocación en el historial
+            case_id = f"REVOKE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
+            event_description = f"Revocación de acceso {access_type} para {app_name}"
+            
+            cursor.execute('''
+                INSERT INTO historico (
+                    scotia_id, case_id, responsible, record_date, request_date,
+                    process_access, sid, area, subunit, event_description,
+                    ticket_email, app_access_name, computer_system_type, status,
+                    closing_date_app, closing_date_ticket, app_quality,
+                    confirmation_by_user, comment, ticket_quality, general_status,
+                    average_time_open_ticket
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                scotia_id, case_id, responsible, datetime.now(), None,
+                'offboarding', scotia_id, 'N/A', 'N/A', event_description,
+                f'{responsible}@empresa.com', app_name, 'Desktop', 'Pendiente',
+                None, None, None, None, f'Revocación de acceso {access_type} por {responsible}', 
+                None, 'En Proceso', None
+            ))
+            
+            # Marcar el acceso original como revocado
+            cursor.execute('''
+                UPDATE historico 
+                SET status = 'Revocado', 
+                    closing_date_app = ?,
+                    comment = COALESCE(comment, '') + ' | Revocado por ' + ?
+                WHERE id = ?
+            ''', (datetime.now(), responsible, access_record[0]))
+            
+            conn.commit()
+            conn.close()
+            
+            return {
+                'success': True,
+                'message': f'Acceso {access_type} para {app_name} revocado exitosamente',
+                'case_id': case_id
+            }
+            
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            return {
+                'success': False,
+                'message': f'Error revocando acceso: {str(e)}'
+            }
+
+    def get_revocable_accesses(self, scotia_id: str) -> List[Dict[str, Any]]:
+        """
+        Obtiene los accesos que pueden ser revocados (flex staff y manuales)
+        
+        Args:
+            scotia_id: ID del empleado
+            
+        Returns:
+            Lista de accesos revocables
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT 
+                    h.app_access_name,
+                    h.process_access,
+                    h.event_description,
+                    h.record_date,
+                    h.responsible,
+                    h.case_id
+                FROM historico h
+                WHERE h.scotia_id = ? 
+                AND h.process_access IN ('flex_staff', 'manual_access')
+                AND h.status = 'Pendiente'
+                ORDER BY h.record_date DESC
+            ''', (scotia_id,))
+            
+            accesses = []
+            for row in cursor.fetchall():
+                accesses.append({
+                    'app_name': row[0],
+                    'access_type': row[1],
+                    'description': row[2],
+                    'record_date': row[3],
+                    'responsible': row[4],
+                    'case_id': row[5]
+                })
+            
+            conn.close()
+            return accesses
+            
+        except Exception as e:
+            print(f"Error obteniendo accesos revocables: {e}")
+            return []
+
 
 # Instancia global del servicio
 access_service = AccessManagementService()

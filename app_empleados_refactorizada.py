@@ -1258,9 +1258,23 @@ class ConciliacionFrame:
         tree.tag_configure('flex_access', background='#d1ecf1')  # Azul claro para flex staff
         tree.tag_configure('other_access', background='#f8f9fa')  # Gris claro para otros
         
+        # Frame de botones de acción
+        action_frame = ttk.Frame(ventana, padding="10")
+        action_frame.grid(row=3, column=0, sticky="ew")
+        
+        # Botón para revocar accesos
+        revoke_btn = ttk.Button(action_frame, text="🔴 Revocar Acceso", 
+                               command=lambda: self._revocar_acceso_seleccionado(tree, sid, ventana))
+        revoke_btn.pack(side="left", padx=(0, 10))
+        
+        # Botón para actualizar
+        refresh_btn = ttk.Button(action_frame, text="🔄 Actualizar", 
+                                command=lambda: self._actualizar_accesos_ventana(ventana, sid, empleado))
+        refresh_btn.pack(side="left", padx=(0, 10))
+        
         # Footer con estadísticas detalladas
         footer_frame = ttk.Frame(ventana, padding="10")
-        footer_frame.grid(row=3, column=0, sticky="ew")
+        footer_frame.grid(row=4, column=0, sticky="ew")
         
         # Estadísticas por tipo
         stats_text = f"📊 Total: {len(accesos_actuales)} | "
@@ -1276,6 +1290,131 @@ class ConciliacionFrame:
         # Botón cerrar
         ttk.Button(footer_frame, text="Cerrar", 
                   command=ventana.destroy).pack(side="right")
+        
+        # Guardar referencia a la ventana para actualizaciones
+        ventana._tree = tree
+        ventana._sid = sid
+        ventana._empleado = empleado
+
+    def _revocar_acceso_seleccionado(self, tree, sid, ventana):
+        """Revoca el acceso seleccionado en el treeview"""
+        selection = tree.selection()
+        if not selection:
+            messagebox.showwarning("Advertencia", "Por favor seleccione un acceso para revocar")
+            return
+        
+        item = selection[0]
+        values = tree.item(item, 'values')
+        
+        if not values or len(values) < 2:
+            messagebox.showerror("Error", "No se pudo obtener la información del acceso")
+            return
+        
+        app_name = values[0]
+        access_type = values[1]
+        
+        # Verificar que el acceso es revocable (flex staff o manual)
+        if access_type not in ['Flex Staff', 'Manual']:
+            messagebox.showwarning("Advertencia", 
+                                 f"Los accesos de tipo '{access_type}' no pueden ser revocados desde aquí.\n"
+                                 f"Solo se pueden revocar accesos de tipo 'Flex Staff' y 'Manual'")
+            return
+        
+        # Confirmar revocación
+        result = messagebox.askyesno(
+            "Confirmar Revocación",
+            f"¿Está seguro de que desea revocar el acceso '{access_type}' para '{app_name}'?\n\n"
+            f"Esta acción creará un registro de offboarding en el historial."
+        )
+        
+        if not result:
+            return
+        
+        # Mapear tipos de acceso
+        access_type_map = {
+            'Flex Staff': 'flex_staff',
+            'Manual': 'manual_access'
+        }
+        
+        try:
+            # Obtener responsable (podría ser desde un campo de entrada)
+            responsible = "Sistema"  # Por defecto, se puede mejorar para obtener del usuario
+            
+            # Revocar el acceso
+            result = access_service.revoke_specific_access(
+                scotia_id=sid,
+                app_name=app_name,
+                access_type=access_type_map[access_type],
+                responsible=responsible
+            )
+            
+            if result['success']:
+                messagebox.showinfo("Éxito", result['message'])
+                # Actualizar la ventana
+                self._actualizar_accesos_ventana(ventana, sid, ventana._empleado)
+            else:
+                messagebox.showerror("Error", result['message'])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Error revocando acceso: {str(e)}")
+
+    def _actualizar_accesos_ventana(self, ventana, sid, empleado):
+        """Actualiza la ventana de accesos actuales"""
+        try:
+            # Obtener accesos actualizados
+            accesos_actuales = access_service.get_employee_current_position_access(sid)
+            
+            # Limpiar el treeview
+            tree = ventana._tree
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            # Insertar datos actualizados
+            for acceso in accesos_actuales:
+                access_type = acceso.get('access_type', 'Otro')
+                
+                # Determinar tag basado en el tipo de acceso
+                if access_type == 'Aplicación':
+                    tag = 'app_access'
+                elif access_type == 'Manual':
+                    tag = 'manual_access'
+                elif access_type == 'Flex Staff':
+                    tag = 'flex_access'
+                else:
+                    tag = 'other_access'
+                
+                tree.insert('', 'end', values=(
+                    acceso.get('app_name', ''),
+                    access_type,
+                    acceso.get('unit', ''),
+                    acceso.get('position', ''),
+                    acceso.get('process', ''),
+                    acceso.get('date', ''),
+                    acceso.get('description', '')
+                ), tags=(tag,))
+            
+            # Actualizar estadísticas en el footer
+            accesos_aplicacion = [a for a in accesos_actuales if a.get('access_type') == 'Aplicación']
+            accesos_manuales = [a for a in accesos_actuales if a.get('access_type') == 'Manual']
+            accesos_flex = [a for a in accesos_actuales if a.get('access_type') == 'Flex Staff']
+            
+            stats_text = f"📊 Total: {len(accesos_actuales)} | "
+            stats_text += f"🟢 Aplicación: {len(accesos_aplicacion)} | "
+            if accesos_manuales:
+                stats_text += f"🟡 Manual: {len(accesos_manuales)} | "
+            if accesos_flex:
+                stats_text += f"🔵 Flex Staff: {len(accesos_flex)}"
+            
+            # Actualizar el label de estadísticas
+            for widget in ventana.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, ttk.Label) and "📊 Total:" in child.cget("text"):
+                            child.config(text=stats_text)
+                            break
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error actualizando accesos: {str(e)}")
 
 
 class AplicacionesFrame:
