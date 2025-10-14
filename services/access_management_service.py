@@ -303,11 +303,25 @@ class AccessManagementService:
             
             query += ' ORDER BY logical_access_name'
             
+            # Debug: imprimir la consulta y parámetros
+            print(f"DEBUG get_applications_by_position:")
+            print(f"  - Posición: '{position}'")
+            print(f"  - Unidad: '{unit}'")
+            print(f"  - Subunidad: '{subunit}'")
+            print(f"  - Título: '{title}'")
+            print(f"  - Consulta: {query}")
+            print(f"  - Parámetros: {params}")
+            
             cursor.execute(query, params)
 
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
             applications = [dict(zip(columns, row)) for row in rows]
+            
+            # Debug: mostrar resultados
+            print(f"  - Resultados encontrados: {len(applications)}")
+            for app in applications:
+                print(f"    * {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
 
             conn.close()
             return applications
@@ -734,7 +748,7 @@ class AccessManagementService:
                 FROM historico h
                 LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
                 WHERE h.scotia_id = ?
-                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                AND h.status = 'Completado'
                 AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
                 AND (
@@ -1298,17 +1312,18 @@ class AccessManagementService:
                 for app in filtered_required_apps
             }
 
-            # 4) Historial/actuales: considerar registros de la unidad actual
-            # MEJORA: Considerar todos los accesos de onboarding como actuales
-            # Esto evita que aparezcan como "onboarding" cuando se cambia de unidad
+            # 4) Historial/actuales: considerar solo registros COMPLETADOS
+            # MEJORA: Solo considerar accesos completados como actuales
+            # Los accesos pendientes o en proceso aparecerán como "a otorgar"
             current_records = []
             for h in history:
-                if h.get('process_access') in ('onboarding', 'lateral_movement'):
+                if (h.get('process_access') in ('onboarding', 'lateral_movement') and 
+                    h.get('status') == 'Completado'):
                     hist_unit = h.get('app_unit') or h.get('area', '')
                     hist_position = h.get('app_position_role') or h.get('position', '')
                     hist_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                     
-                    # Considerar todos los registros de onboarding, independientemente de la unidad
+                    # Considerar todos los registros de onboarding completados, independientemente de la unidad
                     if hist_name:
                         # Si no hay posición en el historial, usar la posición actual
                         if not hist_position:

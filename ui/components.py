@@ -10,6 +10,7 @@ class CamposGeneralesFrame:
     def __init__(self, parent):
         self.parent = parent
         self.variables = {}
+        self.comboboxes = {}  # Para guardar referencias a los comboboxes
         self._crear_variables()
         self._crear_widgets()
     
@@ -61,10 +62,11 @@ class CamposGeneralesFrame:
                 )
             elif tipo == "combobox":
                 valores = campo[3] if len(campo) > 3 else []
-                ttk.Combobox(main_container, textvariable=self.variables[var_name], 
-                            values=valores, width=47).grid(
-                    row=i, column=1, sticky=(tk.W, tk.E), pady=5
-                )
+                combobox = ttk.Combobox(main_container, textvariable=self.variables[var_name], 
+                            values=valores, width=47)
+                combobox.grid(row=i, column=1, sticky=(tk.W, tk.E), pady=5)
+                # Guardar referencia al combobox
+                self.comboboxes[var_name] = combobox
         
         # Información del número de caso (solo informativo)
         info_frame = ttk.Frame(main_container)
@@ -95,6 +97,25 @@ class CamposGeneralesFrame:
                 campos_vacios.append(campo)
         
         return campos_vacios
+    
+    def actualizar_desplegables(self):
+        """Actualiza los valores de los desplegables desde la base de datos"""
+        try:
+            # Obtener valores actualizados de la base de datos
+            from services.dropdown_service import dropdown_service
+            dropdown_values = dropdown_service.get_all_dropdown_values()
+            
+            # Actualizar los comboboxes específicos
+            if 'nueva_sub_unidad' in self.comboboxes:
+                self.comboboxes['nueva_sub_unidad']['values'] = dropdown_values.get('units', [])
+            
+            if 'nuevo_cargo' in self.comboboxes:
+                self.comboboxes['nuevo_cargo']['values'] = dropdown_values.get('positions', [])
+            
+            print("Desplegables actualizados en CamposGeneralesFrame")
+            
+        except Exception as e:
+            print(f"Error actualizando desplegables en CamposGeneralesFrame: {e}")
 
 class OnboardingFrame:
     """Componente para la pestaña de onboarding"""
@@ -462,53 +483,48 @@ class EdicionBusquedaFrame:
         main_frame = ttk.Frame(self.frame)
         main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(3, weight=1)  # Cambiar de row 1 a row 3 para la tabla
+        main_frame.rowconfigure(2, weight=1)  # Fila 2 para la tabla
         
-        # Frame para búsqueda y herramientas
-        busqueda_frame = ttk.LabelFrame(main_frame, text="📊 Historial de Procesos y Asignaciones", padding="15")
-        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
-        busqueda_frame.columnconfigure(1, weight=1)
+        # Barra de herramientas (fuera del LabelFrame, igual que en Aplicaciones)
+        toolbar = ttk.Frame(main_frame)
+        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         
-        # Barra de herramientas para la tabla
-        toolbar_frame = ttk.Frame(busqueda_frame)
-        toolbar_frame.grid(row=0, column=0, columnspan=3, pady=(0, 15), sticky="ew")
-        
-        # Botones de edición
-        ttk.Button(toolbar_frame, text="✏️ Editar Registro", command=self.editar_registro_historial, 
+        # Botones principales
+        ttk.Button(toolbar, text="✏️ Editar Registro", command=self.editar_registro_historial, 
                   style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="🗑️ Eliminar", command=self.eliminar_registro, 
+        ttk.Button(toolbar, text="🗑️ Eliminar", command=self.eliminar_registro, 
                   style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
-        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
         # Botones de estadísticas
-        ttk.Button(toolbar_frame, text="📊 Ver Estadísticas", command=self.mostrar_estadisticas, 
+        ttk.Button(toolbar, text="📊 Ver Estadísticas", command=self.mostrar_estadisticas, 
                   style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="📤 Exportar Excel", command=self.exportar_estadisticas, 
+        ttk.Button(toolbar, text="📤 Exportar Excel", command=self.exportar_estadisticas, 
                   style="Warning.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
-        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
         # Botón para crear registro manual
-        ttk.Button(toolbar_frame, text="➕ Registro Manual", command=self.crear_registro_manual, 
+        ttk.Button(toolbar, text="➕ Registro Manual", command=self.crear_registro_manual, 
                   style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
-        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
         # Botones de actualizar y mostrar todos
-        ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="📋 Mostrar Todo el Historial", 
+        ttk.Button(toolbar, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(toolbar, text="📋 Mostrar Todo el Historial", 
                   command=self.mostrar_todo_el_historial).pack(side=tk.LEFT, padx=(0, 10))
         
         # Panel de filtros múltiples
-        self._crear_panel_filtros(busqueda_frame)
+        self._crear_panel_filtros(main_frame)
         
         # Tabla de resultados - Actualizada para mostrar historial
-        resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="nsew")
+        resultados_frame = ttk.Frame(main_frame)
+        resultados_frame.grid(row=2, column=0, sticky="nsew", pady=(15, 0))
         
         # Crear Treeview para mostrar resultados del historial
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Descripción"), 
@@ -813,7 +829,7 @@ class EdicionBusquedaFrame:
         """Crea el panel de filtros múltiples"""
         # Frame para filtros
         filtros_frame = ttk.LabelFrame(parent, text="Filtros Múltiples", padding="10")
-        filtros_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+        filtros_frame.grid(row=1, column=0, sticky="ew", pady=(15, 0))
         filtros_frame.columnconfigure(1, weight=1)
         
         # Lista de filtros activos
@@ -1620,56 +1636,54 @@ class CreacionPersonaFrame:
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(1, weight=1)
         
-        # Título
-        ttk.Label(self.frame, text="Gestión de Personas en Headcount", 
-                  style="Title.TLabel").grid(row=0, column=0, pady=20, sticky="ew")
+        # Título con espaciado estándar
+        ttk.Label(self.frame, text="👤 Gestión de Personas en Headcount", 
+                  style="Title.TLabel").grid(row=0, column=0, pady=(10, 15), sticky="ew")
         
         # Frame principal simplificado
         main_frame = ttk.Frame(self.frame)
         main_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(3, weight=1)  # Cambiar de row 1 a row 3 para la tabla
+        main_frame.rowconfigure(2, weight=1)  # Fila 2 para la tabla
         
-        # Frame para búsqueda y herramientas
-        busqueda_frame = ttk.LabelFrame(main_frame, text="Gestión de Personas", padding="15")
-        busqueda_frame.grid(row=0, column=0, sticky="ew", pady=(0, 20))
-        busqueda_frame.columnconfigure(1, weight=1)
+        # Barra de herramientas (fuera del LabelFrame, igual que en Aplicaciones)
+        toolbar = ttk.Frame(main_frame)
+        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 15))
         
-        # Barra de herramientas para la tabla
-        toolbar_frame = ttk.Frame(busqueda_frame)
-        toolbar_frame.grid(row=0, column=0, columnspan=3, pady=(0, 15), sticky="ew")
-        
-        # Botones de edición
-        ttk.Button(toolbar_frame, text="➕ Nueva Persona", command=self.crear_persona, 
+        # Botones principales
+        ttk.Button(toolbar, text="➕ Nueva Persona", command=self.crear_persona, 
                   style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="✏️ Editar", command=self.editar_persona, 
+        ttk.Button(toolbar, text="✏️ Editar", command=self.editar_persona, 
                   style="Info.TButton").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="🗑️ Eliminar", command=self.eliminar_persona, 
+        ttk.Button(toolbar, text="🗑️ Eliminar", command=self.eliminar_persona, 
                   style="Danger.TButton").pack(side=tk.LEFT, padx=(0, 10))
         
         # Separador
-        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
         
-        # Botones de estadísticas
-        ttk.Button(toolbar_frame, text="📊 Ver Estadísticas", command=self.mostrar_estadisticas_headcount, 
-                  style="Success.TButton").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="📤 Exportar Excel", command=self.exportar_estadisticas_headcount, 
-                  style="Warning.TButton").pack(side=tk.LEFT, padx=(0, 10))
+        # Búsqueda
+        ttk.Label(toolbar, text="🔍 Buscar:").pack(side=tk.LEFT, padx=(0, 5))
+        self.search_var = tk.StringVar()
+        self.search_var.trace('w', self._on_busqueda_change)
+        search_entry = ttk.Entry(toolbar, textvariable=self.search_var, width=30)
+        search_entry.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Separador
-        ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        # Botón de actualizar
+        ttk.Button(toolbar, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT)
         
-        # Botones de actualizar y mostrar todos
-        ttk.Button(toolbar_frame, text="🔄 Actualizar", command=self.actualizar_tabla).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(toolbar_frame, text="📋 Mostrar Todos", 
-                  command=self.mostrar_todos).pack(side=tk.LEFT, padx=(0, 10))
+        # Botón de exportar
+        ttk.Button(toolbar, text="📊 Exportar", command=self.exportar_estadisticas_headcount).pack(side=tk.LEFT, padx=(10, 0))
         
         # Panel de filtros múltiples
-        self._crear_panel_filtros_personas(busqueda_frame)
+        self._crear_panel_filtros_personas(main_frame)
         
         # Tabla de resultados
-        resultados_frame = ttk.Frame(busqueda_frame)
-        resultados_frame.grid(row=3, column=0, columnspan=3, pady=(15, 0), sticky="nsew")
+        resultados_frame = ttk.Frame(main_frame)
+        resultados_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 15))
+        
+        # Configurar tabla de resultados
+        resultados_frame.columnconfigure(0, weight=1)
+        resultados_frame.rowconfigure(0, weight=1)
         
         # Crear Treeview para mostrar resultados
         self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
@@ -1718,7 +1732,7 @@ class CreacionPersonaFrame:
         """Crea el panel de filtros múltiples para personas"""
         # Frame para filtros
         filtros_frame = ttk.LabelFrame(parent, text="Filtros Múltiples", padding="10")
-        filtros_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+        filtros_frame.grid(row=1, column=0, sticky="ew", pady=(0, 15))
         filtros_frame.columnconfigure(1, weight=1)
         
         # Lista de filtros activos
@@ -2362,6 +2376,21 @@ Puestos Únicos: {generales.get('puestos_unicos', 0)}
             
         except Exception as e:
             messagebox.showerror("Error", f"Error exportando estadísticas: {str(e)}")
+    
+    def _on_busqueda_change(self, *args):
+        """Maneja cambios en la búsqueda"""
+        search_term = self.search_var.get().lower()
+        
+        if not search_term:
+            # Si no hay término de búsqueda, mostrar todos los registros
+            self.actualizar_tabla()
+        else:
+            # Realizar búsqueda en tiempo real
+            try:
+                resultados = self.service.buscar_en_headcount(search_term)
+                self.mostrar_resultados_busqueda(resultados, search_term)
+            except Exception as e:
+                messagebox.showerror("Error", f"Error en la búsqueda: {str(e)}")
 
 
 class PersonaDialog:

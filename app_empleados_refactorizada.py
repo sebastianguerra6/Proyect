@@ -304,6 +304,7 @@ class AppEmpleadosRefactorizada:
         # Botones con estilos predefinidos
         botones_info = [
             ("💾 Guardar", self.guardar_datos, "Success.TButton"),
+            ("🔍 Verificar Apps Gerente RRHH", self.verificar_aplicaciones_gerente_rrhh, "Warning.TButton"),
             ("🧹 Limpiar", self.limpiar_campos, "Info.TButton"),
             ("🚪 Salir", self.root.quit, "Danger.TButton")
         ]
@@ -469,11 +470,20 @@ class AppEmpleadosRefactorizada:
                 # Procesar asignación flex staff
                 datos_flex = self.componentes.get('flex_staff', {}).obtener_datos() if 'flex_staff' in self.componentes else {}
                 
+                # Mapear nombres a los nombres reales de la BD
+                temp_position = datos_generales.get('nuevo_cargo', '')
+                temp_unit = datos_generales.get('nueva_sub_unidad', '')
+                mapped_position, mapped_unit = self.mapear_nombres_bd(temp_position, temp_unit)
+                
+                print(f"FLEX STAFF - Mapeo de nombres:")
+                print(f"  Original: '{temp_position}' + '{temp_unit}'")
+                print(f"  Mapeado: '{mapped_position}' + '{mapped_unit}'")
+                
                 success, message, records = access_service.process_flex_staff_assignment(
                     scotia_id,
-                    datos_generales.get('nuevo_cargo', ''),  # temporary_position
-                    datos_generales.get('nueva_sub_unidad', ''),  # temporary_unit
-                    datos_generales.get('nueva_sub_unidad', ''),  # temporary_subunit
+                    mapped_position,  # temporary_position (mapeado)
+                    mapped_unit,  # temporary_unit (mapeado)
+                    mapped_unit,  # temporary_subunit (mapeado)
                     datos_flex.get('duracion_dias'),  # duration_days
                     responsable  # responsible
                 )
@@ -513,6 +523,82 @@ class AppEmpleadosRefactorizada:
                         
         except Exception as e:
             print(f"Error en limpiar_campos: {e}")
+    
+    def verificar_aplicaciones_gerente_rrhh(self):
+        """Verifica qué aplicaciones existen para Gerente de RRHH"""
+        try:
+            print("=== VERIFICACIÓN DE APLICACIONES PARA GERENTE DE RRHH ===")
+            
+            # Obtener todas las aplicaciones
+            all_apps = access_service.get_all_applications()
+            print(f"Total de aplicaciones en la BD: {len(all_apps)}")
+            
+            # Buscar aplicaciones que contengan "GERENTE" o "RRHH"
+            apps_gerente = []
+            apps_rrhh = []
+            
+            for app in all_apps:
+                position = app.get('position_role', '').upper()
+                unit = app.get('unit', '').upper()
+                
+                if 'GERENTE' in position:
+                    apps_gerente.append(app)
+                if 'RRHH' in unit:
+                    apps_rrhh.append(app)
+            
+            print(f"\nAplicaciones con 'GERENTE' en position_role: {len(apps_gerente)}")
+            for app in apps_gerente:
+                print(f"  - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
+            
+            print(f"\nAplicaciones con 'RRHH' en unit: {len(apps_rrhh)}")
+            for app in apps_rrhh:
+                print(f"  - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
+            
+            # Probar diferentes variaciones de búsqueda
+            variaciones = [
+                ("GERENTE DE RECURSOS HUMANOS", "RRHH"),
+                ("GERENTE RECURSOS HUMANOS", "RRHH"),
+                ("GERENTE RRHH", "RRHH"),
+                ("GERENTE", "RRHH"),
+                ("RECURSOS HUMANOS", "RRHH"),
+                # Probar con los nombres reales de la BD
+                ("GERENTE", "RECURSOS HUMANOS"),
+                ("GERENTE DE RECURSOS HUMANOS", "RECURSOS HUMANOS"),
+                ("GERENTE RECURSOS HUMANOS", "RECURSOS HUMANOS")
+            ]
+            
+            print(f"\n=== PROBANDO DIFERENTES VARIACIONES ===")
+            for pos, unit in variaciones:
+                apps = access_service.get_applications_by_position(pos, unit)
+                print(f"'{pos}' + '{unit}': {len(apps)} aplicaciones")
+            
+        except Exception as e:
+            print(f"Error verificando aplicaciones: {e}")
+    
+    def mapear_nombres_bd(self, position, unit):
+        """Mapea los nombres de los desplegables a los nombres reales de la BD"""
+        # Mapeo de unidades
+        unit_mapping = {
+            'RRHH': 'Recursos Humanos',
+            'TECNOLOGÍA': 'Tecnologia',
+            'TECNOLOGIA': 'Tecnologia'
+        }
+        
+        # Mapeo de posiciones
+        position_mapping = {
+            'GERENTE DE RECURSOS HUMANOS': 'Gerente',
+            'GERENTE RECURSOS HUMANOS': 'Gerente',
+            'GERENTE RRHH': 'Gerente',
+            'ANALISTA SENIOR': 'Analista',
+            'DESARROLLADOR': 'Desarrollador',
+            'ADMINISTRADOR': 'Administrador'
+        }
+        
+        # Aplicar mapeos
+        mapped_unit = unit_mapping.get(unit.upper(), unit)
+        mapped_position = position_mapping.get(position.upper(), position)
+        
+        return mapped_position, mapped_unit
     
 class ConciliacionFrame:
     """Frame simplificado para la conciliación de accesos"""

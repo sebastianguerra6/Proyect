@@ -308,7 +308,7 @@ BEGIN
         h.status
     FROM [dbo].[historico] h
     INNER JOIN [dbo].[headcount] head ON h.scotia_id = head.scotia_id
-    WHERE h.status IN (''Completado'', ''Pendiente'', ''En Proceso'', ''Cancelado'', ''Rechazado'')
+    WHERE h.status = ''Completado''
     AND h.process_access IN (''onboarding'', ''lateral_movement'')
     AND head.activo = 1
     AND h.app_access_name IS NOT NULL
@@ -581,7 +581,7 @@ BEGIN
         status VARCHAR(50)
     );
     
-    -- 1. Accesos actuales (del historial)
+    -- 1. Accesos actuales (del historial) - SOLO COMPLETADOS
     INSERT INTO #ReconciliationResults
     SELECT 
         'current' as access_type,
@@ -598,7 +598,7 @@ BEGIN
     WHERE h.scotia_id = @scotia_id
     AND h.process_access IN ('onboarding', 'lateral_movement')
     AND h.app_access_name IS NOT NULL
-    AND h.status IN ('Completado', 'Pendiente', 'En Proceso');
+    AND h.status = 'Completado';
     
     -- 2. Accesos requeridos (de la malla de aplicaciones)
     INSERT INTO #ReconciliationResults
@@ -800,7 +800,7 @@ BEGIN
     FROM [dbo].[historico] h
     WHERE h.scotia_id = @scotia_id
     AND h.process_access IN ('onboarding', 'lateral_movement')
-    AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+    AND h.status = 'Completado'
     AND h.app_access_name IS NOT NULL;
     
     SET @records_created = @@ROWCOUNT;
@@ -846,7 +846,7 @@ BEGIN
         FROM [dbo].[historico] 
         WHERE scotia_id = @scotia_id 
         AND process_access IN ('onboarding', 'lateral_movement')
-        AND status IN ('Completado', 'Pendiente', 'En Proceso');
+        AND status = 'Completado';
         
         -- Usar el procedimiento de conciliación para obtener to_grant y to_revoke
         CREATE TABLE #TempReconciliation (
