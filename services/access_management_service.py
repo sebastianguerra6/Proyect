@@ -330,6 +330,67 @@ class AccessManagementService:
             print(f"Error obteniendo aplicaciones por posición: {e}")
             return []
 
+    def get_applications_by_position_flexible(self, position: str, unit: str, subunit: Optional[str] = None, title: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Obtiene las aplicaciones usando la misma lógica flexible que se usa para accesos normales.
+        Esta función es más permisiva y encuentra aplicaciones incluso si las unidades/subunidades no coinciden exactamente.
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            # Construir consulta más flexible - similar a la lógica de accesos normales
+            query = 'SELECT logical_access_name, jurisdiction, unit, subunit, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method FROM applications WHERE 1=1'
+            params = []
+            
+            # Filtrar por posición (obligatorio)
+            if position:
+                query += ' AND UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(position)
+            
+            # Filtrar por unidad (obligatorio)
+            if unit:
+                query += ' AND UPPER(LTRIM(RTRIM(unit))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(unit)
+            
+            # Subunidad es opcional - no filtrar si no se proporciona
+            if subunit:
+                query += ' AND UPPER(LTRIM(RTRIM(subunit))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(subunit)
+            
+            # Título es opcional
+            if title:
+                query += ' AND UPPER(LTRIM(RTRIM(role_name))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(title)
+            
+            query += ' ORDER BY logical_access_name'
+            
+            # Debug: imprimir la consulta y parámetros
+            print(f"DEBUG get_applications_by_position_flexible:")
+            print(f"  - Posición: '{position}'")
+            print(f"  - Unidad: '{unit}'")
+            print(f"  - Subunidad: '{subunit}' (opcional)")
+            print(f"  - Título: '{title}' (opcional)")
+            print(f"  - Consulta: {query}")
+            print(f"  - Parámetros: {params}")
+            
+            cursor.execute(query, params)
+
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            applications = [dict(zip(columns, row)) for row in rows]
+            
+            # Debug: mostrar resultados
+            print(f"  - Resultados encontrados: {len(applications)}")
+            for app in applications:
+                print(f"    * {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('subunit', '')} | {app.get('position_role', '')}")
+
+            conn.close()
+            return applications
+
+        except Exception as e:
+            print(f"Error obteniendo aplicaciones por posición flexible: {e}")
+            return []
+
     def get_all_applications(self) -> List[Dict[str, Any]]:
         """Obtiene todas las aplicaciones"""
         try:
@@ -908,14 +969,25 @@ class AccessManagementService:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             history = self.get_employee_history(scotia_id)
-            # Considerar TODOS los accesos de onboarding y lateral_movement, independientemente del estado
-            active_access = [h for h in history if h.get('process_access') in ('onboarding', 'lateral_movement')]
+            # Considerar TODOS los accesos: onboarding, lateral_movement, flex_staff y manual_access
+            active_access = [h for h in history if h.get('process_access') in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')]
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
 
             for access in active_access:
                 app_name = access.get('app_access_name') or access.get('app_logical_access_name')
+                access_type = access.get('process_access', '')
+                
+                # Crear descripción específica según el tipo de acceso
+                if access_type == 'flex_staff':
+                    event_description = f"Revocación de acceso temporal (flex staff) para {app_name}"
+                elif access_type == 'manual_access':
+                    event_description = f"Revocación de acceso manual para {app_name}"
+                elif access_type in ('onboarding', 'lateral_movement'):
+                    event_description = f"Revocación de acceso de posición para {app_name}"
+                else:
+                    event_description = f"Revocación de acceso para {app_name}"
                 
                 record_data = {
                     'scotia_id': scotia_id,
@@ -925,7 +997,7 @@ class AccessManagementService:
                     'sid': scotia_id,
                     'area': 'out of the company',  # Área fija para offboarding
                     'subunit': 'out of the company',  # Subárea fija para offboarding
-                    'event_description': f"Revocación de acceso para {app_name}",
+                    'event_description': event_description,
                     'ticket_email': f"{responsible}@empresa.com",
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
@@ -951,7 +1023,26 @@ class AccessManagementService:
             conn.commit()
             conn.close()
 
-            return True, f"Offboarding procesado para {scotia_id}. {len(created_records)} accesos a revocar.", created_records
+            # Crear mensaje detallado con conteo por tipo de acceso
+            access_counts = {}
+            for access in active_access:
+                access_type = access.get('process_access', '')
+                access_counts[access_type] = access_counts.get(access_type, 0) + 1
+            
+            message = f"Offboarding procesado para {scotia_id}. {len(created_records)} accesos a revocar:\n"
+            for access_type, count in access_counts.items():
+                if access_type == 'onboarding':
+                    message += f"- Accesos de onboarding: {count}\n"
+                elif access_type == 'lateral_movement':
+                    message += f"- Accesos de movimiento lateral: {count}\n"
+                elif access_type == 'flex_staff':
+                    message += f"- Accesos temporales (flex staff): {count}\n"
+                elif access_type == 'manual_access':
+                    message += f"- Accesos manuales: {count}\n"
+                else:
+                    message += f"- Accesos {access_type}: {count}\n"
+            
+            return True, message.strip(), created_records
 
         except Exception as e:
             return False, f"Error procesando offboarding: {str(e)}", []
@@ -1098,8 +1189,9 @@ class AccessManagementService:
             # Obtener accesos actuales del empleado (posición original)
             current_access = self.get_employee_current_access(scotia_id)
             
-            # Obtener accesos requeridos para la posición temporal
-            temp_mesh_apps = self.get_applications_by_position(temporary_position, temporary_unit, subunit=temporary_subunit)
+            # Obtener accesos requeridos para la posición temporal usando lógica flexible
+            # No usar subunidad para flex staff - buscar solo por posición y unidad
+            temp_mesh_apps = self.get_applications_by_position_flexible(temporary_position, temporary_unit, subunit=None)
             
             # Crear índices para comparación
             current_apps_by_name = {}
