@@ -36,12 +36,12 @@ class AccessManagementService:
         )
 
     @staticmethod
-    def _triplet_key(unit: Optional[str], position_role: Optional[str], logical_access_name: Optional[str]) -> Tuple[str, str, str]:
-        """Crea una clave normalizada para comparar accesos por 3 campos (ignora subunit).
-        Orden: (unit, position_role, logical_access_name)
+    def _triplet_key(unidad_subunidad: Optional[str], position_role: Optional[str], logical_access_name: Optional[str]) -> Tuple[str, str, str]:
+        """Crea una clave normalizada para comparar accesos por 3 campos usando unidad_subunidad.
+        Orden: (unidad_subunidad, position_role, logical_access_name)
         """
         return (
-            (unit or '').strip().upper(),
+            (unidad_subunidad or '').strip().upper(),
             (position_role or '').strip().upper(),
             (logical_access_name or '').strip().upper(),
         )
@@ -98,13 +98,20 @@ class AccessManagementService:
                 if not employee_data.get(field):
                     return False, f"Campo requerido faltante: {field}"
 
+            # Usar unidad_subunidad directamente si se proporciona, o construirla
+            unidad_subunidad = employee_data.get('unidad_subunidad', '')
+            if not unidad_subunidad:
+                unit = employee_data.get('unit', '')
+                subunit = employee_data.get('subunit', '')
+                unidad_subunidad = f"{unit}/{subunit}" if unit and subunit else unit if unit else None
+            
             # Insertar empleado
             cursor.execute('''
                 INSERT INTO headcount 
                 (scotia_id, employee, full_name, email, position, manager, senior_manager, 
-                 unit, start_date, ceco, skip_level, cafe_alcides, parents, personal_email, 
+                 unit, unidad_subunidad, start_date, ceco, skip_level, cafe_alcides, parents, personal_email, 
                  size, birthday, validacion, activo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 employee_data.get('scotia_id'),
                 employee_data.get('employee'),
@@ -114,6 +121,7 @@ class AccessManagementService:
                 employee_data.get('manager'),
                 employee_data.get('senior_manager'),
                 employee_data.get('unit'),
+                unidad_subunidad,
                 employee_data.get('start_date'),
                 employee_data.get('ceco'),
                 employee_data.get('skip_level'),
@@ -207,11 +215,22 @@ class AccessManagementService:
             conn = self.get_connection()
             cursor = conn.cursor()
 
+            # Manejar unidad_subunidad
+            update_data = employee_data.copy()
+            if 'unidad_subunidad' not in update_data or not update_data['unidad_subunidad']:
+                # Si no se proporciona unidad_subunidad, construirla
+                if 'subunit' in update_data and 'unit' in update_data:
+                    unit = update_data['unit']
+                    subunit = update_data['subunit']
+                    update_data['unidad_subunidad'] = f"{unit}/{subunit}" if unit and subunit else unit if unit else None
+                    # No actualizar subunit directamente ya que no existe en la tabla
+                    del update_data['subunit']
+
             # Construir query de actualización dinámicamente
             set_clauses = []
             params = []
 
-            for campo, valor in employee_data.items():
+            for campo, valor in update_data.items():
                 if campo != 'scotia_id':  # No actualizar el SID
                     set_clauses.append(f"{campo} = ?")
                     params.append(valor)
@@ -273,21 +292,21 @@ class AccessManagementService:
     # MÉTODOS PARA APPLICATIONS
     # ==============================
 
-    def get_applications_by_position(self, position: str, unit: str, subunit: Optional[str] = None, title: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Obtiene las aplicaciones que debe tener un empleado según posición/unidad/subunidad/título.
-        **Sin duplicados**: devuelve una fila por tripleta (unit, position_role, logical_access_name).
+    def get_applications_by_position(self, position: str, unidad_subunidad: str, subunit: Optional[str] = None, title: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Obtiene las aplicaciones que debe tener un empleado según posición/unidad_subunidad/subunidad/título.
+        **Sin duplicados**: devuelve una fila por tripleta (unidad_subunidad, position_role, logical_access_name).
         """
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
 
             # Construir consulta dinámicamente
-            query = 'SELECT logical_access_name, jurisdiction, unit, subunit, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method FROM applications WHERE 1=1'
+            query = 'SELECT logical_access_name, jurisdiction, unit, subunit, unidad_subunidad, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method FROM applications WHERE 1=1'
             params = []
             
-            if unit:
-                query += ' AND UPPER(LTRIM(RTRIM(unit))) = UPPER(LTRIM(RTRIM(?)))'
-                params.append(unit)
+            if unidad_subunidad:
+                query += ' AND UPPER(LTRIM(RTRIM(unidad_subunidad))) = UPPER(LTRIM(RTRIM(?)))'
+                params.append(unidad_subunidad)
             
             if subunit:
                 query += ' AND UPPER(LTRIM(RTRIM(subunit))) = UPPER(LTRIM(RTRIM(?)))'
@@ -306,7 +325,7 @@ class AccessManagementService:
             # Debug: imprimir la consulta y parámetros
             print(f"DEBUG get_applications_by_position:")
             print(f"  - Posición: '{position}'")
-            print(f"  - Unidad: '{unit}'")
+            print(f"  - Unidad/Subunidad: '{unidad_subunidad}'")
             print(f"  - Subunidad: '{subunit}'")
             print(f"  - Título: '{title}'")
             print(f"  - Consulta: {query}")
@@ -452,19 +471,27 @@ class AccessManagementService:
             if not app_data.get('logical_access_name'):
                 return False, "Campo requerido faltante: logical_access_name"
 
+            # Usar unidad_subunidad directamente si se proporciona, o construirla
+            unidad_subunidad = app_data.get('unidad_subunidad', '')
+            if not unidad_subunidad:
+                unit = app_data.get('unit', '')
+                subunit = app_data.get('subunit', '')
+                unidad_subunidad = f"{unit}/{subunit}" if unit and subunit else unit if unit else None
+
             # Usar OUTPUT INSERTED.id para SQL Server
             cursor.execute('''
                 INSERT INTO applications 
-                (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, 
+                (jurisdiction, unit, subunit, unidad_subunidad, logical_access_name, alias, path_email_url, position_role, 
                  exception_tracking, fulfillment_action, system_owner, role_name, access_type, 
                  category, additional_data, ad_code, access_status, last_update_date, 
                  require_licensing, description, authentication_method)
                 OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 app_data.get('jurisdiction'),
                 app_data.get('unit'),
                 app_data.get('subunit'),
+                unidad_subunidad,
                 app_data.get('logical_access_name'),
                 app_data.get('alias'),
                 app_data.get('path_email_url'),
@@ -506,11 +533,20 @@ class AccessManagementService:
             if not result or result[0] == 0:
                 return False, f"Aplicación con ID {app_id} no encontrada"
 
+            # Manejar unidad_subunidad
+            update_data = app_data.copy()
+            if 'unidad_subunidad' not in update_data or not update_data['unidad_subunidad']:
+                # Si no se proporciona unidad_subunidad, construirla
+                if 'subunit' in update_data and 'unit' in update_data:
+                    unit = update_data['unit']
+                    subunit = update_data['subunit']
+                    update_data['unidad_subunidad'] = f"{unit}/{subunit}" if unit and subunit else unit if unit else None
+
             set_clauses = []
             params = []
 
-            for field, value in app_data.items():
-                if field in ['jurisdiction', 'unit', 'subunit', 'logical_access_name', 'alias', 'path_email_url', 
+            for field, value in update_data.items():
+                if field in ['jurisdiction', 'unit', 'subunit', 'unidad_subunidad', 'logical_access_name', 'alias', 'path_email_url', 
                            'position_role', 'exception_tracking', 'fulfillment_action', 'system_owner', 
                            'role_name', 'access_type', 'category', 'additional_data', 'ad_code', 
                            'access_status', 'require_licensing', 'description', 'authentication_method']:
@@ -914,12 +950,15 @@ class AccessManagementService:
                 conn.close()
                 print(f"✅ Posición y unidad actualizadas para {scotia_id}")
 
-            # 4. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
-            required_apps = self.get_applications_by_position(position, unit, subunit=subunit)
+            # 4. Construir unidad_subunidad para la búsqueda
+            unidad_subunidad = f"{unit}/{subunit}" if subunit else unit
+            
+            # 5. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
+            required_apps = self.get_applications_by_position(position, unidad_subunidad, subunit=subunit)
             if not required_apps:
-                return False, f"No se encontraron aplicaciones para la posición {position} en {unit}", []
+                return False, f"No se encontraron aplicaciones para la posición '{position}' en la unidad/subunidad '{unidad_subunidad}'", []
 
-            # 5. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
+            # 6. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{scotia_id}"
             created_records = []
             seen_triplets = set()
@@ -1068,7 +1107,8 @@ class AccessManagementService:
             current_access = self.get_employee_current_access(scotia_id)
             
             # Obtener accesos requeridos para la nueva posición
-            new_mesh_apps = self.get_applications_by_position(new_position, new_unit, subunit=new_subunit)
+            new_unidad_subunidad = f"{new_unit}/{new_subunit}" if new_subunit else new_unit
+            new_mesh_apps = self.get_applications_by_position(new_position, new_unidad_subunidad, subunit=new_subunit)
             
             # Crear índices para comparación más inteligente
             # Usar solo logical_access_name para la comparación, ya que el mismo acceso puede tener diferentes roles entre posiciones
@@ -1357,50 +1397,53 @@ class AccessManagementService:
 
             emp_unit = (employee.get('unit') or '').strip()
             emp_position = (employee.get('position') or '').strip()
+            emp_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
             
-            # 2) Obtener subunit del empleado desde el historial más reciente
-            # o usar un valor por defecto si no hay historial
-            history = self.get_employee_history(scotia_id)
-            emp_subunit = ''
-            if history:
-                # Buscar el subunit más reciente del historial
-                for h in history:
-                    if h.get('area') == emp_unit and h.get('subunit'):
-                        emp_subunit = h.get('subunit', '').strip()
-                        break
-            
-            # Si no encontramos subunit, usar un valor por defecto basado en la unidad
-            if not emp_subunit:
-                emp_subunit = 'General'  # Valor por defecto
+            # Si no hay unidad_subunidad, construirla a partir de unit y subunit
+            if not emp_unidad_subunidad:
+                history = self.get_employee_history(scotia_id)
+                emp_subunit = ''
+                if history:
+                    # Buscar el subunit más reciente del historial
+                    for h in history:
+                        if h.get('area') == emp_unit and h.get('subunit'):
+                            emp_subunit = h.get('subunit', '').strip()
+                            break
+                
+                # Si no encontramos subunit, usar un valor por defecto basado en la unidad
+                if not emp_subunit:
+                    emp_subunit = 'General'  # Valor por defecto
+                
+                emp_unidad_subunidad = f"{emp_unit}/{emp_subunit}"
 
-            # 3) Requeridos por malla de apps para la posición/unidad del empleado
-            # Solo buscar por unit y position_role (comparación estricta)
+            # 3) Requeridos por malla de apps para la posición/unidad_subunidad del empleado
+            # Solo buscar por unidad_subunidad y position_role (comparación estricta)
             required_apps = self.get_applications_by_position(
                 position=emp_position,
-                unit=emp_unit,
+                unidad_subunidad=emp_unidad_subunidad,
                 subunit=None,  # No filtrar por subunit para ser más inclusivo
                 title=None,    # No tenemos title del empleado
             )
 
-            # Filtrar aplicaciones que coincidan exactamente con unit y position_role
+            # Filtrar aplicaciones que coincidan exactamente con unidad_subunidad y position_role
             filtered_required_apps = []
             for app in required_apps:
-                app_unit = app.get('unit', '').strip()
+                app_unidad_subunidad = app.get('unidad_subunidad', '').strip()
                 app_position = app.get('position_role', '').strip()
                 
-                # Solo incluir si coincide exactamente con unit y position
-                if app_unit == emp_unit and app_position == emp_position:
+                # Solo incluir si coincide exactamente con unidad_subunidad y position
+                if app_unidad_subunidad == emp_unidad_subunidad and app_position == emp_position:
                     filtered_required_apps.append(app)
 
-            # Claves requeridas - usar tripleta normalizada: unit, position_role, logical_access_name (ignora subunit)
+            # Claves requeridas - usar tripleta normalizada: unidad_subunidad, position_role, logical_access_name
             required_keys = {
-                self._triplet_key(app.get('unit'), app.get('position_role'), app.get('logical_access_name'))
+                self._triplet_key(app.get('unidad_subunidad'), app.get('position_role'), app.get('logical_access_name'))
                 for app in filtered_required_apps
             }
 
             # Índice para detalles usando la misma clave normalizada
             req_index = {
-                self._triplet_key(app.get('unit'), app.get('position_role'), app.get('logical_access_name')): app
+                self._triplet_key(app.get('unidad_subunidad'), app.get('position_role'), app.get('logical_access_name')): app
                 for app in filtered_required_apps
             }
 
@@ -1445,9 +1488,15 @@ class AccessManagementService:
                 if app_position != emp_position:
                     app_position = emp_position
                 
-                # Considerar todos los accesos, independientemente de la unidad
+                # Construir unidad_subunidad para el acceso actual
+                app_subunit = h.get('subunit', '')
+                if not app_subunit:
+                    app_subunit = 'General'
+                app_unidad_subunidad = f"{app_unit}/{app_subunit}"
+                
+                # Considerar todos los accesos usando unidad_subunidad
                 if app_position and app_name:
-                    current_keys.add(self._triplet_key(app_unit, app_position, app_name))
+                    current_keys.add(self._triplet_key(app_unidad_subunidad, app_position, app_name))
 
             # 4) Deltas estrictos por clave completa
             to_grant_keys = required_keys - current_keys
@@ -1458,7 +1507,8 @@ class AccessManagementService:
             for key in to_grant_keys:
                 app = req_index.get(key, {})
                 to_grant.append({
-                    'unit': key[0],
+                    'unidad_subunidad': key[0],
+                    'unit': app.get('unit', ''),  # unit del app original
                     'subunit': app.get('subunit', ''),  # subunit del app original
                     'position_role': key[1],
                     'app_name': key[2],
@@ -1478,13 +1528,20 @@ class AccessManagementService:
                 if not app_position:
                     app_position = emp_position
                 
-                if app_unit and app_position and app_name:
-                    key = self._triplet_key(app_unit, app_position, app_name)
+                # Construir unidad_subunidad para el acceso actual
+                app_subunit = h.get('subunit', '')
+                if not app_subunit:
+                    app_subunit = 'General'
+                app_unidad_subunidad = f"{app_unit}/{app_subunit}"
+                
+                if app_unidad_subunidad and app_position and app_name:
+                    key = self._triplet_key(app_unidad_subunidad, app_position, app_name)
                     rec_index[key] = h
             for key in to_revoke_keys:
                 h = rec_index.get(key, {})
                 to_revoke.append({
-                    'unit': key[0],
+                    'unidad_subunidad': key[0],
+                    'unit': h.get('app_unit', '') or h.get('area', ''),  # unit del historial
                     'subunit': h.get('app_subunit', '') or h.get('subunit', ''),  # subunit del historial
                     'position_role': key[1],
                     'app_name': key[2],
@@ -1496,9 +1553,14 @@ class AccessManagementService:
             current_access: List[Dict[str, Any]] = []
             seen_keys = set()
             for h in current_records:
-                # Solo agregar si coincide con la unidad actual del empleado
-                if h.get('area') == emp_unit:
-                    app_unit = h.get('app_unit') or h.get('area', '')
+                # Solo agregar si coincide con la unidad_subunidad actual del empleado
+                app_unit = h.get('app_unit') or h.get('area', '')
+                app_subunit = h.get('subunit', '')
+                if not app_subunit:
+                    app_subunit = 'General'
+                app_unidad_subunidad = f"{app_unit}/{app_subunit}"
+                
+                if app_unidad_subunidad == emp_unidad_subunidad:
                     app_position = h.get('app_position_role') or h.get('position', '')
                     app_name = h.get('app_logical_access_name') or h.get('app_access_name', '')
                     
@@ -1506,12 +1568,13 @@ class AccessManagementService:
                     if not app_position:
                         app_position = emp_position
                     
-                    if app_unit and app_position and app_name:
-                        key = self._triplet_key(app_unit, app_position, app_name)
+                    if app_unidad_subunidad and app_position and app_name:
+                        key = self._triplet_key(app_unidad_subunidad, app_position, app_name)
                         if key not in seen_keys:
                             seen_keys.add(key)
                             current_access.append({
-                                'unit': key[0],
+                                'unidad_subunidad': key[0],
+                                'unit': h.get('app_unit', '') or h.get('area', ''),  # unit del historial
                                 'subunit': h.get('app_subunit', '') or h.get('subunit', ''),  # subunit del historial
                                 'position_role': key[1],
                                 'app_name': key[2],

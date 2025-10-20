@@ -32,6 +32,7 @@ BEGIN
         [manager] VARCHAR(100) NULL,
         [senior_manager] VARCHAR(100) NULL,
         [unit] VARCHAR(100) NULL,
+        [unidad_subunidad] VARCHAR(150) NULL,
         [start_date] DATE NULL,
         [ceco] VARCHAR(100) NULL,
         [skip_level] VARCHAR(100) NULL,
@@ -49,6 +50,13 @@ END
 ELSE
 BEGIN
     PRINT 'Tabla headcount ya existe';
+    -- Agregar columna unidad_subunidad si no existe
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[headcount]') AND name = 'unidad_subunidad')
+    BEGIN
+        ALTER TABLE [dbo].[headcount]
+        ADD [unidad_subunidad] VARCHAR(150) NULL;
+        PRINT 'Columna unidad_subunidad agregada a la tabla headcount';
+    END
 END
 GO
 
@@ -62,6 +70,7 @@ BEGIN
         [jurisdiction] VARCHAR(100) NULL,
         [unit] VARCHAR(100) NULL,
         [subunit] VARCHAR(100) NULL,
+        [unidad_subunidad] VARCHAR(150) NULL,
         [logical_access_name] VARCHAR(150) NOT NULL,
         [alias] VARCHAR(150) NULL,
         [path_email_url] VARCHAR(255) NULL,
@@ -85,6 +94,13 @@ END
 ELSE
 BEGIN
     PRINT 'Tabla applications ya existe';
+    -- Agregar columna unidad_subunidad si no existe
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[applications]') AND name = 'unidad_subunidad')
+    BEGIN
+        ALTER TABLE [dbo].[applications]
+        ADD [unidad_subunidad] VARCHAR(150) NULL;
+        PRINT 'Columna unidad_subunidad agregada a la tabla applications';
+    END
 END
 GO
 
@@ -205,6 +221,13 @@ BEGIN
 END
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_headcount_unidad_subunidad_position' AND object_id = OBJECT_ID(N'[dbo].[headcount]'))
+BEGIN
+    CREATE INDEX IX_headcount_unidad_subunidad_position ON [dbo].[headcount] ([unidad_subunidad], [position]);
+    PRINT 'Índice IX_headcount_unidad_subunidad_position creado exitosamente';
+END
+GO
+
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_headcount_activo' AND object_id = OBJECT_ID(N'[dbo].[headcount]'))
 BEGIN
     CREATE INDEX IX_headcount_activo ON [dbo].[headcount] ([activo]);
@@ -217,6 +240,13 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_applications_unit_posi
 BEGIN
     CREATE INDEX IX_applications_unit_position ON [dbo].[applications] ([unit], [position_role]);
     PRINT 'Índice IX_applications_unit_position creado exitosamente';
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_applications_unidad_subunidad_position' AND object_id = OBJECT_ID(N'[dbo].[applications]'))
+BEGIN
+    CREATE INDEX IX_applications_unidad_subunidad_position ON [dbo].[applications] ([unidad_subunidad], [position_role]);
+    PRINT 'Índice IX_applications_unidad_subunidad_position creado exitosamente';
 END
 GO
 
@@ -260,6 +290,7 @@ BEGIN
     SELECT 
         h.scotia_id,
         h.unit,
+        h.unidad_subunidad,
         h.position,
         a.logical_access_name,
         a.subunit,
@@ -274,6 +305,7 @@ BEGIN
         SELECT DISTINCT
             logical_access_name,
             unit,
+            unidad_subunidad,
             position_role,
             subunit,
             role_name,
@@ -284,12 +316,52 @@ BEGIN
         FROM [dbo].[applications]
         WHERE access_status = ''Activo''
     ) a ON 
-        UPPER(LTRIM(RTRIM(h.unit))) = UPPER(LTRIM(RTRIM(a.unit))) AND
+        UPPER(LTRIM(RTRIM(h.unidad_subunidad))) = UPPER(LTRIM(RTRIM(a.unidad_subunidad))) AND
         UPPER(LTRIM(RTRIM(h.position))) = UPPER(LTRIM(RTRIM(a.position_role)))
     WHERE h.activo = 1
-    GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.position, a.subunit, a.position_role, 
+    GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.unidad_subunidad, h.position, a.subunit, a.position_role, 
              a.role_name, a.system_owner, a.access_type, a.category, a.description');
     PRINT 'Vista vw_required_apps creada exitosamente';
+END
+ELSE
+BEGIN
+    -- Actualizar vista existente
+    EXEC('ALTER VIEW [dbo].[vw_required_apps] AS
+    SELECT 
+        h.scotia_id,
+        h.unit,
+        h.unidad_subunidad,
+        h.position,
+        a.logical_access_name,
+        a.subunit,
+        a.position_role,
+        a.role_name,
+        a.system_owner,
+        a.access_type,
+        a.category,
+        a.description
+    FROM [dbo].[headcount] h
+    INNER JOIN (
+        SELECT DISTINCT
+            logical_access_name,
+            unit,
+            unidad_subunidad,
+            position_role,
+            subunit,
+            role_name,
+            system_owner,
+            access_type,
+            category,
+            description
+        FROM [dbo].[applications]
+        WHERE access_status = ''Activo''
+    ) a ON 
+        UPPER(LTRIM(RTRIM(h.unidad_subunidad))) = UPPER(LTRIM(RTRIM(a.unidad_subunidad))) AND
+        UPPER(LTRIM(RTRIM(h.position))) = UPPER(LTRIM(RTRIM(a.position_role)))
+    WHERE h.activo = 1
+    GROUP BY h.scotia_id, a.logical_access_name, h.unit, h.unidad_subunidad, h.position, a.subunit, a.position_role, 
+             a.role_name, a.system_owner, a.access_type, a.category, a.description');
+    PRINT 'Vista vw_required_apps actualizada exitosamente';
 END
 GO
 
@@ -483,11 +555,11 @@ PRINT 'Función fn_NormalizeText creada exitosamente';
 -- Insertar datos de ejemplo en headcount
 IF NOT EXISTS (SELECT * FROM headcount WHERE scotia_id = 'EMP001')
 BEGIN
-    INSERT INTO [dbo].[headcount] (scotia_id, employee, full_name, email, position, manager, senior_manager, unit, start_date, ceco, skip_level, cafe_alcides, parents, personal_email, size, birthday, validacion, activo, inactivation_date)
+    INSERT INTO [dbo].[headcount] (scotia_id, employee, full_name, email, position, manager, senior_manager, unit, unidad_subunidad, start_date, ceco, skip_level, cafe_alcides, parents, personal_email, size, birthday, validacion, activo, inactivation_date)
     VALUES 
-        ('EMP001', 'Juan Pérez', 'Juan Carlos Pérez García', 'juan.perez@empresa.com', 'Analista', 'María González', 'Carlos López', 'Tecnología', '2023-01-15', 'CECO001', 'Nivel 1', 'Café 1', 'Padres', 'juan.personal@gmail.com', 'M', '1985-05-20', 'Validado', 1, NULL),
-        ('EMP002', 'María González', 'María Elena González López', 'maria.gonzalez@empresa.com', 'Analista Senior', 'Carlos López', 'Ana Martínez', 'Tecnología', '2022-03-10', 'CECO002', 'Nivel 2', 'Café 2', 'Padres', 'maria.personal@gmail.com', 'L', '1980-08-15', 'Validado', 1, NULL),
-        ('EMP003', 'Carlos López', 'Carlos Alberto López Martínez', 'carlos.lopez@empresa.com', 'Gerente', 'Ana Martínez', 'Director', 'Tecnología', '2021-06-01', 'CECO003', 'Nivel 3', 'Café 3', 'Padres', 'carlos.personal@gmail.com', 'XL', '1975-12-03', 'Validado', 1, NULL);
+        ('EMP001', 'Juan Pérez', 'Juan Carlos Pérez García', 'juan.perez@empresa.com', 'Analista', 'María González', 'Carlos López', 'Tecnología', 'Tecnología/Desarrollo', '2023-01-15', 'CECO001', 'Nivel 1', 'Café 1', 'Padres', 'juan.personal@gmail.com', 'M', '1985-05-20', 'Validado', 1, NULL),
+        ('EMP002', 'María González', 'María Elena González López', 'maria.gonzalez@empresa.com', 'Analista Senior', 'Carlos López', 'Ana Martínez', 'Tecnología', 'Tecnología/Desarrollo', '2022-03-10', 'CECO002', 'Nivel 2', 'Café 2', 'Padres', 'maria.personal@gmail.com', 'L', '1980-08-15', 'Validado', 1, NULL),
+        ('EMP003', 'Carlos López', 'Carlos Alberto López Martínez', 'carlos.lopez@empresa.com', 'Gerente', 'Ana Martínez', 'Director', 'Tecnología', 'Tecnología/Desarrollo', '2021-06-01', 'CECO003', 'Nivel 3', 'Café 3', 'Padres', 'carlos.personal@gmail.com', 'XL', '1975-12-03', 'Validado', 1, NULL);
     PRINT 'Datos de ejemplo insertados en headcount';
 END
 GO
@@ -495,34 +567,34 @@ GO
 -- Insertar datos de ejemplo en applications
 IF NOT EXISTS (SELECT * FROM applications WHERE logical_access_name = 'Sistema de Gestión')
 BEGIN
-    INSERT INTO [dbo].[applications] (jurisdiction, unit, subunit, logical_access_name, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method)
+    INSERT INTO [dbo].[applications] (jurisdiction, unit, subunit, unidad_subunidad, logical_access_name, alias, path_email_url, position_role, exception_tracking, fulfillment_action, system_owner, role_name, access_type, category, additional_data, ad_code, access_status, last_update_date, require_licensing, description, authentication_method)
     VALUES 
         -- TECNOLOGÍA - ANALISTA
-        ('Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST', 'https://sistema.empresa.com', 'Analista', 'TRK001', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD001', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO', 'https://gitlab.empresa.com', 'Analista', 'TRK002', 'Crear usuario', 'Admin GitLab', 'Developer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD002', 'Activo', GETDATE(), 'Licencia estándar', 'Repositorio de código fuente', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ', 'https://jira.empresa.com', 'Analista', 'TRK003', 'Asignar acceso', 'Admin Jira', 'Developer', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD003', 'Activo', GETDATE(), 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Sistema de Gestión', 'SIS-GEST', 'https://sistema.empresa.com', 'Analista', 'TRK001', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD001', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'GitLab', 'GIT-REPO', 'https://gitlab.empresa.com', 'Analista', 'TRK002', 'Crear usuario', 'Admin GitLab', 'Developer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD002', 'Activo', GETDATE(), 'Licencia estándar', 'Repositorio de código fuente', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Jira', 'JIRA-PROJ', 'https://jira.empresa.com', 'Analista', 'TRK003', 'Asignar acceso', 'Admin Jira', 'Developer', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD003', 'Activo', GETDATE(), 'Licencia estándar', 'Gestión de proyectos y tickets', 'LDAP'),
         
         -- TECNOLOGÍA - ANALISTA SENIOR
-        ('Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST-ADM', 'https://sistema.empresa.com', 'Analista Senior', 'TRK004', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD004', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO-ADM', 'https://gitlab.empresa.com', 'Analista Senior', 'TRK005', 'Crear usuario', 'Admin GitLab', 'Maintainer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD005', 'Activo', GETDATE(), 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ-ADM', 'https://jira.empresa.com', 'Analista Senior', 'TRK006', 'Asignar acceso', 'Admin Jira', 'Project Lead', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD006', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'Docker Registry', 'DOCK-REG', 'https://registry.empresa.com', 'Analista Senior', 'TRK007', 'Crear usuario', 'Admin Docker', 'Maintainer', 'Aplicación', 'DevOps', 'Datos adicionales', 'AD007', 'Activo', GETDATE(), 'Licencia premium', 'Registro de contenedores Docker', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Sistema de Gestión', 'SIS-GEST-ADM', 'https://sistema.empresa.com', 'Analista Senior', 'TRK004', 'Crear usuario', 'Admin Sistema', 'Administrador', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD004', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'GitLab', 'GIT-REPO-ADM', 'https://gitlab.empresa.com', 'Analista Senior', 'TRK005', 'Crear usuario', 'Admin GitLab', 'Maintainer', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD005', 'Activo', GETDATE(), 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Jira', 'JIRA-PROJ-ADM', 'https://jira.empresa.com', 'Analista Senior', 'TRK006', 'Asignar acceso', 'Admin Jira', 'Project Lead', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD006', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Docker Registry', 'DOCK-REG', 'https://registry.empresa.com', 'Analista Senior', 'TRK007', 'Crear usuario', 'Admin Docker', 'Maintainer', 'Aplicación', 'DevOps', 'Datos adicionales', 'AD007', 'Activo', GETDATE(), 'Licencia premium', 'Registro de contenedores Docker', 'LDAP'),
         
         -- TECNOLOGÍA - GERENTE
-        ('Global', 'Tecnología', 'Desarrollo', 'Sistema de Gestión', 'SIS-GEST-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK008', 'Crear usuario', 'Admin Sistema', 'Manager', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD008', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'GitLab', 'GIT-REPO-MGR', 'https://gitlab.empresa.com', 'Gerente', 'TRK009', 'Crear usuario', 'Admin GitLab', 'Owner', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD009', 'Activo', GETDATE(), 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'Jira', 'JIRA-PROJ-MGR', 'https://jira.empresa.com', 'Gerente', 'TRK010', 'Asignar acceso', 'Admin Jira', 'Administrator', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD010', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
-        ('Global', 'Tecnología', 'Desarrollo', 'Power BI', 'POWER-BI', 'https://powerbi.empresa.com', 'Gerente', 'TRK011', 'Crear usuario', 'Admin PowerBI', 'Admin', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD011', 'Activo', GETDATE(), 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Sistema de Gestión', 'SIS-GEST-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK008', 'Crear usuario', 'Admin Sistema', 'Manager', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD008', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'GitLab', 'GIT-REPO-MGR', 'https://gitlab.empresa.com', 'Gerente', 'TRK009', 'Crear usuario', 'Admin GitLab', 'Owner', 'Aplicación', 'Desarrollo', 'Datos adicionales', 'AD009', 'Activo', GETDATE(), 'Licencia premium', 'Repositorio de código fuente', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Jira', 'JIRA-PROJ-MGR', 'https://jira.empresa.com', 'Gerente', 'TRK010', 'Asignar acceso', 'Admin Jira', 'Administrator', 'Aplicación', 'Gestión', 'Datos adicionales', 'AD010', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de proyectos y tickets', 'LDAP'),
+        ('Global', 'Tecnología', 'Desarrollo', 'Tecnología/Desarrollo', 'Power BI', 'POWER-BI', 'https://powerbi.empresa.com', 'Gerente', 'TRK011', 'Crear usuario', 'Admin PowerBI', 'Admin', 'Aplicación', 'Analytics', 'Datos adicionales', 'AD011', 'Activo', GETDATE(), 'Licencia premium', 'Herramienta de análisis de datos', 'LDAP'),
         
         -- RECURSOS HUMANOS - ANALISTA
-        ('Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH', 'https://sistema.empresa.com', 'Analista', 'TRK015', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD015', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
-        ('Global', 'Recursos Humanos', 'RRHH', 'Workday', 'WD-RRHH', 'https://workday.empresa.com', 'Analista', 'TRK016', 'Crear usuario', 'Admin Workday', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD016', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema de gestión de RRHH', 'LDAP'),
-        ('Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'SF-RRHH', 'https://successfactors.empresa.com', 'Analista', 'TRK017', 'Crear usuario', 'Admin SuccessFactors', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD017', 'Activo', GETDATE(), 'Licencia estándar', 'Gestión de talento y rendimiento', 'LDAP'),
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH', 'https://sistema.empresa.com', 'Analista', 'TRK015', 'Crear usuario', 'Admin Sistema', 'Usuario', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD015', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema principal de gestión empresarial', 'LDAP'),
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'Workday', 'WD-RRHH', 'https://workday.empresa.com', 'Analista', 'TRK016', 'Crear usuario', 'Admin Workday', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD016', 'Activo', GETDATE(), 'Licencia estándar', 'Sistema de gestión de RRHH', 'LDAP'),
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'SuccessFactors', 'SF-RRHH', 'https://successfactors.empresa.com', 'Analista', 'TRK017', 'Crear usuario', 'Admin SuccessFactors', 'Analyst', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD017', 'Activo', GETDATE(), 'Licencia estándar', 'Gestión de talento y rendimiento', 'LDAP'),
         
         -- RECURSOS HUMANOS - GERENTE
-        ('Global', 'Recursos Humanos', 'RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK018', 'Crear usuario', 'Admin Sistema', 'Manager', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD018', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
-        ('Global', 'Recursos Humanos', 'RRHH', 'Workday', 'WD-RRHH-MGR', 'https://workday.empresa.com', 'Gerente', 'TRK019', 'Crear usuario', 'Admin Workday', 'Manager', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD019', 'Activo', GETDATE(), 'Licencia premium', 'Sistema de gestión de RRHH', 'LDAP'),
-        ('Global', 'Recursos Humanos', 'RRHH', 'SuccessFactors', 'SF-RRHH-MGR', 'https://successfactors.empresa.com', 'Gerente', 'TRK020', 'Crear usuario', 'Admin SuccessFactors', 'Manager', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD020', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de talento y rendimiento', 'LDAP');
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'Sistema de Gestión', 'SIS-GEST-RRHH-MGR', 'https://sistema.empresa.com', 'Gerente', 'TRK018', 'Crear usuario', 'Admin Sistema', 'Manager', 'Aplicación', 'Sistemas', 'Datos adicionales', 'AD018', 'Activo', GETDATE(), 'Licencia premium', 'Sistema principal de gestión empresarial', 'LDAP'),
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'Workday', 'WD-RRHH-MGR', 'https://workday.empresa.com', 'Gerente', 'TRK019', 'Crear usuario', 'Admin Workday', 'Manager', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD019', 'Activo', GETDATE(), 'Licencia premium', 'Sistema de gestión de RRHH', 'LDAP'),
+        ('Global', 'Recursos Humanos', 'RRHH', 'Recursos Humanos/RRHH', 'SuccessFactors', 'SF-RRHH-MGR', 'https://successfactors.empresa.com', 'Gerente', 'TRK020', 'Crear usuario', 'Admin SuccessFactors', 'Manager', 'Aplicación', 'RRHH', 'Datos adicionales', 'AD020', 'Activo', GETDATE(), 'Licencia premium', 'Gestión de talento y rendimiento', 'LDAP');
     PRINT 'Datos de ejemplo insertados en applications';
 END
 GO
@@ -555,10 +627,10 @@ BEGIN
     SET NOCOUNT ON;
     
     -- Variables para almacenar resultados
-    DECLARE @emp_unit VARCHAR(100), @emp_position VARCHAR(100);
+    DECLARE @emp_unit VARCHAR(100), @emp_position VARCHAR(100), @emp_unidad_subunidad VARCHAR(150);
     
     -- Obtener datos del empleado
-    SELECT @emp_unit = unit, @emp_position = position 
+    SELECT @emp_unit = unit, @emp_position = position, @emp_unidad_subunidad = unidad_subunidad
     FROM [dbo].[headcount] 
     WHERE scotia_id = @scotia_id AND activo = 1;
     
@@ -614,7 +686,7 @@ BEGIN
         'Required' as status
     FROM [dbo].[applications] a
     WHERE a.access_status = 'Activo'
-    AND a.unit = @emp_unit
+    AND a.unidad_subunidad = @emp_unidad_subunidad
     AND a.position_role = @emp_position;
     
     -- 3. Calcular accesos a otorgar (requeridos - actuales)
@@ -686,6 +758,7 @@ CREATE PROCEDURE [dbo].[sp_ProcessEmployeeOnboarding]
     @scotia_id VARCHAR(20),
     @position VARCHAR(100),
     @unit VARCHAR(100),
+    @unidad_subunidad VARCHAR(150),
     @responsible VARCHAR(100) = 'Sistema',
     @subunit VARCHAR(100) = NULL
 AS
@@ -703,11 +776,11 @@ BEGIN
     SET activo = 1, inactivation_date = NULL
     WHERE scotia_id = @scotia_id;
     
-    -- Actualizar posición y unidad si están vacías
+    -- Actualizar posición, unidad y unidad_subunidad si están vacías
     UPDATE [dbo].[headcount] 
-    SET position = @position, unit = @unit
+    SET position = @position, unit = @unit, unidad_subunidad = @unidad_subunidad
     WHERE scotia_id = @scotia_id 
-    AND (position IS NULL OR position = '' OR unit IS NULL OR unit = '');
+    AND (position IS NULL OR position = '' OR unit IS NULL OR unit = '' OR unidad_subunidad IS NULL OR unidad_subunidad = '');
     
     -- Obtener aplicaciones requeridas y crear registros históricos
     INSERT INTO [dbo].[historico] (
@@ -732,7 +805,7 @@ BEGIN
         'En Proceso'
     FROM [dbo].[applications] a
     WHERE a.access_status = 'Activo'
-    AND a.unit = @unit
+    AND a.unidad_subunidad = @unidad_subunidad
     AND a.position_role = @position
     AND NOT EXISTS (
         SELECT 1 FROM [dbo].[historico] h 

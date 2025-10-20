@@ -18,7 +18,7 @@ class CamposGeneralesFrame:
         """Crea las variables de control"""
         self.variables = {
             'sid': tk.StringVar(),
-            'nueva_sub_unidad': tk.StringVar(),
+            'nueva_unidad_subunidad': tk.StringVar(),
             'nuevo_cargo': tk.StringVar(),
             'request_date': tk.StringVar(value=datetime.now().strftime("%Y-%m-%d")),
             'ingreso_por': tk.StringVar(),
@@ -44,7 +44,7 @@ class CamposGeneralesFrame:
         # Campos
         campos = [
             ("SID:", "sid", "entry"),
-            ("Nueva Sub Unidad:", "nueva_sub_unidad", "combobox", dropdown_values['units']),
+            ("Nueva Unidad/Subunidad:", "nueva_unidad_subunidad", "combobox", dropdown_values['unidad_subunidad']),
             ("Nuevo Cargo:", "nuevo_cargo", "combobox", dropdown_values['positions']),
             ("Request Date:", "request_date", "entry"),
             ("Quien hace el ingreso:", "ingreso_por", "combobox", ["Juan Pérez", "María García"]),
@@ -89,7 +89,7 @@ class CamposGeneralesFrame:
     
     def validar_campos_obligatorios(self):
         """Valida que los campos obligatorios estén completos"""
-        campos_obligatorios = ['sid', 'nueva_sub_unidad', 'nuevo_cargo', 'status']
+        campos_obligatorios = ['sid', 'nueva_unidad_subunidad', 'nuevo_cargo', 'status']
         campos_vacios = []
         
         for campo in campos_obligatorios:
@@ -106,8 +106,8 @@ class CamposGeneralesFrame:
             dropdown_values = dropdown_service.get_all_dropdown_values()
             
             # Actualizar los comboboxes específicos
-            if 'nueva_sub_unidad' in self.comboboxes:
-                self.comboboxes['nueva_sub_unidad']['values'] = dropdown_values.get('units', [])
+            if 'nueva_unidad_subunidad' in self.comboboxes:
+                self.comboboxes['nueva_unidad_subunidad']['values'] = dropdown_values.get('unidad_subunidad', [])
             
             if 'nuevo_cargo' in self.comboboxes:
                 self.comboboxes['nuevo_cargo']['values'] = dropdown_values.get('positions', [])
@@ -439,7 +439,7 @@ class EdicionBusquedaFrame:
         self.variables = {
             'numero_caso_busqueda': tk.StringVar(),
             'numero_caso_edicion': tk.StringVar(),
-            'nueva_sub_unidad_edicion': tk.StringVar(),
+            'nueva_unidad_subunidad_edicion': tk.StringVar(),
             'nuevo_cargo_edicion': tk.StringVar(),
             'request_date_edicion': tk.StringVar(),
             'ingreso_por_edicion': tk.StringVar(),
@@ -1198,7 +1198,7 @@ class EdicionBusquedaFrame:
                 # Mapear nombres de columnas a campos de la base de datos
                 mapeo_columnas = {
                     "SID": "sid",
-                    "Sub Unidad": "nueva_sub_unidad",
+                    "Unidad/Subunidad": "nueva_unidad_subunidad",
                     "Cargo": "nuevo_cargo",
                     "Status": "status",
                     "Request Date": "request_date",
@@ -1264,7 +1264,7 @@ class EdicionBusquedaFrame:
                 # Mapear nombres de columnas a campos de la base de datos
                 mapeo_columnas = {
                     "SID": "sid",
-                    "Sub Unidad": "nueva_sub_unidad",
+                    "Unidad/Subunidad": "nueva_unidad_subunidad",
                     "Cargo": "nuevo_cargo",
                     "Status": "status",
                     "Request Date": "request_date",
@@ -1311,7 +1311,7 @@ class EdicionBusquedaFrame:
                 valores = (
                     resultado.get('numero_caso', ''),
                     resultado.get('sid', ''),
-                    resultado.get('nueva_sub_unidad', ''),
+                    resultado.get('nueva_unidad_subunidad', ''),
                     resultado.get('nuevo_cargo', ''),
                     resultado.get('status', ''),
                     resultado.get('request_date', ''),
@@ -1338,7 +1338,7 @@ class EdicionBusquedaFrame:
             if len(valores) >= 14:  # Ahora tenemos 14 columnas
                 # Campos básicos
                 self.variables['numero_caso_edicion'].set(valores[0])
-                self.variables['nueva_sub_unidad_edicion'].set(valores[2])
+                self.variables['nueva_unidad_subunidad_edicion'].set(valores[2])
                 self.variables['nuevo_cargo_edicion'].set(valores[3])
                 self.variables['status_edicion'].set(valores[4])
                 self.variables['request_date_edicion'].set(valores[5])
@@ -1598,6 +1598,7 @@ class CreacionPersonaFrame:
             'manager': tk.StringVar(),
             'senior_manager': tk.StringVar(),
             'unit': tk.StringVar(),
+            'unidad_subunidad': tk.StringVar(),
             'start_date': tk.StringVar(),
             'ceco': tk.StringVar(),
             'skip_level': tk.StringVar(),
@@ -1623,6 +1624,7 @@ class CreacionPersonaFrame:
             "Posición": "position",
             "Manager": "manager",
             "Unidad": "unit",
+            "Unidad/Subunidad": "unidad_subunidad",
             "CECO": "ceco",
             "Cafe Alcides": "cafe_alcides",
             "Validación": "validacion"
@@ -1686,7 +1688,7 @@ class CreacionPersonaFrame:
         resultados_frame.rowconfigure(0, weight=1)
         
         # Crear Treeview para mostrar resultados
-        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Cargo", "Estado"), 
+        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Nombre", "Apellido", "Email", "Departamento", "Unidad/Subunidad", "Cargo", "Estado"), 
                                 show="headings", height=12)
         
         # Configurar columnas
@@ -1695,6 +1697,7 @@ class CreacionPersonaFrame:
         self.tree.heading("Apellido", text="Apellido")
         self.tree.heading("Email", text="Email")
         self.tree.heading("Departamento", text="Departamento")
+        self.tree.heading("Unidad/Subunidad", text="Unidad/Subunidad")
         self.tree.heading("Cargo", text="Cargo")
         self.tree.heading("Estado", text="Estado")
         
@@ -1703,7 +1706,8 @@ class CreacionPersonaFrame:
         self.tree.column("Nombre", width=150, minwidth=120)
         self.tree.column("Apellido", width=150, minwidth=120)
         self.tree.column("Email", width=250, minwidth=200)
-        self.tree.column("Departamento", width=180, minwidth=150)
+        self.tree.column("Departamento", width=150, minwidth=120)
+        self.tree.column("Unidad/Subunidad", width=180, minwidth=150)
         self.tree.column("Cargo", width=180, minwidth=150)
         self.tree.column("Estado", width=120, minwidth=100)
         
@@ -2152,6 +2156,7 @@ class CreacionPersonaFrame:
                     apellido,                        # Apellido
                     resultado.get('email', ''),      # Email
                     resultado.get('unit', ''),       # Departamento
+                    resultado.get('unidad_subunidad', ''),  # Unidad/Subunidad
                     resultado.get('position', ''),   # Cargo
                     'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
                 ))
@@ -2446,6 +2451,7 @@ class PersonaDialog:
             ("Manager:", "manager", "entry"),
             ("Senior Manager:", "senior_manager", "entry"),
             ("Unidad:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
+            ("Unidad/Subunidad:", "unidad_subunidad", "entry"),
             ("Fecha de Inicio:", "start_date", "entry"),
             ("CECO:", "ceco", "entry"),
             ("Skip Level:", "skip_level", "entry"),

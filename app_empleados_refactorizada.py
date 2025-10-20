@@ -304,7 +304,6 @@ class AppEmpleadosRefactorizada:
         # Botones con estilos predefinidos
         botones_info = [
             ("💾 Guardar", self.guardar_datos, "Success.TButton"),
-            ("🔍 Verificar Apps Gerente RRHH", self.verificar_aplicaciones_gerente_rrhh, "Warning.TButton"),
             ("🧹 Limpiar", self.limpiar_campos, "Info.TButton"),
             ("🚪 Salir", self.root.quit, "Danger.TButton")
         ]
@@ -473,11 +472,11 @@ class AppEmpleadosRefactorizada:
                 # Mapear nombres a los nombres reales de la BD
                 temp_position = datos_generales.get('nuevo_cargo', '')
                 temp_unit = datos_generales.get('nueva_sub_unidad', '')
-                mapped_position, mapped_unit = self.mapear_nombres_bd(temp_position, temp_unit)
+                mapped_position, mapped_unit, mapped_unidad_subunidad = self.mapear_nombres_bd(temp_position, temp_unit)
                 
                 print(f"FLEX STAFF - Mapeo de nombres:")
                 print(f"  Original: '{temp_position}' + '{temp_unit}'")
-                print(f"  Mapeado: '{mapped_position}' + '{mapped_unit}'")
+                print(f"  Mapeado: '{mapped_position}' + '{mapped_unit}' + '{mapped_unidad_subunidad}'")
                 
                 success, message, records = access_service.process_flex_staff_assignment(
                     scotia_id,
@@ -524,56 +523,6 @@ class AppEmpleadosRefactorizada:
         except Exception as e:
             print(f"Error en limpiar_campos: {e}")
     
-    def verificar_aplicaciones_gerente_rrhh(self):
-        """Verifica qué aplicaciones existen para Gerente de RRHH"""
-        try:
-            print("=== VERIFICACIÓN DE APLICACIONES PARA GERENTE DE RRHH ===")
-            
-            # Obtener todas las aplicaciones
-            all_apps = access_service.get_all_applications()
-            print(f"Total de aplicaciones en la BD: {len(all_apps)}")
-            
-            # Buscar aplicaciones que contengan "GERENTE" o "RRHH"
-            apps_gerente = []
-            apps_rrhh = []
-            
-            for app in all_apps:
-                position = app.get('position_role', '').upper()
-                unit = app.get('unit', '').upper()
-                
-                if 'GERENTE' in position:
-                    apps_gerente.append(app)
-                if 'RRHH' in unit:
-                    apps_rrhh.append(app)
-            
-            print(f"\nAplicaciones con 'GERENTE' en position_role: {len(apps_gerente)}")
-            for app in apps_gerente:
-                print(f"  - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
-            
-            print(f"\nAplicaciones con 'RRHH' en unit: {len(apps_rrhh)}")
-            for app in apps_rrhh:
-                print(f"  - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
-            
-            # Probar diferentes variaciones de búsqueda
-            variaciones = [
-                ("GERENTE DE RECURSOS HUMANOS", "RRHH"),
-                ("GERENTE RECURSOS HUMANOS", "RRHH"),
-                ("GERENTE RRHH", "RRHH"),
-                ("GERENTE", "RRHH"),
-                ("RECURSOS HUMANOS", "RRHH"),
-                # Probar con los nombres reales de la BD
-                ("GERENTE", "RECURSOS HUMANOS"),
-                ("GERENTE DE RECURSOS HUMANOS", "RECURSOS HUMANOS"),
-                ("GERENTE RECURSOS HUMANOS", "RECURSOS HUMANOS")
-            ]
-            
-            print(f"\n=== PROBANDO DIFERENTES VARIACIONES ===")
-            for pos, unit in variaciones:
-                apps = access_service.get_applications_by_position(pos, unit)
-                print(f"'{pos}' + '{unit}': {len(apps)} aplicaciones")
-            
-        except Exception as e:
-            print(f"Error verificando aplicaciones: {e}")
     
     def mapear_nombres_bd(self, position, unit):
         """Mapea los nombres de los desplegables a los nombres reales de la BD"""
@@ -598,7 +547,15 @@ class AppEmpleadosRefactorizada:
         mapped_unit = unit_mapping.get(unit.upper(), unit)
         mapped_position = position_mapping.get(position.upper(), position)
         
-        return mapped_position, mapped_unit
+        # Construir unidad_subunidad
+        if mapped_unit == 'Tecnologia':
+            unidad_subunidad = 'Tecnología/Desarrollo'
+        elif mapped_unit == 'Recursos Humanos':
+            unidad_subunidad = 'Recursos Humanos/RRHH'
+        else:
+            unidad_subunidad = f"{mapped_unit}/General"
+        
+        return mapped_position, mapped_unit, unidad_subunidad
     
 class ConciliacionFrame:
     """Frame simplificado para la conciliación de accesos"""
@@ -793,25 +750,25 @@ class ConciliacionFrame:
             # Verificar si ya existen aplicaciones para ANALISTA SENIOR en TECNOLOGÍA
             cursor.execute("""
                 SELECT COUNT(*) FROM applications 
-                WHERE unit = 'TECNOLOGÍA' AND position_role = 'ANALISTA SENIOR'
+                WHERE unidad_subunidad = 'Tecnología/Desarrollo' AND position_role = 'Analista Senior'
             """)
             count = cursor.fetchone()[0]
             
             if count == 0:
                 # Crear aplicaciones de ejemplo
                 applications_data = [
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'JIRA', 'JIRA', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de gestión de proyectos'),
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'CONFLUENCE', 'CONFLUENCE', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de documentación'),
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'GITLAB', 'GITLAB', 'ANALISTA SENIOR', 'DEVELOPER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de control de versiones'),
-                    ('Global', 'TECNOLOGÍA', 'ANALISIS', 'POWER BI', 'POWER BI', 'ANALISTA SENIOR', 'ANALYST', 'Aplicación', 'Analytics', 'Activo', 'Tecnología', 'Herramienta de análisis de datos')
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'JIRA', 'JIRA', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de gestión de proyectos'),
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'CONFLUENCE', 'CONFLUENCE', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de documentación'),
+                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'GITLAB', 'GITLAB', 'ANALISTA SENIOR', 'DEVELOPER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de control de versiones'),
+                    ('Global', 'TECNOLOGÍA', 'ANALISIS', 'Tecnología/Desarrollo', 'POWER BI', 'POWER BI', 'ANALISTA SENIOR', 'ANALYST', 'Aplicación', 'Analytics', 'Activo', 'Tecnología', 'Herramienta de análisis de datos')
                 ]
                 
                 for app in applications_data:
                     cursor.execute("""
                         INSERT OR IGNORE INTO applications 
-                        (jurisdiction, unit, subunit, logical_access_name, alias, position_role, 
+                        (jurisdiction, unit, subunit, unidad_subunidad, logical_access_name, alias, position_role, 
                          role_name, access_type, category, access_status, system_owner, description)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, app)
                 
                 conn.commit()
@@ -1747,7 +1704,7 @@ class AplicacionesFrame:
         table_frame.rowconfigure(0, weight=1)
         
         # Crear Treeview - Actualizado para coincidir con tabla applications
-        columns = ('ID', 'Logical Access Name', 'Alias', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category')
+        columns = ('ID', 'Logical Access Name', 'Alias', 'Unit', 'Unidad/Subunidad', 'Position Role', 'System Owner', 'Access Status', 'Category')
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         # Configurar columnas
@@ -1755,6 +1712,7 @@ class AplicacionesFrame:
         self.tree.heading('Logical Access Name', text='Logical Access Name')
         self.tree.heading('Alias', text='Alias')
         self.tree.heading('Unit', text='Unit')
+        self.tree.heading('Unidad/Subunidad', text='Unidad/Subunidad')
         self.tree.heading('Position Role', text='Position Role')
         self.tree.heading('System Owner', text='System Owner')
         self.tree.heading('Access Status', text='Access Status')
@@ -1764,7 +1722,8 @@ class AplicacionesFrame:
         self.tree.column('ID', width=50, minwidth=50)
         self.tree.column('Logical Access Name', width=180, minwidth=150)
         self.tree.column('Alias', width=120, minwidth=100)
-        self.tree.column('Unit', width=120, minwidth=100)
+        self.tree.column('Unit', width=100, minwidth=80)
+        self.tree.column('Unidad/Subunidad', width=150, minwidth=120)
         self.tree.column('Position Role', width=150, minwidth=120)
         self.tree.column('System Owner', width=120, minwidth=100)
         self.tree.column('Access Status', width=100, minwidth=80)
@@ -1831,6 +1790,7 @@ class AplicacionesFrame:
                 app.get('logical_access_name', ''),
                 app.get('alias', ''),
                 app.get('unit', ''),
+                app.get('unidad_subunidad', ''),
                 app.get('position_role', ''),
                 app.get('system_owner', ''),
                 app.get('access_status', ''),
@@ -1986,7 +1946,7 @@ class AplicacionesFrame:
             
             if filename:
                 with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                    fieldnames = ['ID', 'Logical Access Name', 'Alias', 'Unit', 'Position Role', 'System Owner', 'Access Status', 'Category']
+                    fieldnames = ['ID', 'Logical Access Name', 'Alias', 'Unit', 'Unidad/Subunidad', 'Position Role', 'System Owner', 'Access Status', 'Category']
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     
                     writer.writeheader()
@@ -1996,6 +1956,7 @@ class AplicacionesFrame:
                             'Logical Access Name': app.get('logical_access_name', ''),
                             'Alias': app.get('alias', ''),
                             'Unit': app.get('unit', ''),
+                            'Unidad/Subunidad': app.get('unidad_subunidad', ''),
                             'Position Role': app.get('position_role', ''),
                             'System Owner': app.get('system_owner', ''),
                             'Access Status': app.get('access_status', ''),
@@ -2080,6 +2041,7 @@ class ApplicationDialog:
             ("Jurisdiction:", "jurisdiction", "combobox", dropdown_values['jurisdictions']),
             ("Unit:", "unit", "combobox", dropdown_values['units']),
             ("Subunit:", "subunit", "combobox", dropdown_values['subunits']),
+            ("Unidad/Subunidad:", "unidad_subunidad", "entry"),
             ("Logical Access Name:", "logical_access_name", "entry"),
             ("Alias:", "alias", "entry"),
             ("Path/Email/URL:", "path_email_url", "entry"),
