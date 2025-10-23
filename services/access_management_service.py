@@ -185,17 +185,21 @@ class AccessManagementService:
             print(f"Error obteniendo empleados: {e}")
             return []
 
-    def update_employee_position(self, scotia_id: str, new_position: str, new_unit: str) -> Tuple[bool, str]:
-        """Actualiza la posición y unidad de un empleado"""
+    def update_employee_position(self, scotia_id: str, new_position: str, new_unit: str, new_unidad_subunidad: str = None) -> Tuple[bool, str]:
+        """Actualiza la posición, unidad y unidad_subunidad de un empleado"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
 
+            # Si no se proporciona unidad_subunidad, generar una basada en la unidad
+            if new_unidad_subunidad is None:
+                new_unidad_subunidad = f"{new_unit}/General" if new_unit else "Sin Unidad/Subunidad"
+
             cursor.execute('''
                 UPDATE headcount 
-                SET position = ?, unit = ?
+                SET position = ?, unit = ?, unidad_subunidad = ?
                 WHERE scotia_id = ?
-            ''', (new_position, new_unit, scotia_id))
+            ''', (new_position, new_unit, new_unidad_subunidad, scotia_id))
 
             if cursor.rowcount == 0:
                 conn.close()
@@ -204,7 +208,7 @@ class AccessManagementService:
             conn.commit()
             conn.close()
 
-            return True, f"Posición actualizada para {scotia_id}"
+            return True, f"Posición y unidad actualizadas para {scotia_id}"
 
         except Exception as e:
             return False, f"Error actualizando posición: {str(e)}"
@@ -313,7 +317,9 @@ class AccessManagementService:
                 params.append(subunit)
             
             if position:
-                query += ' AND UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))'
+                # Buscar en ambas columnas: position (nueva) y position_role (antigua)
+                query += ' AND (UPPER(LTRIM(RTRIM(position))) = UPPER(LTRIM(RTRIM(?))) OR UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?))))'
+                params.append(position)
                 params.append(position)
             
             if title:
@@ -340,7 +346,7 @@ class AccessManagementService:
             # Debug: mostrar resultados
             print(f"  - Resultados encontrados: {len(applications)}")
             for app in applications:
-                print(f"    * {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('position_role', '')}")
+                print(f"    * {app.get('logical_access_name', '')} | {app.get('unidad_subunidad', '')} | {app.get('position_role', '')}")
 
             conn.close()
             return applications
@@ -607,7 +613,8 @@ class AccessManagementService:
 
     def create_manual_access_record(self, scotia_id: str, app_name: str, 
                                    responsible: str = "Manual", 
-                                   description: str = None) -> Tuple[bool, str]:
+                                   description: str = None,
+                                   position: str = None) -> Tuple[bool, str]:
         """Crea un registro manual individual de acceso para una persona específica"""
         try:
             # Verificar que el empleado existe
@@ -622,6 +629,31 @@ class AccessManagementService:
             if not description:
                 description = f"Acceso manual a {app_name} para {employee.get('full_name', scotia_id)}"
             
+            # Obtener información de la aplicación si se proporciona posición
+            app_info = None
+            if position:
+                try:
+                    conn = self.get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        SELECT unit, subunit, role_name, description
+                        FROM applications 
+                        WHERE logical_access_name = ? AND position_role = ?
+                        LIMIT 1
+                    ''', (app_name, position))
+                    
+                    app_row = cursor.fetchone()
+                    if app_row:
+                        app_info = {
+                            'unit': app_row[0],
+                            'subunit': app_row[1],
+                            'role_name': app_row[2],
+                            'description': app_row[3]
+                        }
+                    conn.close()
+                except Exception as e:
+                    print(f"Error obteniendo información de aplicación: {e}")
+            
             # Datos del registro manual
             record_data = {
                 'scotia_id': scotia_id,
@@ -631,8 +663,8 @@ class AccessManagementService:
                 'request_date': datetime.now().strftime('%Y-%m-%d'),
                 'process_access': 'manual_access',
                 'sid': scotia_id,
-                'area': employee.get('unit', 'Sin Unidad'),
-                'subunit': employee.get('unit', 'Sin Unidad'),
+                'area': app_info.get('unit', employee.get('unit', 'Sin Unidad')) if app_info else employee.get('unit', 'Sin Unidad'),
+                'subunit': app_info.get('subunit', employee.get('unit', 'Sin Unidad')) if app_info else employee.get('unit', 'Sin Unidad'),
                 'event_description': description,
                 'ticket_email': f"{responsible}@empresa.com",
                 'app_access_name': app_name,
@@ -642,7 +674,7 @@ class AccessManagementService:
                 'closing_date_ticket': None,
                 'app_quality': None,
                 'confirmation_by_user': None,
-                'comment': f"Registro manual creado por {responsible}",
+                'comment': f"Registro manual creado por {responsible}" + (f" para posición {position}" if position else ""),
                 'ticket_quality': None,
                 'general_status': 'Pendiente',
                 'average_time_open_ticket': None
@@ -850,7 +882,7 @@ class AccessManagementService:
                 AND h.app_access_name IS NOT NULL
                 AND (
                     -- Accesos asignados por aplicación (de la posición actual)
-                    (h.process_access IN ('onboarding', 'lateral_movement') AND a.unit = ? AND a.position_role = ?)
+                    (h.process_access IN ('onboarding', 'lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?)
                     OR
                     -- Accesos manuales
                     h.process_access = 'manual_access'
@@ -934,29 +966,35 @@ class AccessManagementService:
             else:
                 print(f"⚠️ {message}")
 
-            # 3. Actualizar posición y unidad del empleado si están vacías
-            current_position = employee.get('position', '').strip()
-            current_unit = employee.get('unit', '').strip()
+            # 3. Usar el valor de unidad_subunidad del formulario para filtrar
+            # Este valor viene del campo "Nueva Unidad/Subunidad" del formulario
+            unidad_subunidad = unit  # Usar directamente el valor del formulario
             
-            if not current_position or not current_unit:
+            # 4. Actualizar posición, unidad y unidad_subunidad del empleado si están vacías
+            current_position = (employee.get('position') or '').strip()
+            current_unit = (employee.get('unit') or '').strip()
+            current_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
+            
+            if not current_position or not current_unit or not current_unidad_subunidad:
                 conn = self.get_connection()
                 cursor = conn.cursor()
                 cursor.execute('''
                     UPDATE headcount 
-                    SET position = ?, unit = ?
+                    SET position = ?, unit = ?, unidad_subunidad = ?
                     WHERE scotia_id = ?
-                ''', (position, unit, scotia_id))
+                ''', (position, unit, unidad_subunidad, scotia_id))
                 conn.commit()
                 conn.close()
-                print(f"✅ Posición y unidad actualizadas para {scotia_id}")
-
-            # 4. Construir unidad_subunidad para la búsqueda
-            unidad_subunidad = f"{unit}/{subunit}" if subunit else unit
+                print(f"✅ Posición, unidad y unidad_subunidad actualizadas para {scotia_id}")
+                print(f"  - unidad_subunidad: '{unidad_subunidad}' (del formulario)")
+            else:
+                print(f"✅ Empleado ya tiene todos los campos poblados")
+                print(f"  - unidad_subunidad actual: '{current_unidad_subunidad}'")
             
-            # 5. Obtener aplicaciones requeridas para la posición (ya sin duplicados por clave)
+            # 5. Obtener aplicaciones requeridas para la posición y unidad/subunidad
             required_apps = self.get_applications_by_position(position, unidad_subunidad, subunit=subunit)
             if not required_apps:
-                return False, f"No se encontraron aplicaciones para la posición '{position}' en la unidad/subunidad '{unidad_subunidad}'", []
+                return False, f"No se encontraron aplicaciones para la posición '{position}'", []
 
             # 6. Crear registros históricos para cada aplicación (dedupe por tripleta normalizada)
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S%f')}-{scotia_id}"
@@ -982,7 +1020,7 @@ class AccessManagementService:
                     'area': app.get('unit'),
                     'subunit': app.get('subunit') or '',  # ya no afecta dedupe
                     'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name')}",
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name'),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1037,7 +1075,7 @@ class AccessManagementService:
                     'area': 'out of the company',  # Área fija para offboarding
                     'subunit': 'out of the company',  # Subárea fija para offboarding
                     'event_description': event_description,
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': f"{responsible}@empresa.com",  # No hay app data disponible aquí
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1152,7 +1190,7 @@ class AccessManagementService:
                     'area': acc.get('unit', ''),
                     'subunit': acc.get('subunit', ''),
                     'event_description': f"Revocación de acceso para {acc.get('logical_access_name', '')} (lateral movement - cambio de posición)",
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': acc.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1173,7 +1211,7 @@ class AccessManagementService:
                     'area': app.get('unit', ''),
                     'subunit': app.get('subunit', ''),
                     'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name', '')} (lateral movement - nueva posición)",
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1184,7 +1222,7 @@ class AccessManagementService:
                     created_records.append(record_data)
 
             # Actualizar posición/unidad del empleado
-            success, message = self.update_employee_position(scotia_id, new_position, new_unit)
+            success, message = self.update_employee_position(scotia_id, new_position, new_unit, new_unidad_subunidad)
             if not success:
                 return False, f"Error actualizando posición: {message}", []
 
@@ -1272,7 +1310,7 @@ class AccessManagementService:
                     'area': app.get('unit', ''),
                     'subunit': app.get('subunit', ''),
                     'event_description': f"Otorgamiento temporal de acceso para {app.get('logical_access_name', '')} (flex staff - {temporary_position})",
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1331,7 +1369,7 @@ class AccessManagementService:
                     'area': acc.get('unit', ''),
                     'subunit': acc.get('subunit', ''),
                     'event_description': f"Revocación de acceso temporal para {acc.get('logical_access_name', '')} (retorno flex staff)",
-                    'ticket_email': f"{responsible}@empresa.com",
+                    'ticket_email': f"{responsible}@empresa.com",  # No hay app data disponible aquí
                     'app_access_name': acc.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
@@ -1398,6 +1436,15 @@ class AccessManagementService:
             emp_unit = (employee.get('unit') or '').strip()
             emp_position = (employee.get('position') or '').strip()
             emp_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
+            
+            # Debug: mostrar valores del empleado
+            print(f"DEBUG empleado {scotia_id}:")
+            print(f"  - unit: '{emp_unit}'")
+            print(f"  - position: '{emp_position}'")
+            print(f"  - unidad_subunidad: '{emp_unidad_subunidad}'")
+            print(f"  - Datos completos del empleado:")
+            for key, value in employee.items():
+                print(f"    - {key}: '{value}'")
             
             # Si no hay unidad_subunidad, construirla a partir de unit y subunit
             if not emp_unidad_subunidad:
@@ -1784,6 +1831,59 @@ class AccessManagementService:
             
         except Exception as e:
             return []
+    
+    def get_available_positions(self) -> List[str]:
+        """Obtiene todas las posiciones disponibles"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT position_role
+                FROM applications 
+                WHERE access_status = 'Activo' AND position_role IS NOT NULL
+                ORDER BY position_role
+            ''')
+            
+            positions = [row[0] for row in cursor.fetchall()]
+            
+            conn.close()
+            return positions
+            
+        except Exception as e:
+            print(f"Error obteniendo posiciones disponibles: {e}")
+            return []
+    
+    def get_applications_by_position_simple(self, position: str) -> List[Dict[str, Any]]:
+        """Obtiene aplicaciones filtradas por posición (versión simple)"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT logical_access_name, description, role_name, unit, subunit
+                FROM applications 
+                WHERE access_status = 'Activo' 
+                AND position_role = ?
+                ORDER BY logical_access_name
+            ''', (position,))
+            
+            applications = []
+            for row in cursor.fetchall():
+                applications.append({
+                    'logical_access_name': row[0],
+                    'description': row[1] or '',
+                    'role_name': row[2] or '',
+                    'unit': row[3] or '',
+                    'subunit': row[4] or ''
+                })
+            
+            conn.close()
+            return applications
+            
+        except Exception as e:
+            print(f"Error obteniendo aplicaciones por posición: {e}")
+            return []
 
     def get_historial_statistics(self) -> Dict[str, Any]:
         """Obtiene estadísticas del historial agrupadas por diferentes criterios"""
@@ -2023,7 +2123,7 @@ class AccessManagementService:
                         'area': access_data.get('unit', ''),
                         'subunit': access_data.get('subunit', ''),
                         'event_description': f"Otorgamiento automático de acceso para {app_name}",
-                        'ticket_email': f"{responsable}@empresa.com",
+                        'ticket_email': f"{responsable}@empresa.com",  # No hay app data disponible aquí
                         'app_access_name': app_name,
                         'computer_system_type': 'Desktop',
                         'status': 'Pendiente',
@@ -2050,7 +2150,7 @@ class AccessManagementService:
                         'area': access_data.get('unit', ''),
                         'subunit': access_data.get('subunit', ''),
                         'event_description': f"Revocación automática de acceso para {app_name}",
-                        'ticket_email': f"{responsable}@empresa.com",
+                        'ticket_email': f"{responsable}@empresa.com",  # No hay app data disponible aquí
                         'app_access_name': app_name,
                         'computer_system_type': 'Desktop',
                         'status': 'Pendiente',

@@ -236,12 +236,12 @@ class DropdownService:
             return []
     
     def get_unique_unidad_subunidad(self) -> List[str]:
-        """Obtiene las unidades/subunidades únicas de la base de datos"""
+        """Obtiene las unidades/subunidades únicas de la base de datos (solo de applications)"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # Obtener de la tabla applications
+            # Solo obtener de la tabla applications (que tiene las aplicaciones reales)
             cursor.execute("""
                 SELECT DISTINCT unidad_subunidad 
                 FROM applications 
@@ -251,29 +251,15 @@ class DropdownService:
             
             apps_unidad_subunidad = [row[0] for row in cursor.fetchall()]
             
-            # Obtener de la tabla headcount
-            cursor.execute("""
-                SELECT DISTINCT unidad_subunidad 
-                FROM headcount 
-                WHERE unidad_subunidad IS NOT NULL AND unidad_subunidad != ''
-                ORDER BY unidad_subunidad
-            """)
-            
-            headcount_unidad_subunidad = [row[0] for row in cursor.fetchall()]
-            
-            # Combinar y eliminar duplicados
-            all_unidad_subunidad = list(set(apps_unidad_subunidad + headcount_unidad_subunidad))
-            all_unidad_subunidad.sort()
-            
             conn.close()
             
             # Si no hay datos en la base de datos, usar valores por defecto
-            if not all_unidad_subunidad:
-                all_unidad_subunidad = ["Tecnología/Desarrollo", "Tecnología/QA", "Tecnología/Infraestructura", 
+            if not apps_unidad_subunidad:
+                apps_unidad_subunidad = ["Tecnología/Desarrollo", "Tecnología/QA", "Tecnología/Infraestructura", 
                                        "Recursos Humanos/RRHH", "Finanzas/Contabilidad", "Marketing/Ventas", 
                                        "Operaciones/Logística", "Legal/Compliance"]
             
-            return all_unidad_subunidad
+            return apps_unidad_subunidad
             
         except Exception as e:
             print(f"Error obteniendo unidades/subunidades: {e}")

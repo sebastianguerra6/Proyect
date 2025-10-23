@@ -117,28 +117,79 @@ BEGIN
         [record_date] DATETIME2 NOT NULL DEFAULT GETDATE(),
         [request_date] DATE NULL,
         [process_access] VARCHAR(50) NULL,
-        [sid] VARCHAR(100) NULL,
-        [area] VARCHAR(100) NULL,
         [subunit] VARCHAR(100) NULL,
         [event_description] NVARCHAR(MAX) NULL,
         [ticket_email] VARCHAR(150) NULL,
         [app_access_name] VARCHAR(150) NULL,
         [computer_system_type] VARCHAR(100) NULL,
+        [duration_of_access] VARCHAR(50) NULL,
         [status] VARCHAR(50) NULL,
         [closing_date_app] DATE NULL,
         [closing_date_ticket] DATE NULL,
         [app_quality] VARCHAR(50) NULL,
         [confirmation_by_user] BIT NULL,
         [comment] NVARCHAR(MAX) NULL,
+        [comment_tq] NVARCHAR(MAX) NULL,
         [ticket_quality] VARCHAR(50) NULL,
-        [general_status] VARCHAR(50) NULL,
-        [average_time_open_ticket] VARCHAR(20) NULL
+        [general_status_ticket] VARCHAR(50) NULL,
+        [general_status_case] VARCHAR(50) NULL,
+        [average_time_open_ticket] VARCHAR(20) NULL,
+        [sla_app] VARCHAR(50) NULL,
+        [sla_ticket] VARCHAR(50) NULL,
+        [sla_case] VARCHAR(50) NULL
     );
     PRINT 'Tabla historico creada exitosamente';
 END
 ELSE
 BEGIN
     PRINT 'Tabla historico ya existe';
+    -- Agregar campos faltantes si no existen
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'duration_of_access')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [duration_of_access] VARCHAR(50) NULL;
+        PRINT 'Columna duration_of_access agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'comment_tq')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [comment_tq] NVARCHAR(MAX) NULL;
+        PRINT 'Columna comment_tq agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'general_status_ticket')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [general_status_ticket] VARCHAR(50) NULL;
+        PRINT 'Columna general_status_ticket agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'general_status_case')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [general_status_case] VARCHAR(50) NULL;
+        PRINT 'Columna general_status_case agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'sla_app')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [sla_app] VARCHAR(50) NULL;
+        PRINT 'Columna sla_app agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'sla_ticket')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [sla_ticket] VARCHAR(50) NULL;
+        PRINT 'Columna sla_ticket agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'sla_case')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [sla_case] VARCHAR(50) NULL;
+        PRINT 'Columna sla_case agregada a la tabla historico';
+    END
+    -- Eliminar campos que sobran si existen
+    IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'sid')
+    BEGIN
+        ALTER TABLE [dbo].[historico] DROP COLUMN [sid];
+        PRINT 'Columna sid eliminada de la tabla historico';
+    END
+    IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'area')
+    BEGIN
+        ALTER TABLE [dbo].[historico] DROP COLUMN [area];
+        PRINT 'Columna area eliminada de la tabla historico';
+    END
 END
 GO
 
@@ -374,7 +425,7 @@ BEGIN
         head.unit,
         head.position,
         h.app_access_name as logical_access_name,
-        h.area as subunit,
+        h.subunit,
         head.position as position_role,
         h.record_date,
         h.status
@@ -384,8 +435,30 @@ BEGIN
     AND h.process_access IN (''onboarding'', ''lateral_movement'')
     AND head.activo = 1
     AND h.app_access_name IS NOT NULL
-    GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.area, h.record_date, h.status');
+    GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.subunit, h.record_date, h.status');
     PRINT 'Vista vw_current_access creada exitosamente';
+END
+ELSE
+BEGIN
+    -- Actualizar vista existente
+    EXEC('ALTER VIEW [dbo].[vw_current_access] AS
+    SELECT 
+        h.scotia_id,
+        head.unit,
+        head.position,
+        h.app_access_name as logical_access_name,
+        h.subunit,
+        head.position as position_role,
+        h.record_date,
+        h.status
+    FROM [dbo].[historico] h
+    INNER JOIN [dbo].[headcount] head ON h.scotia_id = head.scotia_id
+    WHERE h.status = ''Completado''
+    AND h.process_access IN (''onboarding'', ''lateral_movement'')
+    AND head.activo = 1
+    AND h.app_access_name IS NOT NULL
+    GROUP BY h.scotia_id, h.app_access_name, head.unit, head.position, h.subunit, h.record_date, h.status');
+    PRINT 'Vista vw_current_access actualizada exitosamente';
 END
 GO
 
@@ -487,7 +560,8 @@ BEGIN
             a.description AS app_description,
             a.unit AS app_unit,
             a.subunit AS app_subunit,
-            a.position_role AS app_position_role
+            a.position_role AS app_position_role,
+            a.category AS app_category
         FROM [dbo].[historico] h
         LEFT JOIN (
             SELECT 
@@ -496,6 +570,7 @@ BEGIN
                 unit,
                 subunit,
                 position_role,
+                category,
                 ROW_NUMBER() OVER (PARTITION BY logical_access_name ORDER BY id) as rn
             FROM [dbo].[applications]
         ) a ON h.app_access_name = a.logical_access_name AND a.rn = 1
@@ -602,11 +677,11 @@ GO
 -- Insertar datos de ejemplo en historico
 IF NOT EXISTS (SELECT * FROM historico WHERE scotia_id = 'EMP001')
 BEGIN
-    INSERT INTO [dbo].[historico] (scotia_id, case_id, responsible, record_date, request_date, process_access, sid, area, subunit, event_description, ticket_email, app_access_name, computer_system_type, status, closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, ticket_quality, general_status, average_time_open_ticket)
+    INSERT INTO [dbo].[historico] (scotia_id, case_id, responsible, record_date, request_date, process_access, subunit, event_description, ticket_email, app_access_name, computer_system_type, duration_of_access, status, closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, comment_tq, ticket_quality, general_status_ticket, general_status_case, average_time_open_ticket, sla_app, sla_ticket, sla_case)
     VALUES 
-        ('EMP001', 'CASE-20240115-001', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'EMP001', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:30:00'),
-        ('EMP002', 'CASE-20240115-002', 'Admin Portal', GETDATE(), '2024-01-14', 'onboarding', 'EMP002', 'Tecnología', 'Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'GitLab', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:45:00'),
-        ('EMP003', 'CASE-20240115-003', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'EMP003', 'Tecnología', 'Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Jira', 'Desktop', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Excelente', 'Completado', '00:20:00');
+        ('EMP001', 'CASE-20240115-001', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Sistemas', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:30:00', 'Cumplido', 'Cumplido', 'Cumplido'),
+        ('EMP002', 'CASE-20240115-002', 'Admin Portal', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'GitLab', 'Desarrollo', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:45:00', 'Cumplido', 'Cumplido', 'Cumplido'),
+        ('EMP003', 'CASE-20240115-003', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Jira', 'Gestión', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:20:00', 'Cumplido', 'Cumplido', 'Cumplido');
     PRINT 'Datos de ejemplo insertados en historico';
 END
 GO
@@ -658,7 +733,7 @@ BEGIN
     SELECT 
         'current' as access_type,
         h.app_access_name as app_name,
-        h.area as unit,
+        a.unit,
         h.subunit,
         @emp_position as position_role,
         a.role_name,
@@ -785,8 +860,8 @@ BEGIN
     -- Obtener aplicaciones requeridas y crear registros históricos
     INSERT INTO [dbo].[historico] (
         scotia_id, case_id, responsible, record_date, process_access, 
-        sid, area, subunit, event_description, ticket_email, 
-        app_access_name, computer_system_type, status, general_status
+        subunit, event_description, ticket_email, 
+        app_access_name, computer_system_type, status, general_status_case
     )
     SELECT 
         @scotia_id,
@@ -794,13 +869,11 @@ BEGIN
         @responsible,
         GETDATE(),
         'onboarding',
-        @scotia_id,
-        a.unit,
         ISNULL(@subunit, a.subunit),
         'Otorgamiento de acceso para ' + a.logical_access_name,
         @responsible + '@empresa.com',
         a.logical_access_name,
-        'Desktop',
+        a.category,
         'Pendiente',
         'En Proceso'
     FROM [dbo].[applications] a
@@ -852,8 +925,8 @@ BEGIN
     -- Crear registros de offboarding para accesos activos
     INSERT INTO [dbo].[historico] (
         scotia_id, case_id, responsible, record_date, process_access, 
-        sid, area, subunit, event_description, ticket_email, 
-        app_access_name, computer_system_type, status, general_status
+        subunit, event_description, ticket_email, 
+        app_access_name, computer_system_type, status, general_status_case
     )
     SELECT DISTINCT
         @scotia_id,
@@ -861,16 +934,15 @@ BEGIN
         @responsible,
         GETDATE(),
         'offboarding',
-        @scotia_id,
-        h.area,
         h.subunit,
         'Revocación de acceso para ' + h.app_access_name,
         @responsible + '@empresa.com',
         h.app_access_name,
-        'Desktop',
+        a.category,
         'Pendiente',
         'En Proceso'
     FROM [dbo].[historico] h
+    LEFT JOIN [dbo].[applications] a ON h.app_access_name = a.logical_access_name
     WHERE h.scotia_id = @scotia_id
     AND h.process_access IN ('onboarding', 'lateral_movement')
     AND h.status = 'Completado'
@@ -989,6 +1061,13 @@ PRINT 'Procedimientos básicos: sp_GetDatabaseStats, sp_GetEmployeeHistory, sp_G
 PRINT 'Procedimientos de conciliación: sp_GetAccessReconciliationReport, sp_ProcessEmployeeOnboarding, sp_ProcessEmployeeOffboarding, sp_GetReconciliationStats';
 PRINT 'Función creada: fn_NormalizeText';
 PRINT 'Datos de ejemplo insertados correctamente';
+PRINT '=====================================================';
+PRINT 'CAMBIOS EN TABLA HISTORICO:';
+PRINT '  - Campos agregados: duration_of_access, comment_tq, general_status_ticket, general_status_case, sla_app, sla_ticket, sla_case';
+PRINT '  - Campos eliminados: sid, area';
+PRINT '  - Campo subunit ahora se llena con unidad/subunidad';
+PRINT '  - Campo computer_system_type ahora se llena con category de application';
+PRINT '  - Campo scotia_id ahora representa el mail de la persona';
 PRINT '=====================================================';
 PRINT 'ARQUITECTURA HÍBRIDA IMPLEMENTADA:';
 PRINT '  - Consultas simples: Manejadas directamente en Python';

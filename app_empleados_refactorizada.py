@@ -430,7 +430,7 @@ class AppEmpleadosRefactorizada:
                 success, message, records = access_service.process_employee_onboarding(
                     scotia_id, 
                     datos_generales.get('nuevo_cargo', ''), 
-                    datos_generales.get('nueva_sub_unidad', ''),
+                    datos_generales.get('nueva_unidad_subunidad', ''),  # Corregir nombre del campo
                     responsable
                 )
                 
@@ -455,7 +455,7 @@ class AppEmpleadosRefactorizada:
                 success, message, records = access_service.process_lateral_movement(
                     scotia_id,
                     datos_generales.get('nuevo_cargo', ''),
-                    datos_generales.get('nueva_sub_unidad', ''),
+                    datos_generales.get('nueva_unidad_subunidad', ''),  # Corregir nombre del campo
                     responsable
                 )
                 
@@ -471,7 +471,7 @@ class AppEmpleadosRefactorizada:
                 
                 # Mapear nombres a los nombres reales de la BD
                 temp_position = datos_generales.get('nuevo_cargo', '')
-                temp_unit = datos_generales.get('nueva_sub_unidad', '')
+                temp_unit = datos_generales.get('nueva_unidad_subunidad', '')  # Corregir nombre del campo
                 mapped_position, mapped_unit, mapped_unidad_subunidad = self.mapear_nombres_bd(temp_position, temp_unit)
                 
                 print(f"FLEX STAFF - Mapeo de nombres:")
@@ -2041,7 +2041,7 @@ class ApplicationDialog:
             ("Jurisdiction:", "jurisdiction", "combobox", dropdown_values['jurisdictions']),
             ("Unit:", "unit", "combobox", dropdown_values['units']),
             ("Subunit:", "subunit", "combobox", dropdown_values['subunits']),
-            ("Unidad/Subunidad:", "unidad_subunidad", "entry"),
+            ("Unidad/Subunidad:", "unidad_subunidad", "combobox", dropdown_values['unidad_subunidad']),
             ("Logical Access Name:", "logical_access_name", "entry"),
             ("Alias:", "alias", "entry"),
             ("Path/Email/URL:", "path_email_url", "entry"),

@@ -22,6 +22,7 @@ class ManualAccessDialog:
         self.variables = {
             'scotia_id': tk.StringVar(),
             'app_name': tk.StringVar(),
+            'position': tk.StringVar(),
             'responsible': tk.StringVar(value="Manual"),
             'description': tk.StringVar()
         }
@@ -41,6 +42,7 @@ class ManualAccessDialog:
         # Campos del formulario
         campos = [
             ("ID de Empleado (Scotia ID):", "scotia_id", "entry"),
+            ("Posición:", "position", "combobox"),
             ("Aplicación:", "app_name", "combobox"),
             ("Responsable:", "responsible", "entry"),
             ("Descripción (opcional):", "description", "entry")
@@ -56,8 +58,12 @@ class ManualAccessDialog:
                 widget = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
             elif widget_type == "combobox":
                 widget = ttk.Combobox(main_frame, textvariable=self.variables[var_name], width=37)
-                # Cargar aplicaciones disponibles
-                self._load_applications(widget)
+                if var_name == "position":
+                    # Cargar posiciones disponibles
+                    self._load_positions(widget)
+                elif var_name == "app_name":
+                    # Cargar aplicaciones disponibles (se actualizará cuando se seleccione posición)
+                    self._load_applications(widget)
             else:
                 widget = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
             
@@ -82,12 +88,27 @@ class ManualAccessDialog:
 ℹ️ Información:
 • Este registro se creará como "manual_access" en el historial
 • El empleado debe existir en el headcount
-• La aplicación se puede seleccionar de la lista o escribir una nueva
+• Seleccione la posición para filtrar las aplicaciones disponibles
+• La aplicación se puede seleccionar de la lista filtrada o escribir una nueva
 • El registro quedará en estado "Pendiente" para su procesamiento
         """
         ttk.Label(main_frame, text=info_text, font=("Arial", 9), 
                  foreground="gray").grid(row=len(campos)+2, column=0, columnspan=2, 
                                        pady=(10, 0), sticky="w")
+    
+    def _load_positions(self, combobox):
+        """Carga las posiciones disponibles en el combobox"""
+        try:
+            if self.service:
+                positions = self.service.get_available_positions()
+                combobox['values'] = positions
+                # Configurar evento para actualizar aplicaciones cuando cambie la posición
+                combobox.bind('<<ComboboxSelected>>', self._on_position_changed)
+            else:
+                combobox['values'] = []
+
+        except Exception as e:
+            print(f"Error cargando posiciones: {e}")
     
     def _load_applications(self, combobox):
         """Carga las aplicaciones disponibles en el combobox"""
@@ -99,17 +120,46 @@ class ManualAccessDialog:
         except Exception as e:
             print(f"Error cargando aplicaciones: {e}")
     
+    def _on_position_changed(self, event):
+        """Se ejecuta cuando se cambia la posición seleccionada"""
+        try:
+            position = self.variables['position'].get().strip()
+            if position and self.service:
+                # Obtener aplicaciones filtradas por posición
+                applications = self.service.get_applications_by_position_simple(position)
+                app_names = [app['logical_access_name'] for app in applications]
+                
+                # Actualizar el combobox de aplicaciones
+                app_combobox = None
+                for child in self.dialog.winfo_children():
+                    if isinstance(child, ttk.Frame):
+                        for grandchild in child.winfo_children():
+                            if isinstance(grandchild, ttk.Combobox) and grandchild.cget('textvariable') == str(self.variables['app_name']):
+                                app_combobox = grandchild
+                                break
+                
+                if app_combobox:
+                    app_combobox['values'] = app_names
+                    app_combobox.set('')  # Limpiar selección anterior
+        except Exception as e:
+            print(f"Error actualizando aplicaciones por posición: {e}")
+    
     def _create_record(self):
         """Crea el registro manual"""
         try:
             # Validar campos obligatorios
             scotia_id = self.variables['scotia_id'].get().strip()
+            position = self.variables['position'].get().strip()
             app_name = self.variables['app_name'].get().strip()
             responsible = self.variables['responsible'].get().strip()
             description = self.variables['description'].get().strip()
             
             if not scotia_id:
                 messagebox.showerror("Error", "El ID de empleado es obligatorio")
+                return
+            
+            if not position:
+                messagebox.showerror("Error", "La posición es obligatoria")
                 return
             
             if not app_name:
@@ -125,13 +175,14 @@ class ManualAccessDialog:
             # Crear el registro
             if self.service:
                 success, message = self.service.create_manual_access_record(
-                    scotia_id, app_name, responsible, description
+                    scotia_id, app_name, responsible, description, position
                 )
                 
                 if success:
                     messagebox.showinfo("Éxito", message)
                     self.result = {
                         'scotia_id': scotia_id,
+                        'position': position,
                         'app_name': app_name,
                         'responsible': responsible,
                         'description': description
