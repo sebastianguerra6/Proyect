@@ -345,6 +345,36 @@ class AccessManagementService:
             
             # Debug: mostrar resultados
             print(f"  - Resultados encontrados: {len(applications)}")
+            
+            # Si no hay resultados, hacer debug para ver qué datos existen
+            if len(applications) == 0:
+                print("DEBUG: No se encontraron aplicaciones. Verificando qué datos existen...")
+                
+                # Verificar posiciones disponibles
+                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Activo'")
+                positions = cursor.fetchall()
+                print(f"DEBUG: Posiciones disponibles: {positions}")
+                
+                # Verificar unidades/subunidades disponibles
+                cursor.execute("SELECT DISTINCT unidad_subunidad FROM applications WHERE access_status = 'Activo'")
+                unidades = cursor.fetchall()
+                print(f"DEBUG: Unidades/Subunidades disponibles: {unidades}")
+                
+                # Verificar subunidades disponibles
+                cursor.execute("SELECT DISTINCT subunit FROM applications WHERE access_status = 'Activo'")
+                subunidades = cursor.fetchall()
+                print(f"DEBUG: Subunidades disponibles: {subunidades}")
+                
+                # Buscar aplicaciones que contengan "Summer" en cualquier campo
+                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Activo' AND (position LIKE '%Summer%' OR position_role LIKE '%Summer%')")
+                summer_apps = cursor.fetchall()
+                print(f"DEBUG: Aplicaciones que contienen 'Summer': {summer_apps}")
+                
+                # Buscar aplicaciones que contengan "Business Intelligence" o "Analytics"
+                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Activo' AND (unidad_subunidad LIKE '%Business Intelligence%' OR unidad_subunidad LIKE '%Analytics%' OR subunit LIKE '%Analytics%')")
+                bi_apps = cursor.fetchall()
+                print(f"DEBUG: Aplicaciones relacionadas con Business Intelligence/Analytics: {bi_apps}")
+            
             for app in applications:
                 print(f"    * {app.get('logical_access_name', '')} | {app.get('unidad_subunidad', '')} | {app.get('position_role', '')}")
 
@@ -372,10 +402,10 @@ class AccessManagementService:
                 query += ' AND UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))'
                 params.append(position)
             
-            # Filtrar por unidad (obligatorio)
+            # Filtrar por unidad_subunidad (obligatorio) - usar LIKE para coincidencia parcial
             if unit:
-                query += ' AND UPPER(LTRIM(RTRIM(unit))) = UPPER(LTRIM(RTRIM(?)))'
-                params.append(unit)
+                query += ' AND UPPER(LTRIM(RTRIM(unidad_subunidad))) LIKE UPPER(LTRIM(RTRIM(?)))'
+                params.append(f'%{unit}%')
             
             # Subunidad es opcional - no filtrar si no se proporciona
             if subunit:
@@ -406,6 +436,31 @@ class AccessManagementService:
             
             # Debug: mostrar resultados
             print(f"  - Resultados encontrados: {len(applications)}")
+            
+            # Si no hay resultados, hacer debug para ver qué datos existen
+            if len(applications) == 0:
+                print("DEBUG: No se encontraron aplicaciones para flex staff. Verificando qué datos existen...")
+                
+                # Verificar posiciones disponibles
+                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Activo'")
+                positions = cursor.fetchall()
+                print(f"DEBUG: Posiciones disponibles: {positions}")
+                
+                # Verificar unidades disponibles
+                cursor.execute("SELECT DISTINCT unit FROM applications WHERE access_status = 'Activo'")
+                units = cursor.fetchall()
+                print(f"DEBUG: Unidades disponibles: {units}")
+                
+                # Buscar aplicaciones que contengan "Analista"
+                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Activo' AND (position LIKE '%Analista%' OR position_role LIKE '%Analista%')")
+                analista_apps = cursor.fetchall()
+                print(f"DEBUG: Aplicaciones que contienen 'Analista': {analista_apps}")
+                
+                # Buscar aplicaciones que contengan "Recursos Humanos"
+                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Activo' AND (unit LIKE '%Recursos Humanos%' OR subunit LIKE '%Recursos Humanos%')")
+                rh_apps = cursor.fetchall()
+                print(f"DEBUG: Aplicaciones relacionadas con Recursos Humanos: {rh_apps}")
+            
             for app in applications:
                 print(f"    * {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('subunit', '')} | {app.get('position_role', '')}")
 
@@ -694,12 +749,16 @@ class AccessManagementService:
     def create_historical_record(self, record_data: Dict[str, Any]) -> Tuple[bool, str]:
         """Crea un registro en el historial con verificación anti-duplicados"""
         try:
+            print(f"DEBUG: Iniciando creación de registro histórico")
+            print(f"DEBUG: Datos recibidos: {record_data}")
+            
             conn = self.get_connection()
             cursor = conn.cursor()
 
             required_fields = ['scotia_id', 'process_access']
             for field in required_fields:
                 if not record_data.get(field):
+                    print(f"DEBUG: Error - Campo requerido faltante: {field}")
                     return False, f"Campo requerido faltante: {field}"
 
             # Verificación anti-duplicados: evita más de un "Pendiente" por la misma app/empleado
@@ -718,22 +777,26 @@ class AccessManagementService:
                     conn.close()
                     return True, f"Registro ya pendiente; no se duplicó (existentes: {existing_count})"
 
-            cursor.execute('''
-                INSERT INTO historico 
-                (scotia_id, case_id, responsible, record_date, request_date, process_access, sid, area, subunit, 
-                 event_description, ticket_email, app_access_name, computer_system_type, status, 
-                 closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, 
-                 ticket_quality, general_status, average_time_open_ticket)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            # Obtener el email del empleado si no se proporciona
+            employee_email = record_data.get('employee_email')
+            if not employee_email:
+                print(f"DEBUG: Obteniendo email del empleado {record_data.get('scotia_id')}")
+                cursor.execute('SELECT email FROM headcount WHERE scotia_id = ?', (record_data.get('scotia_id'),))
+                email_result = cursor.fetchone()
+                employee_email = email_result[0] if email_result else None
+                print(f"DEBUG: Email obtenido: {employee_email}")
+
+            print(f"DEBUG: Preparando inserción con email: {employee_email}")
+            
+            # Preparar parámetros para debug
+            params = (
                 record_data.get('scotia_id'),
+                employee_email,
                 record_data.get('case_id'),
                 record_data.get('responsible'),
                 record_data.get('record_date', datetime.now().isoformat()),
                 record_data.get('request_date'),
                 record_data.get('process_access'),
-                record_data.get('sid'),
-                record_data.get('area'),
                 record_data.get('subunit'),
                 record_data.get('event_description'),
                 record_data.get('ticket_email'),
@@ -746,11 +809,23 @@ class AccessManagementService:
                 record_data.get('confirmation_by_user'),
                 record_data.get('comment'),
                 record_data.get('ticket_quality'),
-                record_data.get('general_status'),
+                record_data.get('general_status_ticket'),
                 record_data.get('average_time_open_ticket')
-            ))
+            )
+            
+            print(f"DEBUG: Parámetros para inserción: {params}")
+            
+            cursor.execute('''
+                INSERT INTO historico 
+                (scotia_id, employee_email, case_id, responsible, record_date, request_date, process_access, subunit, 
+                 event_description, ticket_email, app_access_name, computer_system_type, status, 
+                 closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, 
+                 ticket_quality, general_status_ticket, average_time_open_ticket)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', params)
 
             conn.commit()
+            print(f"DEBUG: Registro insertado exitosamente en la base de datos")
             conn.close()
 
             return True, "Registro histórico creado exitosamente"
@@ -809,7 +884,7 @@ class AccessManagementService:
             cursor.execute('''
                 SELECT DISTINCT
                     h.scotia_id,
-                    h.area as unit,
+                    h.subunit as unit,
                     h.subunit,
                     h.app_access_name as logical_access_name,
                     h.record_date,
@@ -853,12 +928,13 @@ class AccessManagementService:
                 return []
             
             current_unit, current_position = emp_data
+            print(f"DEBUG: Filtrando accesos para posición actual: {current_position} en unidad: {current_unit}")
 
             # Obtener todos los tipos de accesos actuales
             cursor.execute('''
                 SELECT DISTINCT
                     h.scotia_id,
-                    h.area as unit,
+                    h.subunit as unit,
                     h.subunit,
                     h.app_access_name as logical_access_name,
                     h.record_date,
@@ -884,18 +960,22 @@ class AccessManagementService:
                     -- Accesos asignados por aplicación (de la posición actual)
                     (h.process_access IN ('onboarding', 'lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?)
                     OR
-                    -- Accesos manuales
-                    h.process_access = 'manual_access'
+                    -- Accesos manuales (solo de la posición actual)
+                    (h.process_access = 'manual_access' AND a.unidad_subunidad = ? AND a.position_role = ?)
                     OR
                     -- Accesos flex staff (temporales)
                     h.process_access = 'flex_staff'
                 )
                 ORDER BY h.process_access, h.record_date DESC
-            ''', (scotia_id, current_unit, current_position))
+            ''', (scotia_id, current_unit, current_position, current_unit, current_position))
 
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
             current_access = [dict(zip(columns, row)) for row in rows]
+            
+            print(f"DEBUG: Accesos encontrados: {len(current_access)}")
+            for acceso in current_access:
+                print(f"DEBUG: - {acceso.get('logical_access_name', '')} | {acceso.get('process_access', '')} | {acceso.get('position_role', '')} | {acceso.get('access_type', '')}")
 
             conn.close()
             return current_access
@@ -1016,15 +1096,13 @@ class AccessManagementService:
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'onboarding',
-                    'sid': scotia_id,
-                    'area': app.get('unit'),
                     'subunit': app.get('subunit') or '',  # ya no afecta dedupe
                     'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name')}",
                     'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name'),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 }
 
                 success, message = self.create_historical_record(record_data)
@@ -1071,15 +1149,13 @@ class AccessManagementService:
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'offboarding',
-                    'sid': scotia_id,
-                    'area': 'out of the company',  # Área fija para offboarding
                     'subunit': 'out of the company',  # Subárea fija para offboarding
                     'event_description': event_description,
                     'ticket_email': f"{responsible}@empresa.com",  # No hay app data disponible aquí
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 }
 
                 success, message = self.create_historical_record(record_data)
@@ -1134,8 +1210,14 @@ class AccessManagementService:
         - Evita duplicados comparando por logical_access_name y unidad
         """
         try:
+            print(f"DEBUG: Iniciando lateral movement para {scotia_id}")
+            print(f"DEBUG: Nueva posición: {new_position}")
+            print(f"DEBUG: Nueva unidad: {new_unit}")
+            print(f"DEBUG: Nueva subunidad: {new_subunit}")
+            
             employee = self.get_employee_by_id(scotia_id)
             if not employee:
+                print(f"DEBUG: Error - Empleado {scotia_id} no encontrado")
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             old_position = (employee.get('position') or '').strip()
@@ -1146,7 +1228,11 @@ class AccessManagementService:
             
             # Obtener accesos requeridos para la nueva posición
             new_unidad_subunidad = f"{new_unit}/{new_subunit}" if new_subunit else new_unit
+            print(f"DEBUG: Nueva unidad_subunidad: {new_unidad_subunidad}")
             new_mesh_apps = self.get_applications_by_position(new_position, new_unidad_subunidad, subunit=new_subunit)
+            print(f"DEBUG: Aplicaciones encontradas para nueva posición: {len(new_mesh_apps)}")
+            for app in new_mesh_apps:
+                print(f"DEBUG: App: {app.get('logical_access_name', '')} - Unit: {app.get('unit', '')} - Subunit: {app.get('subunit', '')}")
             
             # Crear índices para comparación más inteligente
             # Usar solo logical_access_name para la comparación, ya que el mismo acceso puede tener diferentes roles entre posiciones
@@ -1180,46 +1266,56 @@ class AccessManagementService:
             created_records = []
 
             # 1. REVOCAR accesos de la posición anterior que ya no son necesarios
+            print(f"DEBUG: Procesando {len(to_revoke)} aplicaciones para revocar")
             for acc in to_revoke:
+                print(f"DEBUG: Procesando revocación: {acc.get('logical_access_name', '')}")
                 record_data = {
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'offboarding',
-                    'sid': scotia_id,
-                    'area': acc.get('unit', ''),
                     'subunit': acc.get('subunit', ''),
                     'event_description': f"Revocación de acceso para {acc.get('logical_access_name', '')} (lateral movement - cambio de posición)",
-                    'ticket_email': app.get('path_email_url', ''),
+                    'ticket_email': acc.get('path_email_url', ''),
                     'app_access_name': acc.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 }
-                ok, _ = self.create_historical_record(record_data)
+                print(f"DEBUG: Creando registro de revocación para {acc.get('logical_access_name', '')}")
+                ok, message = self.create_historical_record(record_data)
+                print(f"DEBUG: Resultado de revocación: {ok}, Mensaje: {message}")
                 if ok:
                     created_records.append(record_data)
+                    print(f"DEBUG: Registro de revocación agregado a created_records")
+                else:
+                    print(f"DEBUG: Error creando registro de revocación: {message}")
 
             # 2. OTORGAR nuevos accesos de la nueva posición
+            print(f"DEBUG: Procesando {len(to_grant)} aplicaciones para otorgar")
             for app in to_grant:
+                print(f"DEBUG: Procesando otorgamiento: {app.get('logical_access_name', '')}")
                 record_data = {
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'onboarding',
-                    'sid': scotia_id,
-                    'area': app.get('unit', ''),
                     'subunit': app.get('subunit', ''),
                     'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name', '')} (lateral movement - nueva posición)",
                     'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 }
-                ok, _ = self.create_historical_record(record_data)
+                print(f"DEBUG: Creando registro de otorgamiento para {app.get('logical_access_name', '')}")
+                ok, message = self.create_historical_record(record_data)
+                print(f"DEBUG: Resultado de otorgamiento: {ok}, Mensaje: {message}")
                 if ok:
                     created_records.append(record_data)
+                    print(f"DEBUG: Registro de otorgamiento agregado a created_records")
+                else:
+                    print(f"DEBUG: Error creando registro de otorgamiento: {message}")
 
             # Actualizar posición/unidad del empleado
             success, message = self.update_employee_position(scotia_id, new_position, new_unit, new_unidad_subunidad)
@@ -1257,8 +1353,15 @@ class AccessManagementService:
         - NO revoca ningún acceso existente
         """
         try:
+            print(f"DEBUG: Iniciando flex staff para {scotia_id}")
+            print(f"DEBUG: Posición temporal: {temporary_position}")
+            print(f"DEBUG: Unidad temporal: {temporary_unit}")
+            print(f"DEBUG: Subunidad temporal: {temporary_subunit}")
+            print(f"DEBUG: Duración: {duration_days} días")
+            
             employee = self.get_employee_by_id(scotia_id)
             if not employee:
+                print(f"DEBUG: Error - Empleado {scotia_id} no encontrado")
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             original_position = (employee.get('position') or '').strip()
@@ -1269,7 +1372,11 @@ class AccessManagementService:
             
             # Obtener accesos requeridos para la posición temporal usando lógica flexible
             # No usar subunidad para flex staff - buscar solo por posición y unidad
+            print(f"DEBUG: Buscando aplicaciones para posición temporal: {temporary_position} en unidad: {temporary_unit}")
             temp_mesh_apps = self.get_applications_by_position_flexible(temporary_position, temporary_unit, subunit=None)
+            print(f"DEBUG: Aplicaciones encontradas para posición temporal: {len(temp_mesh_apps)}")
+            for app in temp_mesh_apps:
+                print(f"DEBUG: - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('subunit', '')}")
             
             # Crear índices para comparación
             current_apps_by_name = {}
@@ -1295,7 +1402,9 @@ class AccessManagementService:
             created_records = []
 
             # OTORGAR accesos temporales de la nueva posición
+            print(f"DEBUG: Procesando {len(to_grant_temp)} aplicaciones para flex staff")
             for app in to_grant_temp:
+                print(f"DEBUG: Procesando flex staff: {app.get('logical_access_name', '')}")
                 # Calcular fecha de expiración si se especifica duración
                 expiration_date = None
                 if duration_days:
@@ -1306,20 +1415,23 @@ class AccessManagementService:
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'flex_staff',
-                    'sid': scotia_id,
-                    'area': app.get('unit', ''),
                     'subunit': app.get('subunit', ''),
                     'event_description': f"Otorgamiento temporal de acceso para {app.get('logical_access_name', '')} (flex staff - {temporary_position})",
                     'ticket_email': app.get('path_email_url', ''),
                     'app_access_name': app.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso',
+                    'general_status_ticket': 'En Proceso',
                     'expiration_date': expiration_date.isoformat() if expiration_date else None
                 }
-                ok, _ = self.create_historical_record(record_data)
+                print(f"DEBUG: Creando registro flex staff para {app.get('logical_access_name', '')}")
+                ok, message = self.create_historical_record(record_data)
+                print(f"DEBUG: Resultado de flex staff: {ok}, Mensaje: {message}")
                 if ok:
                     created_records.append(record_data)
+                    print(f"DEBUG: Registro flex staff agregado a created_records")
+                else:
+                    print(f"DEBUG: Error creando registro flex staff: {message}")
 
             # Crear mensaje detallado
             grant_details = [app.get('logical_access_name', '') for app in to_grant_temp]
@@ -1365,15 +1477,13 @@ class AccessManagementService:
                     'case_id': case_id,
                     'responsible': responsible,
                     'process_access': 'flex_staff_return',
-                    'sid': scotia_id,
-                    'area': acc.get('unit', ''),
                     'subunit': acc.get('subunit', ''),
                     'event_description': f"Revocación de acceso temporal para {acc.get('logical_access_name', '')} (retorno flex staff)",
                     'ticket_email': f"{responsible}@empresa.com",  # No hay app data disponible aquí
                     'app_access_name': acc.get('logical_access_name', ''),
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 }
                 ok, _ = self.create_historical_record(record_data)
                 if ok:
@@ -1394,13 +1504,14 @@ class AccessManagementService:
     def get_employee_flex_staff_access(self, scotia_id: str) -> List[Dict[str, Any]]:
         """Obtiene los accesos temporales (flex_staff) de un empleado"""
         try:
+            print(f"DEBUG: Buscando accesos flex_staff para {scotia_id}")
             conn = self.get_connection()
             cursor = conn.cursor()
             
             cursor.execute('''
                 SELECT DISTINCT
                     h.app_access_name as logical_access_name,
-                    h.area as unit,
+                    h.subunit as unit,
                     h.subunit,
                     h.event_description,
                     h.record_date,
@@ -1417,6 +1528,24 @@ class AccessManagementService:
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
             access_list = [dict(zip(columns, row)) for row in rows]
+            
+            print(f"DEBUG: Accesos flex_staff encontrados: {len(access_list)}")
+            for acc in access_list:
+                print(f"DEBUG: - {acc.get('logical_access_name', '')} | {acc.get('status', '')} | {acc.get('event_description', '')}")
+            
+            # Si no hay resultados, verificar qué registros existen para este empleado
+            if len(access_list) == 0:
+                print(f"DEBUG: No se encontraron accesos flex_staff. Verificando registros del empleado...")
+                cursor.execute('''
+                    SELECT process_access, app_access_name, status, event_description
+                    FROM historico 
+                    WHERE scotia_id = ? 
+                    ORDER BY record_date DESC
+                ''', (scotia_id,))
+                all_records = cursor.fetchall()
+                print(f"DEBUG: Todos los registros del empleado: {len(all_records)}")
+                for record in all_records[:10]:  # Mostrar solo los primeros 10
+                    print(f"DEBUG: - {record[0]} | {record[1]} | {record[2]} | {record[3]}")
             
             conn.close()
             return access_list
@@ -2281,19 +2410,36 @@ class AccessManagementService:
             cursor = conn.cursor()
             
             # Verificar que el acceso existe y es del tipo correcto
+            print(f"DEBUG: Buscando acceso {access_type} para {app_name} del empleado {scotia_id}")
             cursor.execute('''
-                SELECT h.id, h.app_access_name, h.process_access, h.event_description
+                SELECT h.id, h.app_access_name, h.process_access, h.event_description, h.status
                 FROM historico h
                 WHERE h.scotia_id = ? 
                 AND h.app_access_name = ?
                 AND h.process_access = ?
-                AND h.status = 'Pendiente'
+                AND h.status IN ('Pendiente', 'Completado', 'En Proceso')
                 ORDER BY h.record_date DESC
             ''', (scotia_id, app_name, access_type))
             
             access_record = cursor.fetchone()
             
             if not access_record:
+                print(f"DEBUG: No se encontró acceso {access_type} con status 'Pendiente'. Verificando otros estados...")
+                # Buscar con otros estados
+                cursor.execute('''
+                    SELECT h.id, h.app_access_name, h.process_access, h.event_description, h.status
+                    FROM historico h
+                    WHERE h.scotia_id = ? 
+                    AND h.app_access_name = ?
+                    AND h.process_access = ?
+                    ORDER BY h.record_date DESC
+                ''', (scotia_id, app_name, access_type))
+                
+                all_records = cursor.fetchall()
+                print(f"DEBUG: Registros encontrados para {app_name} con {access_type}: {len(all_records)}")
+                for record in all_records:
+                    print(f"DEBUG: - ID: {record[0]}, App: {record[1]}, Process: {record[2]}, Status: {record[4]}")
+                
                 return {
                     'success': False,
                     'message': f'No se encontró acceso {access_type} activo para {app_name}'
@@ -2305,19 +2451,19 @@ class AccessManagementService:
             
             cursor.execute('''
                 INSERT INTO historico (
-                    scotia_id, case_id, responsible, record_date, request_date,
-                    process_access, sid, area, subunit, event_description,
-                    ticket_email, app_access_name, computer_system_type, status,
+                    scotia_id, employee_email, case_id, responsible, record_date, request_date,
+                    process_access, subunit, event_description,
+                    ticket_email, app_access_name, computer_system_type, duration_of_access, status,
                     closing_date_app, closing_date_ticket, app_quality,
-                    confirmation_by_user, comment, ticket_quality, general_status,
-                    average_time_open_ticket
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    confirmation_by_user, comment, comment_tq, ticket_quality, general_status_ticket,
+                    general_status_case, average_time_open_ticket, sla_app, sla_ticket, sla_case
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                scotia_id, case_id, responsible, datetime.now(), None,
-                'offboarding', scotia_id, 'N/A', 'N/A', event_description,
-                f'{responsible}@empresa.com', app_name, 'Desktop', 'Pendiente',
+                scotia_id, scotia_id, case_id, responsible, datetime.now(), None,
+                'offboarding', 'N/A', event_description,
+                f'{responsible}@empresa.com', app_name, 'Desktop', None, 'Pendiente',
                 None, None, None, None, f'Revocación de acceso {access_type} por {responsible}', 
-                None, 'En Proceso', None
+                None, 'En Proceso', None, None, None, None, None, None
             ))
             
             # Marcar el acceso original como revocado

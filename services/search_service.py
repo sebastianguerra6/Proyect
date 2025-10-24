@@ -112,7 +112,7 @@ class SearchService:
             
             query = """
                 SELECT scotia_id, employee, full_name, email, position, manager, 
-                       senior_manager, unit, start_date, ceco, skip_level, 
+                       senior_manager, unit, unidad_subunidad, start_date, ceco, skip_level, 
                        cafe_alcides, parents, personal_email, size, birthday, 
                        validacion, activo
                 FROM headcount
@@ -147,7 +147,7 @@ class SearchService:
             
             query = """
                 SELECT scotia_id, employee, full_name, email, position, manager, 
-                       senior_manager, unit, start_date, ceco, skip_level, 
+                       senior_manager, unit, unidad_subunidad, start_date, ceco, skip_level, 
                        cafe_alcides, parents, personal_email, size, birthday, 
                        validacion, activo
                 FROM headcount
@@ -182,6 +182,17 @@ class SearchService:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
+            
+            # Obtener el scotia_id del registro para obtener el email del headcount
+            cursor.execute('SELECT scotia_id FROM historico WHERE case_id = ?', (case_id,))
+            scotia_id_result = cursor.fetchone()
+            if scotia_id_result:
+                scotia_id = scotia_id_result[0]
+                # Obtener el email del empleado desde headcount
+                cursor.execute('SELECT email FROM headcount WHERE scotia_id = ?', (scotia_id,))
+                email_result = cursor.fetchone()
+                if email_result:
+                    datos_actualizados['employee_email'] = email_result[0]
             
             # Construir query de actualización dinámicamente
             set_clauses = []

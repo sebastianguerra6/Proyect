@@ -443,21 +443,20 @@ class ExcelToSQLServerImporter:
         """Inserta datos en la tabla historico de SQL Server"""
         cursor.execute('''
             INSERT INTO historico 
-            (scotia_id, case_id, responsible, record_date, request_date, process_access, 
-             sid, area, subunit, event_description, ticket_email, app_access_name, 
+            (scotia_id, employee_email, case_id, responsible, record_date, request_date, process_access, 
+             subunit, event_description, ticket_email, app_access_name, 
              computer_system_type, status, closing_date_app, closing_date_ticket, 
-             app_quality, confirmation_by_user, comment, ticket_quality, general_status, 
+             app_quality, confirmation_by_user, comment, ticket_quality, general_status_ticket, 
              average_time_open_ticket)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('scotia_id', ''),
+            data.get('employee_email', ''),
             data.get('case_id', ''),
             data.get('responsible', ''),
             data.get('record_date', ''),
             data.get('request_date', ''),
             data.get('process_access', ''),
-            data.get('sid', ''),
-            data.get('area', ''),
             data.get('subunit', ''),
             data.get('event_description', ''),
             data.get('ticket_email', ''),

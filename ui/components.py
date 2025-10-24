@@ -437,21 +437,39 @@ class EdicionBusquedaFrame:
     def _crear_variables(self):
         """Crea las variables de control"""
         self.variables = {
+            # Variables de búsqueda
             'numero_caso_busqueda': tk.StringVar(),
-            'numero_caso_edicion': tk.StringVar(),
-            'nueva_unidad_subunidad_edicion': tk.StringVar(),
-            'nuevo_cargo_edicion': tk.StringVar(),
-            'request_date_edicion': tk.StringVar(),
-            'ingreso_por_edicion': tk.StringVar(),
-            'fecha_edicion': tk.StringVar(),
-            'status_edicion': tk.StringVar(),
-            'mail_edicion': tk.StringVar(),
-            'closing_date_app_edicion': tk.StringVar(),
-            'app_quality_edicion': tk.StringVar(),
-            'confirmation_by_user_edicion': tk.StringVar(),
-            'comment_edicion': tk.StringVar(),
             'filtro_texto': tk.StringVar(),
-            'columna_filtro': tk.StringVar(value="SID")
+            'columna_filtro': tk.StringVar(value="SID"),
+            
+            # Variables de edición - Todos los campos de la tabla historico
+            'id_edicion': tk.StringVar(),
+            'scotia_id_edicion': tk.StringVar(),
+            'case_id_edicion': tk.StringVar(),
+            'responsible_edicion': tk.StringVar(),
+            'record_date_edicion': tk.StringVar(),
+            'request_date_edicion': tk.StringVar(),
+            'process_access_edicion': tk.StringVar(),
+            'subunit_edicion': tk.StringVar(),
+            'event_description_edicion': tk.StringVar(),
+            'ticket_email_edicion': tk.StringVar(),
+            'app_access_name_edicion': tk.StringVar(),
+            'computer_system_type_edicion': tk.StringVar(),
+            'duration_of_access_edicion': tk.StringVar(),
+            'status_edicion': tk.StringVar(),
+            'closing_date_app_edicion': tk.StringVar(),
+            'closing_date_ticket_edicion': tk.StringVar(),
+            'app_quality_edicion': tk.StringVar(),
+            'confirmation_by_user_edicion': tk.BooleanVar(),
+            'comment_edicion': tk.StringVar(),
+            'comment_tq_edicion': tk.StringVar(),
+            'ticket_quality_edicion': tk.StringVar(),
+            'general_status_ticket_edicion': tk.StringVar(),
+            'general_status_case_edicion': tk.StringVar(),
+            'average_time_open_ticket_edicion': tk.StringVar(),
+            'sla_app_edicion': tk.StringVar(),
+            'sla_ticket_edicion': tk.StringVar(),
+            'sla_case_edicion': tk.StringVar()
         }
         
         # Variables para filtros múltiples
@@ -526,12 +544,14 @@ class EdicionBusquedaFrame:
         resultados_frame = ttk.Frame(main_frame)
         resultados_frame.grid(row=2, column=0, sticky="nsew", pady=(15, 0))
         
-        # Crear Treeview para mostrar resultados del historial
-        self.tree = ttk.Treeview(resultados_frame, columns=("SID", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Descripción"), 
+        # Crear Treeview para mostrar resultados del historial con más campos
+        self.tree = ttk.Treeview(resultados_frame, columns=("ID", "SID", "Email", "Caso", "Proceso", "Aplicación", "Estado", "Fecha", "Fecha Solicitud", "Responsable", "Subunidad", "Tipo Sistema", "Duración", "Cierre App", "Cierre Ticket", "Calidad App", "Confirmación", "Comentario"), 
                                 show="headings", height=12)
         
         # Configurar columnas
+        self.tree.heading("ID", text="ID")
         self.tree.heading("SID", text="SID")
+        self.tree.heading("Email", text="Email")
         self.tree.heading("Caso", text="Caso")
         self.tree.heading("Proceso", text="Proceso")
         self.tree.heading("Aplicación", text="Aplicación")
@@ -539,18 +559,34 @@ class EdicionBusquedaFrame:
         self.tree.heading("Fecha", text="Fecha")
         self.tree.heading("Fecha Solicitud", text="Fecha Solicitud")
         self.tree.heading("Responsable", text="Responsable")
-        self.tree.heading("Descripción", text="Descripción")
+        self.tree.heading("Subunidad", text="Subunidad")
+        self.tree.heading("Tipo Sistema", text="Tipo Sistema")
+        self.tree.heading("Duración", text="Duración")
+        self.tree.heading("Cierre App", text="Cierre App")
+        self.tree.heading("Cierre Ticket", text="Cierre Ticket")
+        self.tree.heading("Calidad App", text="Calidad App")
+        self.tree.heading("Confirmación", text="Confirmación")
+        self.tree.heading("Comentario", text="Comentario")
         
         # Configurar anchos de columna con minwidth
-        self.tree.column("SID", width=120, minwidth=100)
-        self.tree.column("Caso", width=150, minwidth=120)
-        self.tree.column("Proceso", width=150, minwidth=120)
-        self.tree.column("Aplicación", width=200, minwidth=150)
-        self.tree.column("Estado", width=120, minwidth=100)
-        self.tree.column("Fecha", width=150, minwidth=120)
-        self.tree.column("Fecha Solicitud", width=150, minwidth=120)
-        self.tree.column("Responsable", width=150, minwidth=120)
-        self.tree.column("Descripción", width=300, minwidth=200)
+        self.tree.column("ID", width=50, minwidth=40)
+        self.tree.column("SID", width=100, minwidth=80)
+        self.tree.column("Email", width=200, minwidth=150)
+        self.tree.column("Caso", width=120, minwidth=100)
+        self.tree.column("Proceso", width=120, minwidth=100)
+        self.tree.column("Aplicación", width=150, minwidth=120)
+        self.tree.column("Estado", width=100, minwidth=80)
+        self.tree.column("Fecha", width=120, minwidth=100)
+        self.tree.column("Fecha Solicitud", width=120, minwidth=100)
+        self.tree.column("Responsable", width=120, minwidth=100)
+        self.tree.column("Subunidad", width=120, minwidth=100)
+        self.tree.column("Tipo Sistema", width=120, minwidth=100)
+        self.tree.column("Duración", width=100, minwidth=80)
+        self.tree.column("Cierre App", width=100, minwidth=80)
+        self.tree.column("Cierre Ticket", width=100, minwidth=80)
+        self.tree.column("Calidad App", width=100, minwidth=80)
+        self.tree.column("Confirmación", width=100, minwidth=80)
+        self.tree.column("Comentario", width=200, minwidth=150)
         
         # Scrollbars (vertical y horizontal)
         vsb = ttk.Scrollbar(resultados_frame, orient="vertical", command=self.tree.yview)
@@ -605,11 +641,12 @@ class EdicionBusquedaFrame:
             item = selection[0]
             values = self.tree.item(item, 'values')
             
-            # Ahora los valores son: SID, Caso, Proceso, Aplicación, Estado, Fecha, Responsable, Descripción
-            scotia_id = values[0]  # SID
-            case_id = values[1]    # Caso
-            process_access = values[2]  # Proceso
-            app_access_name = values[3]  # Aplicación
+            # Ahora los valores son: ID, SID, Caso, Proceso, Aplicación, Estado, Fecha, Fecha Solicitud, Responsable, Subunidad, Tipo Sistema, Duración, Cierre App, Cierre Ticket, Calidad App, Confirmación, Comentario
+            record_id = values[0]  # ID
+            scotia_id = values[1]  # SID
+            case_id = values[2]    # Caso
+            process_access = values[3]  # Proceso
+            app_access_name = values[4]  # Aplicación
             
             # Buscar los datos completos del registro del historial
             import sys
@@ -622,12 +659,12 @@ class EdicionBusquedaFrame:
             cursor = conn.cursor()
             
             # Debug: imprimir los valores que estamos buscando
-            print(f"DEBUG: Buscando registro con SID: {scotia_id}, Caso: {case_id}, Proceso: {process_access}")
+            print(f"DEBUG: Buscando registro con ID: {record_id}")
             
             cursor.execute('''
                 SELECT * FROM historico 
-                WHERE scotia_id = ? AND case_id = ? AND process_access = ? AND app_access_name = ?
-            ''', (scotia_id, case_id, process_access, app_access_name))
+                WHERE id = ?
+            ''', (record_id,))
             row = cursor.fetchone()
             
             # Debug: imprimir si se encontró algo
@@ -635,7 +672,7 @@ class EdicionBusquedaFrame:
             
             if not row:
                 conn.close()
-                messagebox.showerror("Error", f"No se encontró el registro del historial con SID: {scotia_id}, Caso: {case_id}")
+                messagebox.showerror("Error", f"No se encontró el registro del historial con ID: {record_id}")
                 return
             
             # Convertir a diccionario
@@ -650,7 +687,7 @@ class EdicionBusquedaFrame:
             self.parent.wait_window(dialog.dialog)
             
             if dialog.result:
-                success, message = self.actualizar_registro_historial_por_campos(scotia_id, case_id, process_access, app_access_name, dialog.result)
+                success, message = self.actualizar_registro_historial_por_id(record_id, dialog.result)
                 
                 if success:
                     messagebox.showinfo("Éxito", message)
@@ -663,6 +700,58 @@ class EdicionBusquedaFrame:
             messagebox.showerror("Error", f"Error editando registro: {str(e)}")
             print(f"Error en editar_registro_historial: {e}")
     
+    def actualizar_registro_historial_por_id(self, record_id, data):
+        """Actualiza un registro del historial usando el ID como identificador"""
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'services'))
+            from access_management_service import access_service
+            
+            conn = access_service.get_connection()
+            cursor = conn.cursor()
+            
+            # Obtener el scotia_id del registro para obtener el email del headcount
+            cursor.execute('SELECT scotia_id FROM historico WHERE id = ?', (record_id,))
+            scotia_id_result = cursor.fetchone()
+            if scotia_id_result:
+                scotia_id = scotia_id_result[0]
+                # Obtener el email del empleado desde headcount
+                cursor.execute('SELECT email FROM headcount WHERE scotia_id = ?', (scotia_id,))
+                email_result = cursor.fetchone()
+                if email_result:
+                    data['employee_email'] = email_result[0]
+            
+            # Construir query de actualización
+            set_clauses = []
+            params = []
+            
+            for campo, valor in data.items():
+                if campo != 'id':  # No actualizar el ID
+                    set_clauses.append(f"{campo} = ?")
+                    params.append(valor)
+            
+            if not set_clauses:
+                return False, "No hay datos para actualizar"
+            
+            # Agregar el ID al WHERE
+            params.append(record_id)
+            
+            query = f"UPDATE historico SET {', '.join(set_clauses)} WHERE id = ?"
+            
+            print(f"DEBUG: Query de actualización: {query}")
+            print(f"DEBUG: Parámetros: {params}")
+            
+            cursor.execute(query, params)
+            conn.commit()
+            conn.close()
+            
+            return True, "Registro actualizado exitosamente"
+            
+        except Exception as e:
+            print(f"Error en actualizar_registro_historial_por_id: {e}")
+            return False, f"Error actualizando registro: {str(e)}"
+    
     def actualizar_registro_historial_por_campos(self, scotia_id, case_id, process_access, app_access_name, data):
         """Actualiza un registro del historial usando una combinación de campos para identificarlo"""
         try:
@@ -673,6 +762,12 @@ class EdicionBusquedaFrame:
             
             conn = access_service.get_connection()
             cursor = conn.cursor()
+            
+            # Obtener el email del empleado desde headcount
+            cursor.execute('SELECT email FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            email_result = cursor.fetchone()
+            if email_result:
+                data['employee_email'] = email_result[0]
             
             # Construir query de actualización
             set_clauses = []
@@ -789,14 +884,21 @@ class EdicionBusquedaFrame:
                     print(f"  email: {resultado.get('email', '')}")
                 
                 # Mapear los campos correctos de la base de datos headcount
+                # Separar nombre y apellido del full_name
+                full_name = resultado.get('full_name', '')
+                nombre_parts = full_name.split(' ', 1)
+                nombre = nombre_parts[0] if nombre_parts else ''
+                apellido = nombre_parts[1] if len(nombre_parts) > 1 else ''
+                
                 values = (
-                    resultado.get('scotia_id', ''),  # Caso
-                    resultado.get('employee', ''),   # SID (usando employee como nombre)
-                    resultado.get('unit', ''),       # Sub Unidad
+                    resultado.get('scotia_id', ''),  # SID
+                    nombre,                          # Nombre
+                    apellido,                        # Apellido
+                    resultado.get('email', ''),      # Email
+                    resultado.get('unit', ''),       # Departamento
+                    resultado.get('unidad_subunidad', ''),  # Unidad/Subunidad
                     resultado.get('position', ''),   # Cargo
-                    'Activo' if resultado.get('activo', True) else 'Inactivo',  # Status
-                    resultado.get('start_date', ''), # Request Date
-                    resultado.get('email', '')       # Mail
+                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
                 )
                 
                 if i < 2:  # Debug para los primeros 2 registros
@@ -982,8 +1084,27 @@ class EdicionBusquedaFrame:
             conn = access_service.get_connection()
             cursor = conn.cursor()
             
+            # Primero verificar cuántos registros hay en total
+            cursor.execute('SELECT COUNT(*) FROM historico')
+            total_count = cursor.fetchone()[0]
+            print(f"DEBUG: Total de registros en historico: {total_count}")
+            
+            # Verificar registros recientes
+            cursor.execute('SELECT TOP 5 scotia_id, process_access, event_description, record_date FROM historico ORDER BY record_date DESC')
+            recent_records = cursor.fetchall()
+            print("DEBUG: Últimos 5 registros en la base de datos:")
+            for record in recent_records:
+                print(f"  SID={record[0]}, Process={record[1]}, Event={record[2][:30]}..., Date={record[3]}")
+            
             cursor.execute('''
-                SELECT h.*, a.logical_access_name, a.description as app_description
+                SELECT h.id, h.scotia_id, h.case_id, h.responsible, h.record_date, h.request_date, 
+                       h.process_access, h.subunit, h.event_description, h.ticket_email, h.app_access_name, 
+                       h.computer_system_type, h.status, h.closing_date_app, h.closing_date_ticket, 
+                       h.app_quality, h.confirmation_by_user, h.comment, h.ticket_quality, h.general_status, 
+                       h.average_time_open_ticket, h.duration_of_access, h.comment_tq, h.general_status_ticket, 
+                       h.general_status_case, h.sla_app, h.sla_ticket, h.sla_case, h.employee_email,
+                       a.logical_access_name, a.description as app_description,
+                       hc.email as headcount_email
                 FROM historico h
                 LEFT JOIN (
                     SELECT 
@@ -992,6 +1113,7 @@ class EdicionBusquedaFrame:
                         ROW_NUMBER() OVER (PARTITION BY logical_access_name ORDER BY id) as rn
                     FROM applications
                 ) a ON h.app_access_name = a.logical_access_name AND a.rn = 1
+                LEFT JOIN headcount hc ON h.scotia_id = hc.scotia_id
                 ORDER BY h.record_date DESC
             ''')
             rows = cursor.fetchall()
@@ -1003,12 +1125,21 @@ class EdicionBusquedaFrame:
             
             print(f"DEBUG: Historial obtenido: {len(historial)} registros")
             
+            # Debug: mostrar los primeros 5 registros
+            for i, registro in enumerate(historial[:5]):
+                print(f"DEBUG: Registro {i}: SID={registro.get('scotia_id')}, Process={registro.get('process_access')}, Event={registro.get('event_description', '')[:50]}...")
+            
             # Analizar registros de lateral movement para debug
             lateral_records = [r for r in historial if r.get('event_description') and 'lateral movement' in r.get('event_description', '')]
             onboarding_count = len([r for r in lateral_records if r.get('process_access') == 'onboarding'])
             offboarding_count = len([r for r in lateral_records if r.get('process_access') == 'offboarding'])
             
             print(f"DEBUG: Registros de lateral movement: {len(lateral_records)} (Onboarding: {onboarding_count}, Offboarding: {offboarding_count})")
+            
+            # Debug: mostrar todos los registros recientes (últimos 10)
+            print("DEBUG: Últimos 10 registros:")
+            for i, registro in enumerate(historial[:10]):
+                print(f"  {i+1}. SID={registro.get('scotia_id')}, Process={registro.get('process_access')}, Status={registro.get('status')}, Event={registro.get('event_description', '')[:30]}...")
             
             self.mostrar_resultados_historial(historial, "")
             
@@ -1114,9 +1245,34 @@ class EdicionBusquedaFrame:
                 except:
                     request_fecha_formatted = request_fecha or 'N/A'
                 
-                # Mapear los campos del historial
+                # Formatear fechas adicionales
+                closing_app = resultado.get('closing_date_app', '')
+                closing_ticket = resultado.get('closing_date_ticket', '')
+                try:
+                    closing_app_formatted = datetime.fromisoformat(closing_app).strftime('%d/%m/%Y') if closing_app else 'N/A'
+                    closing_ticket_formatted = datetime.fromisoformat(closing_ticket).strftime('%d/%m/%Y') if closing_ticket else 'N/A'
+                except:
+                    closing_app_formatted = closing_app or 'N/A'
+                    closing_ticket_formatted = closing_ticket or 'N/A'
+                
+                # Formatear confirmación
+                confirmation = resultado.get('confirmation_by_user', '')
+                confirmation_text = 'Sí' if confirmation else 'No' if confirmation is not None else 'N/A'
+                
+                # Mapear todos los campos del historial
+                # Usar el email del headcount si está disponible, sino usar el employee_email de la tabla historico
+                email_to_show = resultado.get('headcount_email', '') or resultado.get('employee_email', '')
+                
+                # Debug para ver qué email se está usando
+                if i < 3:  # Debug para los primeros 3 registros
+                    print(f"DEBUG: Email del headcount: {resultado.get('headcount_email', '')}")
+                    print(f"DEBUG: Email del historico: {resultado.get('employee_email', '')}")
+                    print(f"DEBUG: Email final a mostrar: {email_to_show}")
+                
                 values = (
+                    resultado.get('id', ''),                     # ID
                     resultado.get('scotia_id', ''),             # SID
+                    email_to_show,                               # Email (del headcount o historico)
                     resultado.get('case_id', ''),               # Caso
                     resultado.get('process_access', ''),        # Proceso
                     resultado.get('app_access_name', ''),       # Aplicación
@@ -1124,7 +1280,14 @@ class EdicionBusquedaFrame:
                     fecha_formatted,                            # Fecha
                     request_fecha_formatted,                    # Fecha Solicitud
                     resultado.get('responsible', ''),           # Responsable
-                    resultado.get('event_description', '')      # Descripción
+                    resultado.get('subunit', ''),               # Subunidad
+                    resultado.get('computer_system_type', ''),   # Tipo Sistema
+                    resultado.get('duration_of_access', ''),     # Duración
+                    closing_app_formatted,                       # Cierre App
+                    closing_ticket_formatted,                    # Cierre Ticket
+                    resultado.get('app_quality', ''),           # Calidad App
+                    confirmation_text,                          # Confirmación
+                    resultado.get('comment', '')                # Comentario
                 )
                 
                 if i < 3:  # Debug para los primeros 3 registros
@@ -2555,7 +2718,7 @@ class HistorialDialog:
     def __init__(self, parent, title: str, historial_data: dict = None):
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(title)
-        self.dialog.geometry("700x600")
+        self.dialog.geometry("800x700")
         self.dialog.resizable(True, True)
         self.dialog.transient(parent)
         self.dialog.grab_set()
@@ -2592,30 +2755,35 @@ class HistorialDialog:
         title_label = ttk.Label(scrollable_frame, text="Editar Registro de Historial", font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
-        # Campos del formulario
+        # Campos del formulario - Todos los campos de la tabla historico
         campos = [
+            ("ID:", "id", "entry", True),  # Solo lectura
             ("SID:", "scotia_id", "entry"),
             ("ID de Caso:", "case_id", "entry"),
             ("Responsable:", "responsible", "entry"),
             ("Fecha de Registro:", "record_date", "entry"),
             ("Fecha de Solicitud:", "request_date", "entry"),
             ("Proceso de Acceso:", "process_access", "combobox", ["onboarding", "offboarding", "lateral_movement"]),
-            ("SID (interno):", "sid", "entry"),
-            ("Área:", "area", "entry"),
             ("Sub Unidad:", "subunit", "entry"),
             ("Descripción del Evento:", "event_description", "text"),
             ("Email del Ticket:", "ticket_email", "entry"),
             ("Nombre de Aplicación:", "app_access_name", "entry"),
-            ("Tipo de Sistema:", "computer_system_type", "combobox", ["Desktop", "Laptop", "Mobile", "Server"]),
+            ("Tipo de Sistema:", "computer_system_type", "entry"),
+            ("Duración del Acceso:", "duration_of_access", "combobox", ["Permanente", "Temporal", "Por Proyecto"]),
             ("Estado:", "status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado", "Rechazado"]),
             ("Fecha de Cierre App:", "closing_date_app", "entry"),
             ("Fecha de Cierre Ticket:", "closing_date_ticket", "entry"),
             ("Calidad de App:", "app_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
-            ("Confirmación por Usuario:", "confirmation_by_user", "entry"),
+            ("Confirmación por Usuario:", "confirmation_by_user", "checkbox"),
             ("Comentario:", "comment", "text"),
+            ("Comentario TQ:", "comment_tq", "text"),
             ("Calidad del Ticket:", "ticket_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
-            ("Estado General:", "general_status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado"]),
-            ("Tiempo Promedio de Apertura:", "average_time_open_ticket", "entry")
+            ("Estado General Ticket:", "general_status_ticket", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado"]),
+            ("Estado General Caso:", "general_status_case", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado"]),
+            ("Tiempo Promedio de Apertura:", "average_time_open_ticket", "entry"),
+            ("SLA App:", "sla_app", "combobox", ["Cumplido", "Incumplido", "Pendiente"]),
+            ("SLA Ticket:", "sla_ticket", "combobox", ["Cumplido", "Incumplido", "Pendiente"]),
+            ("SLA Caso:", "sla_case", "combobox", ["Cumplido", "Incumplido", "Pendiente"])
         ]
         
         # Crear campos dinámicamente
@@ -2623,24 +2791,31 @@ class HistorialDialog:
         self.widgets = {}
         for i, campo in enumerate(campos):
             label_text, var_name, tipo = campo[:3]
+            solo_lectura = campo[3] if len(campo) > 3 and isinstance(campo[3], bool) else False
+            
             ttk.Label(scrollable_frame, text=label_text).grid(row=i+1, column=0, sticky="w", pady=5)
             
             if tipo == "entry":
                 self.variables[var_name] = tk.StringVar()
-                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], width=50)
+                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], width=50, state="readonly" if solo_lectura else "normal")
                 entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.widgets[var_name] = entry
             elif tipo == "combobox":
-                valores = campo[3] if len(campo) > 3 else []
+                valores = campo[3] if len(campo) > 3 and not isinstance(campo[3], bool) else (campo[4] if len(campo) > 4 else [])
                 self.variables[var_name] = tk.StringVar()
-                combo = ttk.Combobox(scrollable_frame, textvariable=self.variables[var_name], values=valores, width=47)
+                combo = ttk.Combobox(scrollable_frame, textvariable=self.variables[var_name], values=valores, width=47, state="readonly" if solo_lectura else "normal")
                 combo.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.widgets[var_name] = combo
             elif tipo == "text":
-                text_widget = tk.Text(scrollable_frame, height=3, width=50)
+                text_widget = tk.Text(scrollable_frame, height=3, width=50, state="disabled" if solo_lectura else "normal")
                 text_widget.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
                 self.variables[var_name] = text_widget  # Para Text widgets, guardamos el widget directamente
                 self.widgets[var_name] = text_widget
+            elif tipo == "checkbox":
+                self.variables[var_name] = tk.BooleanVar()
+                checkbox = ttk.Checkbutton(scrollable_frame, variable=self.variables[var_name], state="disabled" if solo_lectura else "normal")
+                checkbox.grid(row=i+1, column=1, sticky="w", pady=5, padx=(10, 0))
+                self.widgets[var_name] = checkbox
         
         # Configurar grid
         scrollable_frame.columnconfigure(1, weight=1)
@@ -2673,6 +2848,8 @@ class HistorialDialog:
                     elif isinstance(var, tk.Text):
                         var.delete('1.0', tk.END)
                         var.insert('1.0', str(self.historial_data[var_name]) if self.historial_data[var_name] is not None else '')
+                    elif isinstance(var, tk.BooleanVar):
+                        var.set(bool(self.historial_data[var_name]) if self.historial_data[var_name] is not None else False)
     
     def _save(self):
         """Guarda los datos del formulario"""
@@ -2692,6 +2869,8 @@ class HistorialDialog:
                 self.result[var_name] = var.get().strip()
             elif isinstance(var, tk.Text):
                 self.result[var_name] = var.get('1.0', tk.END).strip()
+            elif isinstance(var, tk.BooleanVar):
+                self.result[var_name] = var.get()
         
         self.dialog.destroy()
     

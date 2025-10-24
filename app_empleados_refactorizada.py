@@ -452,11 +452,20 @@ class AppEmpleadosRefactorizada:
                     
             elif tipo_proceso == 'lateral':
                 # Procesar movimiento lateral
+                nueva_unidad_subunidad = datos_generales.get('nueva_unidad_subunidad', '')
+                # Separar unidad y subunidad si es necesario
+                if '/' in nueva_unidad_subunidad:
+                    nueva_unidad, nueva_subunidad = nueva_unidad_subunidad.split('/', 1)
+                else:
+                    nueva_unidad = nueva_unidad_subunidad
+                    nueva_subunidad = None
+                
                 success, message, records = access_service.process_lateral_movement(
                     scotia_id,
                     datos_generales.get('nuevo_cargo', ''),
-                    datos_generales.get('nueva_unidad_subunidad', ''),  # Corregir nombre del campo
-                    responsable
+                    nueva_unidad,
+                    responsable,
+                    nueva_subunidad
                 )
                 
                 if success:

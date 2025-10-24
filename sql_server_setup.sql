@@ -112,6 +112,7 @@ BEGIN
     CREATE TABLE [dbo].[historico] (
         [id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
         [scotia_id] VARCHAR(20) NOT NULL,
+        [employee_email] VARCHAR(150) NULL,
         [case_id] VARCHAR(100) NULL,
         [responsible] VARCHAR(100) NULL,
         [record_date] DATETIME2 NOT NULL DEFAULT GETDATE(),
@@ -178,6 +179,11 @@ BEGIN
     BEGIN
         ALTER TABLE [dbo].[historico] ADD [sla_case] VARCHAR(50) NULL;
         PRINT 'Columna sla_case agregada a la tabla historico';
+    END
+    IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'employee_email')
+    BEGIN
+        ALTER TABLE [dbo].[historico] ADD [employee_email] VARCHAR(150) NULL;
+        PRINT 'Columna employee_email agregada a la tabla historico';
     END
     -- Eliminar campos que sobran si existen
     IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'sid')
@@ -483,6 +489,27 @@ BEGIN
     WHERE curr.scotia_id IS NULL');
     PRINT 'Vista vw_to_grant creada exitosamente';
 END
+ELSE
+BEGIN
+    -- Actualizar vista existente
+    EXEC('ALTER VIEW [dbo].[vw_to_grant] AS
+    SELECT 
+        req.scotia_id,
+        req.unit,
+        req.position,
+        req.logical_access_name,
+        req.subunit,
+        req.position_role,
+        ''onboarding'' as process_type
+    FROM [dbo].[vw_required_apps] req
+    LEFT JOIN [dbo].[vw_current_access] curr ON 
+        req.scotia_id = curr.scotia_id AND
+        UPPER(LTRIM(RTRIM(req.logical_access_name))) = UPPER(LTRIM(RTRIM(curr.logical_access_name))) AND
+        UPPER(LTRIM(RTRIM(req.unit))) = UPPER(LTRIM(RTRIM(curr.unit))) AND
+        UPPER(LTRIM(RTRIM(req.position))) = UPPER(LTRIM(RTRIM(curr.position)))
+    WHERE curr.scotia_id IS NULL');
+    PRINT 'Vista vw_to_grant actualizada exitosamente';
+END
 GO
 
 -- Vista para accesos por revocar
@@ -506,6 +533,28 @@ BEGIN
         UPPER(LTRIM(RTRIM(curr.position))) = UPPER(LTRIM(RTRIM(req.position)))
     WHERE req.scotia_id IS NULL');
     PRINT 'Vista vw_to_revoke creada exitosamente';
+END
+ELSE
+BEGIN
+    -- Actualizar vista existente
+    EXEC('ALTER VIEW [dbo].[vw_to_revoke] AS
+    SELECT 
+        curr.scotia_id,
+        curr.unit,
+        curr.position,
+        curr.logical_access_name,
+        curr.subunit,
+        curr.position_role,
+        curr.record_date,
+        ''offboarding'' as process_type
+    FROM [dbo].[vw_current_access] curr
+    LEFT JOIN [dbo].[vw_required_apps] req ON 
+        curr.scotia_id = req.scotia_id AND
+        UPPER(LTRIM(RTRIM(curr.logical_access_name))) = UPPER(LTRIM(RTRIM(req.logical_access_name))) AND
+        UPPER(LTRIM(RTRIM(curr.unit))) = UPPER(LTRIM(RTRIM(req.unit))) AND
+        UPPER(LTRIM(RTRIM(curr.position))) = UPPER(LTRIM(RTRIM(req.position)))
+    WHERE req.scotia_id IS NULL');
+    PRINT 'Vista vw_to_revoke actualizada exitosamente';
 END
 GO
 
