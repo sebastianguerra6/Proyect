@@ -3,6 +3,7 @@ Componente para crear registros manuales de acceso
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
+from services.dropdown_service import dropdown_service
 
 
 class ManualAccessDialog:
@@ -57,7 +58,7 @@ class ManualAccessDialog:
             if widget_type == "entry":
                 widget = ttk.Entry(main_frame, textvariable=self.variables[var_name], width=40)
             elif widget_type == "combobox":
-                widget = ttk.Combobox(main_frame, textvariable=self.variables[var_name], width=37)
+                widget = ttk.Combobox(main_frame, textvariable=self.variables[var_name], width=37, state="readonly")
                 if var_name == "position":
                     # Cargar posiciones disponibles
                     self._load_positions(widget)
@@ -91,34 +92,92 @@ class ManualAccessDialog:
 • Seleccione la posición para filtrar las aplicaciones disponibles
 • La aplicación se puede seleccionar de la lista filtrada o escribir una nueva
 • El registro quedará en estado "Pendiente" para su procesamiento
+• Los dropdowns se cargan automáticamente desde la base de datos
         """
         ttk.Label(main_frame, text=info_text, font=("Arial", 9), 
                  foreground="gray").grid(row=len(campos)+2, column=0, columnspan=2, 
                                        pady=(10, 0), sticky="w")
     
     def _load_positions(self, combobox):
-        """Carga las posiciones disponibles en el combobox"""
+        """Carga las posiciones disponibles en el combobox usando dropdown_service"""
         try:
-            if self.service:
-                positions = self.service.get_available_positions()
-                combobox['values'] = positions
-                # Configurar evento para actualizar aplicaciones cuando cambie la posición
-                combobox.bind('<<ComboboxSelected>>', self._on_position_changed)
-            else:
-                combobox['values'] = []
-
+            # Usar el dropdown_service para obtener posiciones
+            positions = dropdown_service.get_unique_positions()
+            
+            # Si no hay posiciones en la base de datos, usar valores por defecto
+            if not positions:
+                positions = [
+                    "ANALISTA SENIOR",
+                    "DESARROLLADOR",
+                    "GERENTE",
+                    "ADMINISTRADOR",
+                    "COORDINADOR",
+                    "ESPECIALISTA",
+                    "CONSULTOR",
+                    "DIRECTOR",
+                    "SUPERVISOR",
+                    "TÉCNICO"
+                ]
+            
+            combobox['values'] = positions
+            # Configurar evento para actualizar aplicaciones cuando cambie la posición
+            combobox.bind('<<ComboboxSelected>>', self._on_position_changed)
+            
         except Exception as e:
             print(f"Error cargando posiciones: {e}")
+            # En caso de error, usar valores por defecto
+            combobox['values'] = [
+                "ANALISTA SENIOR",
+                "DESARROLLADOR", 
+                "GERENTE",
+                "ADMINISTRADOR",
+                "COORDINADOR"
+            ]
     
     def _load_applications(self, combobox):
-        """Carga las aplicaciones disponibles en el combobox"""
+        """Carga las aplicaciones disponibles en el combobox usando access_service"""
         try:
             if self.service:
                 applications = self.service.get_available_applications()
                 app_names = [app['name'] for app in applications]
+                
+                # Si no hay aplicaciones en la base de datos, usar valores por defecto
+                if not app_names:
+                    app_names = [
+                        "JIRA",
+                        "CONFLUENCE", 
+                        "GITLAB",
+                        "POWER BI",
+                        "SAP",
+                        "OFFICE 365",
+                        "SALESFORCE",
+                        "SERVICENOW",
+                        "TABLEAU",
+                        "SHAREPOINT"
+                    ]
+                
                 combobox['values'] = app_names
+            else:
+                # Valores por defecto si no hay servicio
+                combobox['values'] = [
+                    "JIRA",
+                    "CONFLUENCE",
+                    "GITLAB", 
+                    "POWER BI",
+                    "SAP",
+                    "OFFICE 365"
+                ]
+                
         except Exception as e:
             print(f"Error cargando aplicaciones: {e}")
+            # En caso de error, usar valores por defecto
+            combobox['values'] = [
+                "JIRA",
+                "CONFLUENCE",
+                "GITLAB",
+                "POWER BI",
+                "SAP"
+            ]
     
     def _on_position_changed(self, event):
         """Se ejecuta cuando se cambia la posición seleccionada"""
@@ -129,20 +188,55 @@ class ManualAccessDialog:
                 applications = self.service.get_applications_by_position_simple(position)
                 app_names = [app['logical_access_name'] for app in applications]
                 
+                # Si no hay aplicaciones específicas para esta posición, mostrar todas las disponibles
+                if not app_names:
+                    all_applications = self.service.get_available_applications()
+                    app_names = [app['name'] for app in all_applications]
+                
+                # Si aún no hay aplicaciones, usar valores por defecto
+                if not app_names:
+                    app_names = [
+                        "JIRA",
+                        "CONFLUENCE", 
+                        "GITLAB",
+                        "POWER BI",
+                        "SAP",
+                        "OFFICE 365",
+                        "SALESFORCE",
+                        "SERVICENOW",
+                        "TABLEAU",
+                        "SHAREPOINT"
+                    ]
+                
                 # Actualizar el combobox de aplicaciones
-                app_combobox = None
-                for child in self.dialog.winfo_children():
-                    if isinstance(child, ttk.Frame):
-                        for grandchild in child.winfo_children():
-                            if isinstance(grandchild, ttk.Combobox) and grandchild.cget('textvariable') == str(self.variables['app_name']):
-                                app_combobox = grandchild
-                                break
+                app_combobox = self._find_app_combobox()
                 
                 if app_combobox:
                     app_combobox['values'] = app_names
                     app_combobox.set('')  # Limpiar selección anterior
+                    
+                    # Mostrar mensaje informativo
+                    print(f"Aplicaciones filtradas para posición '{position}': {len(app_names)} encontradas")
+                    
         except Exception as e:
             print(f"Error actualizando aplicaciones por posición: {e}")
+    
+    def _find_app_combobox(self):
+        """Encuentra el combobox de aplicaciones en la interfaz"""
+        try:
+            # Buscar el combobox de aplicaciones de manera más robusta
+            for child in self.dialog.winfo_children():
+                if isinstance(child, ttk.Frame):
+                    for grandchild in child.winfo_children():
+                        if isinstance(grandchild, ttk.Combobox):
+                            # Verificar si es el combobox de aplicaciones por su posición en el grid
+                            grid_info = grandchild.grid_info()
+                            if grid_info.get('row') == 3:  # La aplicación está en la fila 3 (índice 3)
+                                return grandchild
+            return None
+        except Exception as e:
+            print(f"Error encontrando combobox de aplicaciones: {e}")
+            return None
     
     def _create_record(self):
         """Crea el registro manual"""

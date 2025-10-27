@@ -1489,17 +1489,28 @@ class AplicacionesFrame:
         # Variables para filtros múltiples
         self.filtros_activos = {}
         self.campos_filtro = {
-            "Nombre Lógico": "logical_access_name",
+            "ID": "id",
             "Jurisdicción": "jurisdiction",
             "Unidad": "unit",
             "Subunidad": "subunit",
+            "Unidad/Subunidad": "unidad_subunidad",
+            "Nombre Lógico": "logical_access_name",
             "Alias": "alias",
+            "Path/Email/URL": "path_email_url",
             "Rol de Posición": "position_role",
+            "Exception Tracking": "exception_tracking",
+            "Fulfillment Action": "fulfillment_action",
+            "Propietario del Sistema": "system_owner",
+            "Nombre del Rol": "role_name",
             "Tipo de Acceso": "access_type",
             "Categoría": "category",
-            "Propietario del Sistema": "system_owner",
+            "Datos Adicionales": "additional_data",
+            "Código AD": "ad_code",
             "Estado": "access_status",
-            "Requiere Licencia": "require_licensing"
+            "Fecha Última Actualización": "last_update_date",
+            "Requiere Licencia": "require_licensing",
+            "Descripción": "description",
+            "Método de Autenticación": "authentication_method"
         }
         
         self._crear_interfaz()

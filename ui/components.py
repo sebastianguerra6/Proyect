@@ -1782,15 +1782,25 @@ class CreacionPersonaFrame:
         self.filtros_activos = {}
         self.campos_filtro = {
             "SID": "scotia_id",
-            "Nombre": "full_name",
+            "Employee": "employee",
+            "Nombre Completo": "full_name",
             "Email": "email",
             "Posición": "position",
             "Manager": "manager",
+            "Senior Manager": "senior_manager",
             "Unidad": "unit",
             "Unidad/Subunidad": "unidad_subunidad",
+            "Fecha de Inicio": "start_date",
             "CECO": "ceco",
+            "Skip Level": "skip_level",
             "Cafe Alcides": "cafe_alcides",
-            "Validación": "validacion"
+            "Parents": "parents",
+            "Email Personal": "personal_email",
+            "Size": "size",
+            "Cumpleaños": "birthday",
+            "Validación": "validacion",
+            "Activo": "activo",
+            "Fecha de Inactivación": "inactivation_date"
         }
     
     def _crear_widgets(self):

@@ -963,7 +963,7 @@ class AccessManagementService:
                     -- Accesos manuales (solo de la posición actual)
                     (h.process_access = 'manual_access' AND a.unidad_subunidad = ? AND a.position_role = ?)
                     OR
-                    -- Accesos flex staff (temporales)
+                    -- Accesos flex staff (temporales - mostrar todos los activos del empleado)
                     h.process_access = 'flex_staff'
                 )
                 ORDER BY h.process_access, h.record_date DESC
