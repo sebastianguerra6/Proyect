@@ -460,7 +460,7 @@ class EdicionBusquedaFrame:
             'closing_date_app_edicion': tk.StringVar(),
             'closing_date_ticket_edicion': tk.StringVar(),
             'app_quality_edicion': tk.StringVar(),
-            'confirmation_by_user_edicion': tk.BooleanVar(),
+            'confirmation_by_user_edicion': tk.StringVar(),
             'comment_edicion': tk.StringVar(),
             'comment_tq_edicion': tk.StringVar(),
             'ticket_quality_edicion': tk.StringVar(),
@@ -1100,7 +1100,7 @@ class EdicionBusquedaFrame:
                 SELECT h.id, h.scotia_id, h.case_id, h.responsible, h.record_date, h.request_date, 
                        h.process_access, h.subunit, h.event_description, h.ticket_email, h.app_access_name, 
                        h.computer_system_type, h.status, h.closing_date_app, h.closing_date_ticket, 
-                       h.app_quality, h.confirmation_by_user, h.comment, h.ticket_quality, h.general_status, 
+                       h.app_quality, h.confirmation_by_user, h.comment, h.ticket_quality, 
                        h.average_time_open_ticket, h.duration_of_access, h.comment_tq, h.general_status_ticket, 
                        h.general_status_case, h.sla_app, h.sla_ticket, h.sla_case, h.employee_email,
                        a.logical_access_name, a.description as app_description,
@@ -1177,7 +1177,7 @@ class EdicionBusquedaFrame:
                     'app_access_name': 'Sistema Desarrollo',
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
-                    'general_status': 'En Proceso'
+                    'general_status_ticket': 'En Proceso'
                 },
                 {
                     'scotia_id': 'S002',
@@ -1193,7 +1193,7 @@ class EdicionBusquedaFrame:
                     'app_access_name': 'Sistema Testing',
                     'computer_system_type': 'Desktop',
                     'status': 'Completado',
-                    'general_status': 'Completado'
+                    'general_status_ticket': 'Completado'
                 }
             ]
             
@@ -1201,13 +1201,13 @@ class EdicionBusquedaFrame:
                 cursor.execute('''
                     INSERT INTO historico 
                     (scotia_id, case_id, responsible, record_date, process_access, sid, area, subunit,
-                     event_description, ticket_email, app_access_name, computer_system_type, status, general_status)
+                     event_description, ticket_email, app_access_name, computer_system_type, status, general_status_ticket)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     dato['scotia_id'], dato['case_id'], dato['responsible'], dato['record_date'],
                     dato['process_access'], dato['sid'], dato['area'], dato['subunit'],
                     dato['event_description'], dato['ticket_email'], dato['app_access_name'],
-                    dato['computer_system_type'], dato['status'], dato['general_status']
+                    dato['computer_system_type'], dato['status'], dato['general_status_ticket']
                 ))
             
             print("DEBUG: Datos de ejemplo creados en historico")
@@ -1511,7 +1511,24 @@ class EdicionBusquedaFrame:
                 self.variables['mail_edicion'].set(valores[9] if valores[9] else '')
                 self.variables['closing_date_app_edicion'].set(valores[10] if valores[10] else '')
                 self.variables['app_quality_edicion'].set(valores[11] if valores[11] else '')
-                self.variables['confirmation_by_user_edicion'].set(valores[12] if valores[12] else '')
+                
+                # Formatear fecha de confirmación por usuario
+                confirmation_date = valores[12] if valores[12] else ''
+                if confirmation_date:
+                    try:
+                        from datetime import datetime
+                        if isinstance(confirmation_date, str):
+                            # Si es string, intentar parsear y formatear
+                            parsed_date = datetime.strptime(confirmation_date, '%Y-%m-%d')
+                            self.variables['confirmation_by_user_edicion'].set(confirmation_date)
+                        else:
+                            # Si es objeto datetime, formatear
+                            self.variables['confirmation_by_user_edicion'].set(confirmation_date.strftime('%Y-%m-%d'))
+                    except (ValueError, AttributeError):
+                        self.variables['confirmation_by_user_edicion'].set('')
+                else:
+                    self.variables['confirmation_by_user_edicion'].set('')
+                
                 self.variables['comment_edicion'].set(valores[13] if valores[13] else '')
     
     def guardar_cambios(self):
@@ -1532,8 +1549,21 @@ class EdicionBusquedaFrame:
                 'comment': self.variables['comment_edicion'].get()
             }
             
+            # Validar fecha de confirmación por usuario
+            confirmation_date = datos_actualizados.get('confirmation_by_user', '').strip()
+            if confirmation_date and confirmation_date != 'YYYY-MM-DD':
+                try:
+                    # Validar formato de fecha
+                    from datetime import datetime
+                    datetime.strptime(confirmation_date, '%Y-%m-%d')
+                except ValueError:
+                    messagebox.showerror("Error", "La fecha de confirmación debe estar en formato YYYY-MM-DD")
+                    return
+            elif confirmation_date == 'YYYY-MM-DD':
+                datos_actualizados['confirmation_by_user'] = None
+            
             # Filtrar campos vacíos
-            datos_actualizados = {k: v for k, v in datos_actualizados.items() if v.strip()}
+            datos_actualizados = {k: v for k, v in datos_actualizados.items() if v and v.strip()}
             
             if not datos_actualizados:
                 messagebox.showwarning("Advertencia", "No hay cambios para guardar")
@@ -2784,7 +2814,7 @@ class HistorialDialog:
             ("Fecha de Cierre App:", "closing_date_app", "entry"),
             ("Fecha de Cierre Ticket:", "closing_date_ticket", "entry"),
             ("Calidad de App:", "app_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
-            ("Confirmación por Usuario:", "confirmation_by_user", "checkbox"),
+            ("Confirmación por Usuario:", "confirmation_by_user", "date"),
             ("Comentario:", "comment", "text"),
             ("Comentario TQ:", "comment_tq", "text"),
             ("Calidad del Ticket:", "ticket_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),
@@ -2826,6 +2856,26 @@ class HistorialDialog:
                 checkbox = ttk.Checkbutton(scrollable_frame, variable=self.variables[var_name], state="disabled" if solo_lectura else "normal")
                 checkbox.grid(row=i+1, column=1, sticky="w", pady=5, padx=(10, 0))
                 self.widgets[var_name] = checkbox
+            elif tipo == "date":
+                self.variables[var_name] = tk.StringVar()
+                entry = ttk.Entry(scrollable_frame, textvariable=self.variables[var_name], state="disabled" if solo_lectura else "normal")
+                entry.grid(row=i+1, column=1, sticky="ew", pady=5, padx=(10, 0))
+                entry.insert(0, "YYYY-MM-DD")
+                entry.configure(foreground="gray")
+                
+                def on_focus_in(event):
+                    if entry.get() == "YYYY-MM-DD":
+                        entry.delete(0, tk.END)
+                        entry.configure(foreground="black")
+                
+                def on_focus_out(event):
+                    if not entry.get():
+                        entry.insert(0, "YYYY-MM-DD")
+                        entry.configure(foreground="gray")
+                
+                entry.bind("<FocusIn>", on_focus_in)
+                entry.bind("<FocusOut>", on_focus_out)
+                self.widgets[var_name] = entry
         
         # Configurar grid
         scrollable_frame.columnconfigure(1, weight=1)

@@ -146,7 +146,7 @@ class ExcelToSQLiteImporter:
             (scotia_id, case_id, responsible, record_date, request_date, process_access, 
              sid, area, subunit, event_description, ticket_email, app_access_name, 
              computer_system_type, status, closing_date_app, closing_date_ticket, 
-             app_quality, confirmation_by_user, comment, ticket_quality, general_status, 
+             app_quality, confirmation_by_user, comment, ticket_quality, 
              average_time_open_ticket)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
@@ -170,7 +170,6 @@ class ExcelToSQLiteImporter:
             data.get('confirmation_by_user', ''),
             data.get('comment', ''),
             data.get('ticket_quality', ''),
-            data.get('general_status', ''),
             data.get('average_time_open_ticket', '')
         ))
     
@@ -291,7 +290,6 @@ class ExcelToSQLServerImporter:
                     confirmation_by_user BIT,
                     comment TEXT,
                     ticket_quality VARCHAR(50),
-                    general_status VARCHAR(50),
                     average_time_open_ticket VARCHAR(50)
                 )
             ''')
@@ -469,7 +467,6 @@ class ExcelToSQLServerImporter:
             data.get('confirmation_by_user', ''),
             data.get('comment', ''),
             data.get('ticket_quality', ''),
-            data.get('general_status', ''),
             data.get('average_time_open_ticket', '')
         ))
     

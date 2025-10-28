@@ -731,7 +731,6 @@ class AccessManagementService:
                 'confirmation_by_user': None,
                 'comment': f"Registro manual creado por {responsible}" + (f" para posición {position}" if position else ""),
                 'ticket_quality': None,
-                'general_status': 'Pendiente',
                 'average_time_open_ticket': None
             }
             
@@ -930,20 +929,50 @@ class AccessManagementService:
             current_unit, current_position = emp_data
             print(f"DEBUG: Filtrando accesos para posición actual: {current_position} en unidad: {current_unit}")
 
+            # Obtener la posición temporal específica de Flex Staff más reciente
+            cursor.execute('''
+                SELECT TOP 1 event_description
+                FROM historico 
+                WHERE scotia_id = ? 
+                AND process_access = 'flex_staff' 
+                AND status = 'Completado'
+                ORDER BY record_date DESC
+            ''', (scotia_id,))
+            
+            flex_staff_desc = cursor.fetchone()
+            flex_staff_position = None
+            if flex_staff_desc:
+                # Extraer la posición temporal de la descripción: "(flex staff - POSICIÓN)"
+                import re
+                match = re.search(r'\(flex staff - ([^)]+)\)', flex_staff_desc[0])
+                if match:
+                    flex_staff_position = match.group(1).strip()
+                    print(f"DEBUG: Posición temporal de Flex Staff encontrada: {flex_staff_position}")
+            
+            # Construir el filtro para Flex Staff
+            flex_staff_filter = f'%flex staff - {flex_staff_position}%' if flex_staff_position else '%flex staff%'
+
             # Obtener todos los tipos de accesos actuales
             cursor.execute('''
-                SELECT DISTINCT
+                SELECT 
                     h.scotia_id,
                     h.subunit as unit,
                     h.subunit,
                     h.app_access_name as logical_access_name,
-                    h.record_date,
+                    MAX(h.record_date) as record_date,
                     h.status,
                     h.process_access,
-                    h.event_description,
-                    a.position_role,
-                    a.role_name,
-                    a.description,
+                    MAX(h.event_description) as event_description,
+                    CASE 
+                        WHEN h.process_access = 'flex_staff' THEN 
+                            SUBSTRING(MAX(h.event_description), CHARINDEX('flex staff - ', MAX(h.event_description)) + 13, 
+                                     CHARINDEX(')', MAX(h.event_description), CHARINDEX('flex staff - ', MAX(h.event_description))) - CHARINDEX('flex staff - ', MAX(h.event_description)) - 13)
+                        WHEN h.process_access = 'manual_access' THEN 
+                            COALESCE(MAX(a.position_role), 'Manual')
+                        ELSE MAX(a.position_role)
+                    END as position_role,
+                    MAX(a.role_name) as role_name,
+                    MAX(a.description) as description,
                     CASE 
                         WHEN h.process_access = 'manual_access' THEN 'Manual'
                         WHEN h.process_access = 'flex_staff' THEN 'Flex Staff'
@@ -960,14 +989,15 @@ class AccessManagementService:
                     -- Accesos asignados por aplicación (de la posición actual)
                     (h.process_access IN ('onboarding', 'lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?)
                     OR
-                    -- Accesos manuales (solo de la posición actual)
-                    (h.process_access = 'manual_access' AND a.unidad_subunidad = ? AND a.position_role = ?)
+                    -- Accesos manuales (mostrar todos los del empleado)
+                    (h.process_access = 'manual_access')
                     OR
-                    -- Accesos flex staff (temporales - mostrar todos los activos del empleado)
-                    h.process_access = 'flex_staff'
+                    -- Accesos flex staff (solo para la posición temporal específica asignada)
+                    (h.process_access = 'flex_staff' AND h.event_description LIKE ?)
                 )
-                ORDER BY h.process_access, h.record_date DESC
-            ''', (scotia_id, current_unit, current_position, current_unit, current_position))
+                GROUP BY h.scotia_id, h.subunit, h.app_access_name, h.status, h.process_access
+                ORDER BY h.process_access, MAX(h.record_date) DESC
+            ''', (scotia_id, current_unit, current_position, flex_staff_filter))
 
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
@@ -976,6 +1006,12 @@ class AccessManagementService:
             print(f"DEBUG: Accesos encontrados: {len(current_access)}")
             for acceso in current_access:
                 print(f"DEBUG: - {acceso.get('logical_access_name', '')} | {acceso.get('process_access', '')} | {acceso.get('position_role', '')} | {acceso.get('access_type', '')}")
+                
+            # Debug específico para accesos manuales
+            manual_accesses = [a for a in current_access if a.get('process_access') == 'manual_access']
+            print(f"DEBUG: Accesos manuales encontrados: {len(manual_accesses)}")
+            for manual in manual_accesses:
+                print(f"DEBUG: Manual - {manual.get('logical_access_name', '')} | Status: {manual.get('status', '')}")
 
             conn.close()
             return current_access
@@ -2256,7 +2292,7 @@ class AccessManagementService:
                         'app_access_name': app_name,
                         'computer_system_type': 'Desktop',
                         'status': 'Pendiente',
-                        'general_status': 'En Proceso'
+                        'general_status_ticket': 'En Proceso'
                     }
                     
                     success, message = self.create_historical_record(record_data)
@@ -2283,7 +2319,7 @@ class AccessManagementService:
                         'app_access_name': app_name,
                         'computer_system_type': 'Desktop',
                         'status': 'Pendiente',
-                        'general_status': 'En Proceso'
+                        'general_status_ticket': 'En Proceso'
                     }
                     
                     success, message = self.create_historical_record(record_data)

@@ -128,7 +128,7 @@ BEGIN
         [closing_date_app] DATE NULL,
         [closing_date_ticket] DATE NULL,
         [app_quality] VARCHAR(50) NULL,
-        [confirmation_by_user] BIT NULL,
+        [confirmation_by_user] DATE NULL,
         [comment] NVARCHAR(MAX) NULL,
         [comment_tq] NVARCHAR(MAX) NULL,
         [ticket_quality] VARCHAR(50) NULL,
@@ -728,16 +728,42 @@ IF NOT EXISTS (SELECT * FROM historico WHERE scotia_id = 'EMP001')
 BEGIN
     INSERT INTO [dbo].[historico] (scotia_id, case_id, responsible, record_date, request_date, process_access, subunit, event_description, ticket_email, app_access_name, computer_system_type, duration_of_access, status, closing_date_app, closing_date_ticket, app_quality, confirmation_by_user, comment, comment_tq, ticket_quality, general_status_ticket, general_status_case, average_time_open_ticket, sla_app, sla_ticket, sla_case)
     VALUES 
-        ('EMP001', 'CASE-20240115-001', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Sistemas', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:30:00', 'Cumplido', 'Cumplido', 'Cumplido'),
-        ('EMP002', 'CASE-20240115-002', 'Admin Portal', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'GitLab', 'Desarrollo', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:45:00', 'Cumplido', 'Cumplido', 'Cumplido'),
-        ('EMP003', 'CASE-20240115-003', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Jira', 'Gestión', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', 1, 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:20:00', 'Cumplido', 'Cumplido', 'Cumplido');
+        ('EMP001', 'CASE-20240115-001', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Sistema de Gestión', 'Sistemas', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', '2024-01-16', 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:30:00', 'Cumplido', 'Cumplido', 'Cumplido'),
+        ('EMP002', 'CASE-20240115-002', 'Admin Portal', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en portal', 'admin@empresa.com', 'GitLab', 'Desarrollo', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', '2024-01-16', 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:45:00', 'Cumplido', 'Cumplido', 'Cumplido'),
+        ('EMP003', 'CASE-20240115-003', 'Admin Sistema', GETDATE(), '2024-01-14', 'onboarding', 'Tecnología/Desarrollo', 'Usuario creado en sistema', 'admin@empresa.com', 'Jira', 'Gestión', 'Permanente', 'Completado', '2024-01-15', '2024-01-15', 'Excelente', '2024-01-16', 'Usuario creado exitosamente', 'Ticket completado satisfactoriamente', 'Excelente', 'Completado', 'Completado', '00:20:00', 'Cumplido', 'Cumplido', 'Cumplido');
     PRINT 'Datos de ejemplo insertados en historico';
 END
 GO
 
 -- =====================================================
--- PROCEDIMIENTOS DE CONCILIACIÓN Y LÓGICA DE NEGOCIO
+-- MIGRACIÓN SIMPLE PARA CONFIRMATION_BY_USER
 -- =====================================================
+
+-- Migrar confirmation_by_user de VARCHAR a DATE en tabla historico
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[historico]') AND name = 'confirmation_by_user' AND system_type_id = 167)
+BEGIN
+    PRINT 'Migrando confirmation_by_user de VARCHAR a DATE en tabla historico...';
+    ALTER TABLE [dbo].[historico] ALTER COLUMN [confirmation_by_user] DATE NULL;
+    PRINT 'Migración de historico completada';
+END
+ELSE
+BEGIN
+    PRINT 'confirmation_by_user en historico ya es DATE o no existe';
+END
+GO
+
+-- Migrar confirmation_by_user de VARCHAR a DATE en tabla procesos
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[procesos]') AND name = 'confirmation_by_user' AND system_type_id = 167)
+BEGIN
+    PRINT 'Migrando confirmation_by_user de VARCHAR a DATE en tabla procesos...';
+    ALTER TABLE [dbo].[procesos] ALTER COLUMN [confirmation_by_user] DATE NULL;
+    PRINT 'Migración de procesos completada';
+END
+ELSE
+BEGIN
+    PRINT 'confirmation_by_user en procesos ya es DATE o no existe';
+END
+GO
 
 -- Procedimiento para obtener reporte de conciliación completo
 IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'sp_GetAccessReconciliationReport')
@@ -1108,6 +1134,7 @@ PRINT 'Tablas creadas: headcount, applications, historico, procesos';
 PRINT 'Vistas creadas: vw_required_apps, vw_current_access, vw_to_grant, vw_to_revoke, vw_system_stats';
 PRINT 'Procedimientos básicos: sp_GetDatabaseStats, sp_GetEmployeeHistory, sp_GetApplicationsByPosition';
 PRINT 'Procedimientos de conciliación: sp_GetAccessReconciliationReport, sp_ProcessEmployeeOnboarding, sp_ProcessEmployeeOffboarding, sp_GetReconciliationStats';
+PRINT 'Migración automática: confirmation_by_user de VARCHAR a DATE';
 PRINT 'Función creada: fn_NormalizeText';
 PRINT 'Datos de ejemplo insertados correctamente';
 PRINT '=====================================================';
@@ -1117,6 +1144,14 @@ PRINT '  - Campos eliminados: sid, area';
 PRINT '  - Campo subunit ahora se llena con unidad/subunidad';
 PRINT '  - Campo computer_system_type ahora se llena con category de application';
 PRINT '  - Campo scotia_id ahora representa el mail de la persona';
+PRINT '  - Campo confirmation_by_user migrado de VARCHAR a DATE';
+PRINT '=====================================================';
+PRINT 'CAMBIOS EN TABLA PROCESOS:';
+PRINT '  - Campo confirmation_by_user migrado de VARCHAR(50) a DATE';
+PRINT '=====================================================';
+PRINT 'MIGRACIÓN DE CONFIRMATION_BY_USER:';
+PRINT '  - Los valores VARCHAR se convierten automáticamente a DATE';
+PRINT '  - Migración simple y segura usando ALTER COLUMN';
 PRINT '=====================================================';
 PRINT 'ARQUITECTURA HÍBRIDA IMPLEMENTADA:';
 PRINT '  - Consultas simples: Manejadas directamente en Python';
