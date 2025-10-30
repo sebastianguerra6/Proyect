@@ -923,11 +923,12 @@ class AccessManagementService:
             ''', (scotia_id,))
             
             emp_data = cursor.fetchone()
-            if not emp_data:
-                return []
-            
-            current_unit, current_position = emp_data
-            print(f"DEBUG: Filtrando accesos para posición actual: {current_position} en unidad: {current_unit}")
+            has_headcount = bool(emp_data)
+            current_unit, current_position = (emp_data if has_headcount else (None, None))
+            if has_headcount:
+                print(f"DEBUG: Filtrando accesos para posición actual: {current_position} en unidad: {current_unit}")
+            else:
+                print("DEBUG: SID sin registro activo en headcount - usando modo fallback solo con historico")
 
             # Obtener la posición temporal específica de Flex Staff más reciente
             cursor.execute('''
@@ -953,7 +954,7 @@ class AccessManagementService:
             flex_staff_filter = f'%flex staff - {flex_staff_position}%' if flex_staff_position else '%flex staff%'
 
             # Obtener todos los tipos de accesos actuales
-            cursor.execute('''
+            base_query = '''
                 SELECT 
                     h.scotia_id,
                     h.subunit as unit,
@@ -985,19 +986,20 @@ class AccessManagementService:
                 AND h.status = 'Completado'
                 AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
-                AND (
-                    -- Accesos asignados por aplicación (de la posición actual)
-                    (h.process_access IN ('onboarding', 'lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?)
-                    OR
-                    -- Accesos manuales (mostrar todos los del empleado)
-                    (h.process_access = 'manual_access')
-                    OR
-                    -- Accesos flex staff (solo para la posición temporal específica asignada)
-                    (h.process_access = 'flex_staff' AND h.event_description LIKE ?)
-                )
+                AND ({extra_filter})
                 GROUP BY h.scotia_id, h.subunit, h.app_access_name, h.status, h.process_access
                 ORDER BY h.process_access, MAX(h.record_date) DESC
-            ''', (scotia_id, current_unit, current_position, flex_staff_filter))
+            '''
+
+            if has_headcount:
+                extra_filter = "( (h.process_access IN ('onboarding','lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?) OR (h.process_access = 'manual_access') OR (h.process_access = 'flex_staff' AND h.event_description LIKE ?) )"
+                query = base_query.format(extra_filter=extra_filter)
+                cursor.execute(query, (scotia_id, current_unit, current_position, flex_staff_filter))
+            else:
+                # Fallback: no filtrar por headcount/applications; mostrar todo lo completado del empleado
+                extra_filter = "( (h.process_access IN ('onboarding','lateral_movement')) OR (h.process_access = 'manual_access') OR (h.process_access = 'flex_staff' AND h.event_description LIKE ?) )"
+                query = base_query.format(extra_filter=extra_filter)
+                cursor.execute(query, (scotia_id, flex_staff_filter))
 
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
