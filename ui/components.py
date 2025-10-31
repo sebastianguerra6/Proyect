@@ -49,7 +49,7 @@ class CamposGeneralesFrame:
             ("Request Date:", "request_date", "entry"),
             ("Quien hace el ingreso:", "ingreso_por", "combobox", ["Juan Pérez", "María García"]),
             ("Fecha:", "fecha", "entry"),
-            ("Status:", "status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado", "Rechazado"])
+            ("Status:", "status", "combobox", ["cancelled", "closed completed", "closed incompleted", "in progress", "in validation", "to validate"])
         ]
         
         for i, campo in enumerate(campos):
@@ -2810,7 +2810,7 @@ class HistorialDialog:
             ("Nombre de Aplicación:", "app_access_name", "entry"),
             ("Tipo de Sistema:", "computer_system_type", "entry"),
             ("Duración del Acceso:", "duration_of_access", "combobox", ["Permanente", "Temporal", "Por Proyecto"]),
-            ("Estado:", "status", "combobox", ["Pendiente", "En Proceso", "Completado", "Cancelado", "Rechazado"]),
+            ("Estado:", "status", "combobox", ["cancelled", "closed completed", "closed incompleted", "in progress", "in validation", "to validate"]),
             ("Fecha de Cierre App:", "closing_date_app", "entry"),
             ("Fecha de Cierre Ticket:", "closing_date_ticket", "entry"),
             ("Calidad de App:", "app_quality", "combobox", ["Excelente", "Buena", "Regular", "Mala"]),

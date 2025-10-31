@@ -893,7 +893,7 @@ class AccessManagementService:
                 FROM historico h
                 LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
                 WHERE h.scotia_id = ?
-                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                AND h.status = 'closed completed'
                 AND h.process_access IN ('onboarding', 'lateral_movement')
                 AND h.app_access_name IS NOT NULL
                 ORDER BY h.record_date DESC
@@ -936,7 +936,7 @@ class AccessManagementService:
                 FROM historico 
                 WHERE scotia_id = ? 
                 AND process_access = 'flex_staff' 
-                AND status = 'Completado'
+                AND status = 'closed completed'
                 ORDER BY record_date DESC
             ''', (scotia_id,))
             
@@ -983,7 +983,7 @@ class AccessManagementService:
                 FROM historico h
                 LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
                 WHERE h.scotia_id = ?
-                AND h.status = 'Completado'
+                AND h.status = 'closed completed'
                 AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
                 AND ({extra_filter})
@@ -1162,8 +1162,16 @@ class AccessManagementService:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             history = self.get_employee_history(scotia_id)
-            # Considerar TODOS los accesos: onboarding, lateral_movement, flex_staff y manual_access
-            active_access = [h for h in history if h.get('process_access') in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')]
+            # Considerar solo accesos en estado 'closed completed' de tipos: onboarding, lateral_movement, flex_staff y manual_access
+            active_access = [
+                h for h in history 
+                if h.get('process_access') in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                and h.get('status', '').strip().lower() == 'closed completed'
+            ]
+            
+            print(f"DEBUG: Accesos encontrados para revocar (solo 'closed completed'): {len(active_access)}")
+            for acc in active_access:
+                print(f"DEBUG: Acceso a revocar: {acc.get('app_access_name') or acc.get('app_logical_access_name')} - Status: {acc.get('status')}")
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
@@ -1220,7 +1228,7 @@ class AccessManagementService:
                 access_type = access.get('process_access', '')
                 access_counts[access_type] = access_counts.get(access_type, 0) + 1
             
-            message = f"Offboarding procesado para {scotia_id}. {len(created_records)} accesos a revocar:\n"
+            message = f"Offboarding procesado para {scotia_id}. {len(created_records)} accesos a revocar (solo 'closed completed'):\n"
             for access_type, count in access_counts.items():
                 if access_type == 'onboarding':
                     message += f"- Accesos de onboarding: {count}\n"
@@ -1260,45 +1268,96 @@ class AccessManagementService:
 
             old_position = (employee.get('position') or '').strip()
             old_unit = (employee.get('unit') or '').strip()
-
-            # Obtener accesos actuales del empleado (solo los de la posición anterior)
-            current_access = self.get_employee_current_access(scotia_id)
+            old_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
             
-            # Obtener accesos requeridos para la nueva posición
+            print(f"DEBUG: Posición anterior: {old_position}")
+            print(f"DEBUG: Unidad anterior: {old_unit}")
+            print(f"DEBUG: Unidad/Subunidad anterior: {old_unidad_subunidad}")
+
+            # Obtener accesos requeridos para la posición ANTERIOR (usando unidad_subunidad como el onboarding)
+            old_mesh_apps = self.get_applications_by_position(old_position, old_unidad_subunidad, subunit=employee.get('subunit'))
+            print(f"DEBUG: Aplicaciones encontradas para posición anterior: {len(old_mesh_apps)}")
+            for app in old_mesh_apps:
+                print(f"DEBUG: App anterior: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
+            
+            # Obtener accesos requeridos para la nueva posición (usando unidad_subunidad como el onboarding)
             new_unidad_subunidad = f"{new_unit}/{new_subunit}" if new_subunit else new_unit
             print(f"DEBUG: Nueva unidad_subunidad: {new_unidad_subunidad}")
             new_mesh_apps = self.get_applications_by_position(new_position, new_unidad_subunidad, subunit=new_subunit)
             print(f"DEBUG: Aplicaciones encontradas para nueva posición: {len(new_mesh_apps)}")
             for app in new_mesh_apps:
-                print(f"DEBUG: App: {app.get('logical_access_name', '')} - Unit: {app.get('unit', '')} - Subunit: {app.get('subunit', '')}")
+                print(f"DEBUG: App nueva: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
             
-            # Crear índices para comparación más inteligente
-            # Usar solo logical_access_name para la comparación, ya que el mismo acceso puede tener diferentes roles entre posiciones
-            current_apps_by_name = {}
-            for acc in current_access:
-                app_name = acc.get('logical_access_name', '').strip().upper()
+            # Crear índices para comparación usando logical_access_name + unidad_subunidad (como el onboarding)
+            old_apps_by_key = {}
+            for app in old_mesh_apps:
+                app_name = app.get('logical_access_name', '').strip().upper()
+                app_unidad_subunidad = app.get('unidad_subunidad', '').strip().upper()
+                key = f"{app_name}|||{app_unidad_subunidad}"
                 if app_name:  # Solo agregar si tiene nombre
-                    current_apps_by_name[app_name] = acc
+                    old_apps_by_key[key] = app
             
-            new_apps_by_name = {}
+            new_apps_by_key = {}
             for app in new_mesh_apps:
                 app_name = app.get('logical_access_name', '').strip().upper()
+                app_unidad_subunidad = app.get('unidad_subunidad', '').strip().upper()
+                key = f"{app_name}|||{app_unidad_subunidad}"
                 if app_name:  # Solo agregar si tiene nombre
-                    new_apps_by_name[app_name] = app
+                    new_apps_by_key[key] = app
 
+            # Obtener accesos actuales del empleado en historial con status 'closed completed'
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT app_access_name, status
+                FROM historico
+                WHERE scotia_id = ?
+                AND status = 'closed completed'
+                AND process_access IN ('onboarding', 'lateral_movement')
+                AND app_access_name IS NOT NULL
+            ''', (scotia_id,))
+            
+            completed_access = {}
+            for row in cursor.fetchall():
+                app_name = (row[0] or '').strip().upper()
+                if app_name:
+                    completed_access[app_name] = True
+            
+            conn.close()
+            print(f"DEBUG: Accesos en 'closed completed' encontrados: {list(completed_access.keys())}")
+            
             # Calcular qué revocar y qué otorgar
             to_revoke = []
             to_grant = []
             
             # Revocar accesos de la posición anterior que NO están en la nueva posición
-            for app_name, acc in current_apps_by_name.items():
-                if app_name not in new_apps_by_name:
-                    to_revoke.append(acc)
+            # PERO solo si están en estado 'closed completed' en el historial
+            # (misma app + misma unidad_subunidad)
+            for key, app in old_apps_by_key.items():
+                if key not in new_apps_by_key:
+                    app_name = app.get('logical_access_name', '').strip().upper()
+                    # Solo revocar si está en 'closed completed'
+                    if app_name in completed_access:
+                        to_revoke.append(app)
+                        print(f"DEBUG: Marcado para revocar (closed completed): {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
+                    else:
+                        print(f"DEBUG: NO se revoca (no está en closed completed): {app.get('logical_access_name', '')} - Estado actual no es 'closed completed'")
             
             # Otorgar accesos de la nueva posición que no tiene actualmente
-            for app_name, app in new_apps_by_name.items():
-                if app_name not in current_apps_by_name:
+            # (misma app + misma unidad_subunidad)
+            for key, app in new_apps_by_key.items():
+                if key not in old_apps_by_key:
                     to_grant.append(app)
+                    print(f"DEBUG: Marcado para otorgar: {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
+            
+            # Identificar aplicaciones mantenidas (están en ambas posiciones con misma unidad_subunidad)
+            maintained = []
+            for key, app in old_apps_by_key.items():
+                if key in new_apps_by_key:
+                    maintained.append(app)
+                    print(f"DEBUG: Aplicación mantenida: {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
+            
+            print(f"DEBUG: Resumen - Mantener: {len(maintained)}, Revocar: {len(to_revoke)}, Otorgar: {len(to_grant)}")
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
@@ -1363,16 +1422,20 @@ class AccessManagementService:
             # Crear mensaje detallado
             revoke_details = []
             if to_revoke:
-                revoke_details = [acc.get('logical_access_name', '') for acc in to_revoke]
+                revoke_details = [app.get('logical_access_name', '') for app in to_revoke]
             
             grant_details = []
             if to_grant:
                 grant_details = [app.get('logical_access_name', '') for app in to_grant]
             
+            maintained_details = []
+            if maintained:
+                maintained_details = [app.get('logical_access_name', '') for app in maintained]
+            
             message = f"Movimiento lateral procesado para {scotia_id}.\n"
+            message += f"- Accesos mantenidos ({len(maintained)}): {', '.join(maintained_details) if maintained_details else 'Ninguno'}\n"
             message += f"- Accesos revocados ({len(to_revoke)}): {', '.join(revoke_details) if revoke_details else 'Ninguno'}\n"
-            message += f"- Accesos otorgados ({len(to_grant)}): {', '.join(grant_details) if grant_details else 'Ninguno'}\n"
-            message += f"- Accesos mantenidos: {len(current_apps_by_name) - len(to_revoke)}"
+            message += f"- Accesos otorgados ({len(to_grant)}): {', '.join(grant_details) if grant_details else 'Ninguno'}"
 
             return True, message, created_records
 
@@ -1559,7 +1622,7 @@ class AccessManagementService:
                 WHERE h.scotia_id = ?
                 AND h.process_access = 'flex_staff'
                 AND h.app_access_name IS NOT NULL
-                AND h.status IN ('Completado', 'Pendiente', 'En Proceso')
+                AND h.status = 'closed completed'
                 ORDER BY h.app_access_name
             ''', (scotia_id,))
             
@@ -2455,7 +2518,7 @@ class AccessManagementService:
                 WHERE h.scotia_id = ? 
                 AND h.app_access_name = ?
                 AND h.process_access = ?
-                AND h.status IN ('Pendiente', 'Completado', 'En Proceso')
+                AND h.status IN ('to validate', 'closed completed', 'in progress', 'in validation')
                 ORDER BY h.record_date DESC
             ''', (scotia_id, app_name, access_type))
             
