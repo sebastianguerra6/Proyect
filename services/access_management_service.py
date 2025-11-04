@@ -926,9 +926,13 @@ class AccessManagementService:
             has_headcount = bool(emp_data)
             current_unit, current_position = (emp_data if has_headcount else (None, None))
             if has_headcount:
-                print(f"DEBUG: Filtrando accesos para posición actual: {current_position} en unidad: {current_unit}")
+                print(f"DEBUG: Accesos actuales - Posición actual: {current_position} en unidad: {current_unit}")
+                print(f"DEBUG: Onboarding: mostrar todos cuyo último proceso fue onboarding (sin filtrar por unidad/posición)")
+                print(f"DEBUG: Lateral Movement: solo los que coinciden con posición actual")
             else:
                 print("DEBUG: SID sin registro activo en headcount - usando modo fallback solo con historico")
+                print(f"DEBUG: Onboarding: mostrar todos cuyo último proceso fue onboarding")
+                print(f"DEBUG: Lateral Movement: mostrar todos cuyo último proceso fue lateral_movement")
 
             # Obtener la posición temporal específica de Flex Staff más reciente
             cursor.execute('''
@@ -953,8 +957,63 @@ class AccessManagementService:
             # Construir el filtro para Flex Staff
             flex_staff_filter = f'%flex staff - {flex_staff_position}%' if flex_staff_position else '%flex staff%'
 
+            # Primero verificar qué registros hay en el historial para este empleado
+            cursor.execute('''
+                SELECT COUNT(*), process_access, status
+                FROM historico
+                WHERE scotia_id = ?
+                GROUP BY process_access, status
+            ''', (scotia_id,))
+            debug_counts = cursor.fetchall()
+            print(f"DEBUG: Registros en historial por tipo y status:")
+            total_registros = 0
+            for count, proc, stat in debug_counts:
+                print(f"  {proc} - {stat}: {count}")
+                total_registros += count
+            print(f"DEBUG: Total de registros en historial: {total_registros}")
+            
+            # Verificar específicamente registros 'closed completed'
+            cursor.execute('''
+                SELECT COUNT(*), process_access
+                FROM historico
+                WHERE scotia_id = ?
+                AND status = 'closed completed'
+                AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                GROUP BY process_access
+            ''', (scotia_id,))
+            completed_counts = cursor.fetchall()
+            print(f"DEBUG: Registros 'closed completed' disponibles:")
+            for count, proc in completed_counts:
+                print(f"  {proc}: {count}")
+
+            # Obtener unidad_subunidad del headcount si existe
+            unidad_subunidad = None
+            if has_headcount:
+                cursor.execute('''
+                    SELECT unidad_subunidad FROM headcount 
+                    WHERE scotia_id = ? AND activo = 1
+                ''', (scotia_id,))
+                unidad_result = cursor.fetchone()
+                unidad_subunidad = unidad_result[0] if unidad_result else None
+                print(f"DEBUG: unidad_subunidad del headcount: {unidad_subunidad}")
+
             # Obtener todos los tipos de accesos actuales
-            base_query = '''
+            # Simplificar la consulta: primero obtener el último proceso por aplicación, luego filtrar
+            query = '''
+                WITH LastProcessByApp AS (
+                    -- Para cada aplicación, obtener el proceso más reciente
+                    SELECT 
+                        app_access_name,
+                        process_access as last_process,
+                        MAX(record_date) as last_record_date,
+                        ROW_NUMBER() OVER (PARTITION BY app_access_name ORDER BY MAX(record_date) DESC) as rn
+                    FROM historico
+                    WHERE scotia_id = ?
+                    AND status = 'closed completed'
+                    AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                    AND app_access_name IS NOT NULL
+                    GROUP BY app_access_name, process_access
+                )
                 SELECT 
                     h.scotia_id,
                     h.subunit as unit,
@@ -982,24 +1041,56 @@ class AccessManagementService:
                     END as access_type
                 FROM historico h
                 LEFT JOIN applications a ON h.app_access_name = a.logical_access_name
+                INNER JOIN LastProcessByApp lp ON h.app_access_name = lp.app_access_name AND lp.rn = 1
                 WHERE h.scotia_id = ?
                 AND h.status = 'closed completed'
                 AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
-                AND ({extra_filter})
+                AND (
+                    -- Mostrar onboarding si fue el último proceso (sin filtrar por unidad/posición)
+                    (lp.last_process = 'onboarding' AND h.process_access = 'onboarding')
+                    OR
+                    -- Mostrar lateral_movement si fue el último proceso
+                    -- Y si hay headcount, verificar que coincida con posición actual
+                    (lp.last_process = 'lateral_movement' AND h.process_access = 'lateral_movement'
+                     {lateral_condition})
+                    OR
+                    -- Mostrar manual_access siempre (si fue el último proceso)
+                    (lp.last_process = 'manual_access' AND h.process_access = 'manual_access')
+                    OR
+                    -- Mostrar flex_staff con el filtro de posición temporal (si fue el último proceso)
+                    (lp.last_process = 'flex_staff' AND h.process_access = 'flex_staff' 
+                     AND h.event_description LIKE ?)
+                )
                 GROUP BY h.scotia_id, h.subunit, h.app_access_name, h.status, h.process_access
                 ORDER BY h.process_access, MAX(h.record_date) DESC
             '''
 
-            if has_headcount:
-                extra_filter = "( (h.process_access IN ('onboarding','lateral_movement') AND a.unidad_subunidad = ? AND a.position_role = ?) OR (h.process_access = 'manual_access') OR (h.process_access = 'flex_staff' AND h.event_description LIKE ?) )"
-                query = base_query.format(extra_filter=extra_filter)
-                cursor.execute(query, (scotia_id, current_unit, current_position, flex_staff_filter))
+            # Construir la condición para lateral_movement
+            # Para lateral_movement, si hay headcount, solo mostrar si coincide con unidad_subunidad y posición
+            # Para onboarding, mostrar todos sin restricciones
+            if has_headcount and unidad_subunidad:
+                # Si hay headcount, filtrar lateral_movement por unidad_subunidad y posición
+                # Pero solo si la aplicación tiene estos campos definidos
+                lateral_condition = "AND (a.unidad_subunidad = ? AND a.position_role = ?)"
+                params = (scotia_id, scotia_id, unidad_subunidad, current_position, flex_staff_filter)
+                print(f"DEBUG: Usando filtro lateral_movement con unidad_subunidad={unidad_subunidad}, position={current_position}")
             else:
-                # Fallback: no filtrar por headcount/applications; mostrar todo lo completado del empleado
-                extra_filter = "( (h.process_access IN ('onboarding','lateral_movement')) OR (h.process_access = 'manual_access') OR (h.process_access = 'flex_staff' AND h.event_description LIKE ?) )"
-                query = base_query.format(extra_filter=extra_filter)
-                cursor.execute(query, (scotia_id, flex_staff_filter))
+                # Sin headcount o sin unidad_subunidad: mostrar todos los lateral_movement también
+                lateral_condition = ""
+                params = (scotia_id, scotia_id, flex_staff_filter)
+                print(f"DEBUG: Sin filtro lateral_movement (no hay headcount o unidad_subunidad)")
+            
+            query = query.format(lateral_condition=lateral_condition)
+            print(f"DEBUG: Ejecutando consulta con {len(params)} parámetros")
+            print(f"DEBUG: Parámetros: scotia_id (2 veces)={scotia_id}, unidad_subunidad={unidad_subunidad if has_headcount else 'N/A'}, position={current_position if has_headcount else 'N/A'}, flex_staff_filter={flex_staff_filter}")
+            try:
+                cursor.execute(query, params)
+            except Exception as query_error:
+                print(f"ERROR en consulta SQL: {query_error}")
+                print(f"Query: {query}")
+                print(f"Params: {params}")
+                raise
 
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]

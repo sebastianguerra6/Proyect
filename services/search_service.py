@@ -38,10 +38,13 @@ class SearchService:
             
             # Query base - seleccionar todos los campos relevantes
             query = """
-                SELECT case_id, sid, scotia_id, process_access, record_date, 
-                       status, comment, responsible, area, subunit, event_description,
+                SELECT id, case_id, scotia_id, process_access, record_date, request_date,
+                       status, comment, responsible, subunit, event_description,
                        ticket_email, app_access_name, closing_date_app, app_quality,
-                       confirmation_by_user
+                       confirmation_by_user, employee_email, computer_system_type,
+                       duration_of_access, closing_date_ticket, comment_tq, ticket_quality,
+                       general_status_ticket, general_status_case, average_time_open_ticket,
+                       sla_app, sla_ticket, sla_case
                 FROM historico
             """
             
@@ -53,21 +56,65 @@ class SearchService:
                     conditions.append("case_id LIKE ?")
                     params.append(f"%{filtros['case_id']}%")
                 
-                if filtros.get('sid'):
-                    conditions.append("sid LIKE ?")
-                    params.append(f"%{filtros['sid']}%")
-                
-                if filtros.get('scotia_id'):
+                if filtros.get('sid') or filtros.get('scotia_id'):
+                    # 'sid' es un alias para 'scotia_id'
+                    valor = filtros.get('scotia_id') or filtros.get('sid')
                     conditions.append("scotia_id LIKE ?")
-                    params.append(f"%{filtros['scotia_id']}%")
+                    params.append(f"%{valor}%")
                 
-                if filtros.get('process_access'):
+                if filtros.get('process_access') or filtros.get('tipo_proceso'):
+                    # 'tipo_proceso' es un alias para 'process_access'
+                    valor = filtros.get('process_access') or filtros.get('tipo_proceso')
                     conditions.append("process_access LIKE ?")
-                    params.append(f"%{filtros['process_access']}%")
+                    params.append(f"%{valor}%")
                 
                 if filtros.get('status'):
-                    conditions.append("status = ?")
-                    params.append(filtros['status'])
+                    conditions.append("status LIKE ?")
+                    params.append(f"%{filtros['status']}%")
+                
+                if filtros.get('request_date'):
+                    conditions.append("request_date LIKE ?")
+                    params.append(f"%{filtros['request_date']}%")
+                
+                if filtros.get('app_access_name') or filtros.get('app_name'):
+                    # 'app_name' es un alias para 'app_access_name'
+                    valor = filtros.get('app_access_name') or filtros.get('app_name')
+                    conditions.append("app_access_name LIKE ?")
+                    params.append(f"%{valor}%")
+                
+                if filtros.get('ticket_email') or filtros.get('mail'):
+                    # 'mail' es un alias para 'ticket_email'
+                    valor = filtros.get('ticket_email') or filtros.get('mail')
+                    conditions.append("ticket_email LIKE ?")
+                    params.append(f"%{valor}%")
+                
+                if filtros.get('employee_email'):
+                    conditions.append("employee_email LIKE ?")
+                    params.append(f"%{filtros['employee_email']}%")
+                
+                if filtros.get('app_quality'):
+                    conditions.append("app_quality LIKE ?")
+                    params.append(f"%{filtros['app_quality']}%")
+                
+                if filtros.get('confirmation_by_user'):
+                    conditions.append("confirmation_by_user LIKE ?")
+                    params.append(f"%{filtros['confirmation_by_user']}%")
+                
+                if filtros.get('comment'):
+                    conditions.append("comment LIKE ?")
+                    params.append(f"%{filtros['comment']}%")
+                
+                if filtros.get('subunit'):
+                    conditions.append("subunit LIKE ?")
+                    params.append(f"%{filtros['subunit']}%")
+                
+                if filtros.get('responsible'):
+                    conditions.append("responsible LIKE ?")
+                    params.append(f"%{filtros['responsible']}%")
+                
+                if filtros.get('event_description'):
+                    conditions.append("event_description LIKE ?")
+                    params.append(f"%{filtros['event_description']}%")
                 
                 if filtros.get('fecha_desde'):
                     conditions.append("record_date >= ?")
@@ -90,10 +137,17 @@ class SearchService:
                 result_dict = dict(zip(columns, row))
                 results.append(result_dict)
             
+            conn.close()
             return results
             
         except Exception as e:
             print(f"Error en buscar_procesos: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                conn.close()
+            except:
+                pass
             return []
     
     def buscar_headcount_por_sid(self, sid: str) -> List[Dict[str, Any]]:

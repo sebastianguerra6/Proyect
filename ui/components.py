@@ -475,14 +475,20 @@ class EdicionBusquedaFrame:
         # Variables para filtros múltiples
         self.filtros_activos = {}
         self.campos_filtro = {
-            "SID": "sid",
-            "Número de Caso": "numero_caso", 
-            "Proceso": "proceso",
-            "Aplicación": "aplicacion",
-            "Estado": "estado",
-            "Fecha": "fecha",
-            "Responsable": "responsable",
-            "Descripción": "descripcion"
+            "SID": "scotia_id",
+            "Número de Caso": "case_id", 
+            "Proceso": "process_access",
+            "Aplicación": "app_access_name",
+            "Estado": "status",
+            "Request Date": "request_date",
+            "Responsable": "responsible",
+            "Subunidad": "subunit",
+            "Email Ticket": "ticket_email",
+            "Email Empleado": "employee_email",
+            "Descripción": "event_description",
+            "Calidad App": "app_quality",
+            "Confirmación": "confirmation_by_user",
+            "Comentario": "comment"
         }
     
     def _crear_widgets(self):
@@ -1315,23 +1321,48 @@ class EdicionBusquedaFrame:
         if resultados:
             for resultado in resultados:
                 # Extraer valores del resultado de la base de datos real
+                # Formatear fechas si están presentes
+                record_date = resultado.get('record_date', '')
+                if record_date:
+                    try:
+                        if isinstance(record_date, str):
+                            # Intentar formatear si es string
+                            record_date = str(record_date)[:19]  # Truncar a datetime si es muy largo
+                        else:
+                            record_date = str(record_date)
+                    except:
+                        record_date = str(record_date) if record_date else ''
+                
+                request_date = resultado.get('request_date', '')
+                confirmation_date = resultado.get('confirmation_by_user', '')
+                if confirmation_date:
+                    try:
+                        if isinstance(confirmation_date, str):
+                            confirmation_date = str(confirmation_date)[:10]  # Solo fecha
+                        else:
+                            confirmation_date = str(confirmation_date)
+                    except:
+                        confirmation_date = str(confirmation_date) if confirmation_date else ''
+                
                 valores = (
-                    resultado.get('case_id', ''),
-                    resultado.get('sid', ''),
-                    resultado.get('scotia_id', ''),
-                    resultado.get('process_access', ''),
-                    resultado.get('status', ''),
-                    resultado.get('record_date', ''),
-                    resultado.get('responsible', ''),
-                    resultado.get('area', ''),
-                    resultado.get('subunit', ''),
-                    resultado.get('event_description', ''),
-                    resultado.get('ticket_email', ''),
-                    resultado.get('app_access_name', ''),
-                    resultado.get('closing_date_app', ''),
-                    resultado.get('app_quality', ''),
-                    resultado.get('confirmation_by_user', ''),
-                    resultado.get('comment', '')
+                    resultado.get('id', ''),  # ID de la tabla
+                    resultado.get('scotia_id', ''),  # SID
+                    resultado.get('employee_email', ''),  # Email
+                    resultado.get('case_id', ''),  # Caso
+                    resultado.get('process_access', ''),  # Proceso
+                    resultado.get('app_access_name', ''),  # Aplicación
+                    resultado.get('status', ''),  # Estado
+                    record_date,  # Fecha
+                    request_date,  # Fecha Solicitud
+                    resultado.get('responsible', ''),  # Responsable
+                    resultado.get('subunit', ''),  # Subunidad
+                    resultado.get('computer_system_type', ''),  # Tipo Sistema
+                    resultado.get('duration_of_access', ''),  # Duración
+                    resultado.get('closing_date_app', ''),  # Cierre App
+                    resultado.get('closing_date_ticket', ''),  # Cierre Ticket
+                    resultado.get('app_quality', ''),  # Calidad App
+                    confirmation_date,  # Confirmación
+                    resultado.get('comment', '')  # Comentario
                 )
                 self.tree.insert("", "end", values=valores)
             
@@ -1360,21 +1391,22 @@ class EdicionBusquedaFrame:
             if self.service and hasattr(self.service, 'buscar_procesos'):
                 # Mapear nombres de columnas a campos de la base de datos
                 mapeo_columnas = {
-                    "SID": "sid",
-                    "Unidad/Subunidad": "nueva_unidad_subunidad",
-                    "Cargo": "nuevo_cargo",
+                    "SID": "scotia_id",
                     "Status": "status",
                     "Request Date": "request_date",
-                    "Ingreso Por": "ingreso_por",
-                    "Tipo": "tipo_proceso",
-                    "APP Name": "app_name",
-                    "Mail": "mail",
+                    "Tipo": "process_access",
+                    "APP Name": "app_access_name",
+                    "Mail": "ticket_email",
                     "App Quality": "app_quality",
                     "Confirmation by User": "confirmation_by_user",
-                    "Comment": "comment"
+                    "Comment": "comment",
+                    "Case ID": "case_id",
+                    "Responsible": "responsible",
+                    "Subunit": "subunit",
+                    "Event Description": "event_description"
                 }
                 
-                campo_bd = mapeo_columnas.get(columna, "sid")
+                campo_bd = mapeo_columnas.get(columna, "scotia_id")
                 
                 # Crear filtro para la búsqueda
                 filtros = {campo_bd: texto_filtro}
@@ -1426,21 +1458,22 @@ class EdicionBusquedaFrame:
             if self.service and hasattr(self.service, 'buscar_procesos'):
                 # Mapear nombres de columnas a campos de la base de datos
                 mapeo_columnas = {
-                    "SID": "sid",
-                    "Unidad/Subunidad": "nueva_unidad_subunidad",
-                    "Cargo": "nuevo_cargo",
+                    "SID": "scotia_id",
                     "Status": "status",
                     "Request Date": "request_date",
-                    "Ingreso Por": "ingreso_por",
-                    "Tipo": "tipo_proceso",
-                    "APP Name": "app_name",
-                    "Mail": "mail",
+                    "Tipo": "process_access",
+                    "APP Name": "app_access_name",
+                    "Mail": "ticket_email",
                     "App Quality": "app_quality",
                     "Confirmation by User": "confirmation_by_user",
-                    "Comment": "comment"
+                    "Comment": "comment",
+                    "Case ID": "case_id",
+                    "Responsible": "responsible",
+                    "Subunit": "subunit",
+                    "Event Description": "event_description"
                 }
                 
-                campo_bd = mapeo_columnas.get(columna, "sid")
+                campo_bd = mapeo_columnas.get(columna, "scotia_id")
                 
                 # Crear filtro para la búsqueda
                 filtros = {campo_bd: texto_filtro}
