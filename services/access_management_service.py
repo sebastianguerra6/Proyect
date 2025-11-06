@@ -978,13 +978,41 @@ class AccessManagementService:
                 FROM historico
                 WHERE scotia_id = ?
                 AND status = 'closed completed'
-                AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access', 'offboarding')
                 GROUP BY process_access
             ''', (scotia_id,))
             completed_counts = cursor.fetchall()
             print(f"DEBUG: Registros 'closed completed' disponibles:")
             for count, proc in completed_counts:
                 print(f"  {proc}: {count}")
+            
+            # Verificar cuántos accesos tienen offboarding como último proceso
+            cursor.execute('''
+                WITH AllProcessesByApp AS (
+                    SELECT 
+                        app_access_name,
+                        process_access as last_process,
+                        MAX(record_date) as last_record_date
+                    FROM historico
+                    WHERE scotia_id = ?
+                    AND status = 'closed completed'
+                    AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access', 'offboarding')
+                    AND app_access_name IS NOT NULL
+                    GROUP BY app_access_name, process_access
+                ),
+                LastProcessByApp AS (
+                    SELECT 
+                        app_access_name,
+                        last_process,
+                        ROW_NUMBER() OVER (PARTITION BY app_access_name ORDER BY last_record_date DESC) as rn
+                    FROM AllProcessesByApp
+                )
+                SELECT COUNT(*) 
+                FROM LastProcessByApp 
+                WHERE rn = 1 AND last_process = 'offboarding'
+            ''', (scotia_id,))
+            offboarding_count = cursor.fetchone()[0]
+            print(f"DEBUG: Accesos excluidos por tener offboarding como último proceso: {offboarding_count}")
 
             # Obtener unidad_subunidad del headcount si existe
             unidad_subunidad = None
@@ -998,21 +1026,29 @@ class AccessManagementService:
                 print(f"DEBUG: unidad_subunidad del headcount: {unidad_subunidad}")
 
             # Obtener todos los tipos de accesos actuales
-            # Simplificar la consulta: primero obtener el último proceso por aplicación, luego filtrar
+            # IMPORTANTE: Excluir accesos cuyo último proceso sea 'offboarding' (ya fueron removidos)
             query = '''
-                WITH LastProcessByApp AS (
-                    -- Para cada aplicación, obtener el proceso más reciente
+                WITH AllProcessesByApp AS (
+                    -- Para cada aplicación, obtener todos los procesos con sus fechas máximas
                     SELECT 
                         app_access_name,
                         process_access as last_process,
-                        MAX(record_date) as last_record_date,
-                        ROW_NUMBER() OVER (PARTITION BY app_access_name ORDER BY MAX(record_date) DESC) as rn
+                        MAX(record_date) as last_record_date
                     FROM historico
                     WHERE scotia_id = ?
                     AND status = 'closed completed'
-                    AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                    AND process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access', 'offboarding')
                     AND app_access_name IS NOT NULL
                     GROUP BY app_access_name, process_access
+                ),
+                LastProcessByApp AS (
+                    -- Para cada aplicación, obtener solo el proceso más reciente (último en el tiempo)
+                    SELECT 
+                        app_access_name,
+                        last_process,
+                        last_record_date,
+                        ROW_NUMBER() OVER (PARTITION BY app_access_name ORDER BY last_record_date DESC) as rn
+                    FROM AllProcessesByApp
                 )
                 SELECT 
                     h.scotia_id,
@@ -1046,6 +1082,8 @@ class AccessManagementService:
                 AND h.status = 'closed completed'
                 AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
                 AND h.app_access_name IS NOT NULL
+                -- EXCLUIR accesos cuyo último proceso sea 'offboarding' (ya fueron removidos)
+                AND lp.last_process != 'offboarding'
                 AND (
                     -- Mostrar onboarding si fue el último proceso (sin filtrar por unidad/posición)
                     (lp.last_process = 'onboarding' AND h.process_access = 'onboarding')
@@ -1365,29 +1403,64 @@ class AccessManagementService:
             print(f"DEBUG: Unidad anterior: {old_unit}")
             print(f"DEBUG: Unidad/Subunidad anterior: {old_unidad_subunidad}")
 
-            # Obtener accesos requeridos para la posición ANTERIOR (usando unidad_subunidad como el onboarding)
-            old_mesh_apps = self.get_applications_by_position(old_position, old_unidad_subunidad, subunit=employee.get('subunit'))
-            print(f"DEBUG: Aplicaciones encontradas para posición anterior: {len(old_mesh_apps)}")
-            for app in old_mesh_apps:
-                print(f"DEBUG: App anterior: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
-            
             # Obtener accesos requeridos para la nueva posición (usando unidad_subunidad como el onboarding)
             new_unidad_subunidad = f"{new_unit}/{new_subunit}" if new_subunit else new_unit
             print(f"DEBUG: Nueva unidad_subunidad: {new_unidad_subunidad}")
             new_mesh_apps = self.get_applications_by_position(new_position, new_unidad_subunidad, subunit=new_subunit)
             print(f"DEBUG: Aplicaciones encontradas para nueva posición: {len(new_mesh_apps)}")
             for app in new_mesh_apps:
-                print(f"DEBUG: App nueva: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
+                print(f"DEBUG: App requerida para nueva posición: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
             
-            # Crear índices para comparación usando logical_access_name + unidad_subunidad (como el onboarding)
-            old_apps_by_key = {}
-            for app in old_mesh_apps:
-                app_name = app.get('logical_access_name', '').strip().upper()
-                app_unidad_subunidad = app.get('unidad_subunidad', '').strip().upper()
-                key = f"{app_name}|||{app_unidad_subunidad}"
-                if app_name:  # Solo agregar si tiene nombre
-                    old_apps_by_key[key] = app
+            # Obtener accesos ACTUALES del empleado (no los de la malla anterior, sino los que realmente tiene)
+            current_access = self.get_employee_current_position_access(scotia_id)
+            print(f"DEBUG: Accesos actuales del empleado: {len(current_access)}")
             
+            # Crear índice de accesos actuales usando logical_access_name + unidad_subunidad
+            # Obtener unidad_subunidad de todas las aplicaciones de una vez
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Obtener unidad_subunidad del headcount para usar como fallback
+            cursor.execute('SELECT unidad_subunidad FROM headcount WHERE scotia_id = ?', (scotia_id,))
+            hc_result = cursor.fetchone()
+            default_unidad_subunidad = (hc_result[0] or '').strip().upper() if hc_result else ''
+            
+            # Obtener unidad_subunidad de todas las aplicaciones actuales de una vez
+            app_names = [acc.get('logical_access_name', '').strip().upper() for acc in current_access if acc.get('logical_access_name')]
+            app_unidad_subunidad_map = {}
+            
+            if app_names:
+                placeholders = ','.join(['?'] * len(app_names))
+                cursor.execute(f'''
+                    SELECT DISTINCT a.logical_access_name, a.unidad_subunidad
+                    FROM applications a
+                    WHERE a.logical_access_name IN ({placeholders})
+                ''', tuple(app_names))
+                for row in cursor.fetchall():
+                    app_unidad_subunidad_map[row[0].strip().upper()] = (row[1] or '').strip().upper()
+            
+            conn.close()
+            
+            current_access_by_key = {}
+            for acc in current_access:
+                app_name = (acc.get('logical_access_name') or '').strip().upper()
+                if app_name:
+                    # Usar unidad_subunidad de la aplicación si está disponible, sino usar la del headcount
+                    app_unidad_subunidad = app_unidad_subunidad_map.get(app_name, default_unidad_subunidad)
+                    
+                    key = f"{app_name}|||{app_unidad_subunidad}"
+                    current_access_by_key[key] = {
+                        'logical_access_name': app_name,
+                        'unidad_subunidad': app_unidad_subunidad,
+                        'process_access': acc.get('process_access', ''),
+                        'status': acc.get('status', '')
+                    }
+            
+            print(f"DEBUG: Accesos actuales indexados: {len(current_access_by_key)}")
+            for key, acc in current_access_by_key.items():
+                print(f"DEBUG: Acceso actual: {acc.get('logical_access_name', '')} - {acc.get('unidad_subunidad', '')}")
+            
+            # Crear índice de accesos requeridos para la nueva posición
             new_apps_by_key = {}
             for app in new_mesh_apps:
                 app_name = app.get('logical_access_name', '').strip().upper()
@@ -1395,58 +1468,65 @@ class AccessManagementService:
                 key = f"{app_name}|||{app_unidad_subunidad}"
                 if app_name:  # Solo agregar si tiene nombre
                     new_apps_by_key[key] = app
-
-            # Obtener accesos actuales del empleado en historial con status 'closed completed'
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT DISTINCT app_access_name, status
-                FROM historico
-                WHERE scotia_id = ?
-                AND status = 'closed completed'
-                AND process_access IN ('onboarding', 'lateral_movement')
-                AND app_access_name IS NOT NULL
-            ''', (scotia_id,))
             
-            completed_access = {}
-            for row in cursor.fetchall():
-                app_name = (row[0] or '').strip().upper()
-                if app_name:
-                    completed_access[app_name] = True
-            
-            conn.close()
-            print(f"DEBUG: Accesos en 'closed completed' encontrados: {list(completed_access.keys())}")
+            print(f"DEBUG: Accesos requeridos para nueva posición: {len(new_apps_by_key)}")
+            for key, app in new_apps_by_key.items():
+                print(f"DEBUG: Acceso requerido: {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
             
             # Calcular qué revocar y qué otorgar
             to_revoke = []
             to_grant = []
-            
-            # Revocar accesos de la posición anterior que NO están en la nueva posición
-            # PERO solo si están en estado 'closed completed' en el historial
-            # (misma app + misma unidad_subunidad)
-            for key, app in old_apps_by_key.items():
-                if key not in new_apps_by_key:
-                    app_name = app.get('logical_access_name', '').strip().upper()
-                    # Solo revocar si está en 'closed completed'
-                    if app_name in completed_access:
-                        to_revoke.append(app)
-                        print(f"DEBUG: Marcado para revocar (closed completed): {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
-                    else:
-                        print(f"DEBUG: NO se revoca (no está en closed completed): {app.get('logical_access_name', '')} - Estado actual no es 'closed completed'")
-            
-            # Otorgar accesos de la nueva posición que no tiene actualmente
-            # (misma app + misma unidad_subunidad)
-            for key, app in new_apps_by_key.items():
-                if key not in old_apps_by_key:
-                    to_grant.append(app)
-                    print(f"DEBUG: Marcado para otorgar: {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
-            
-            # Identificar aplicaciones mantenidas (están en ambas posiciones con misma unidad_subunidad)
             maintained = []
-            for key, app in old_apps_by_key.items():
-                if key in new_apps_by_key:
-                    maintained.append(app)
-                    print(f"DEBUG: Aplicación mantenida: {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
+            
+            # REVOCAR: accesos actuales que NO están en los requeridos de la nueva posición
+            # Solo si están en estado 'closed completed'
+            for key, current_acc in current_access_by_key.items():
+                if key not in new_apps_by_key:
+                    # Este acceso actual no es necesario en la nueva posición, revocarlo
+                    # Pero solo si está en 'closed completed'
+                    if current_acc.get('status', '').strip().lower() == 'closed completed':
+                        # Buscar la app completa en applications para obtener todos los datos
+                        conn = self.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT logical_access_name, unidad_subunidad, subunit, path_email_url
+                            FROM applications
+                            WHERE logical_access_name = ?
+                        ''', (current_acc.get('logical_access_name', ''),))
+                        app_data = cursor.fetchone()
+                        conn.close()
+                        
+                        if app_data:
+                            app_dict = {
+                                'logical_access_name': app_data[0],
+                                'unidad_subunidad': app_data[1] or current_acc.get('unidad_subunidad', ''),
+                                'subunit': app_data[2] or '',
+                                'path_email_url': app_data[3] or ''
+                            }
+                            to_revoke.append(app_dict)
+                            print(f"DEBUG: Marcado para revocar (no necesario en nueva posición): {app_dict.get('logical_access_name', '')} - {app_dict.get('unidad_subunidad', '')}")
+                        else:
+                            # Si no está en applications, crear un dict básico
+                            app_dict = {
+                                'logical_access_name': current_acc.get('logical_access_name', ''),
+                                'unidad_subunidad': current_acc.get('unidad_subunidad', ''),
+                                'subunit': '',
+                                'path_email_url': ''
+                            }
+                            to_revoke.append(app_dict)
+                            print(f"DEBUG: Marcado para revocar (no está en applications): {app_dict.get('logical_access_name', '')}")
+                else:
+                    # Este acceso ya lo tiene y también lo necesita en la nueva posición, mantenerlo
+                    maintained.append(current_acc)
+                    print(f"DEBUG: Acceso mantenido (ya lo tiene y lo necesita): {current_acc.get('logical_access_name', '')} - {current_acc.get('unidad_subunidad', '')}")
+            
+            # OTORGAR: accesos requeridos de la nueva posición que NO tiene actualmente
+            for key, app in new_apps_by_key.items():
+                if key not in current_access_by_key:
+                    to_grant.append(app)
+                    print(f"DEBUG: Marcado para otorgar (no lo tiene actualmente): {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
+                else:
+                    print(f"DEBUG: Acceso ya existe (no se otorga): {app.get('logical_access_name', '')} - {app.get('unidad_subunidad', '')}")
             
             print(f"DEBUG: Resumen - Mantener: {len(maintained)}, Revocar: {len(to_revoke)}, Otorgar: {len(to_grant)}")
 
@@ -1479,7 +1559,7 @@ class AccessManagementService:
                 else:
                     print(f"DEBUG: Error creando registro de revocación: {message}")
 
-            # 2. OTORGAR nuevos accesos de la nueva posición
+            # 2. OTORGAR nuevos accesos de la nueva posición que no tiene actualmente
             print(f"DEBUG: Procesando {len(to_grant)} aplicaciones para otorgar")
             for app in to_grant:
                 print(f"DEBUG: Procesando otorgamiento: {app.get('logical_access_name', '')}")
@@ -1487,7 +1567,7 @@ class AccessManagementService:
                     'scotia_id': scotia_id,
                     'case_id': case_id,
                     'responsible': responsible,
-                    'process_access': 'onboarding',
+                    'process_access': 'lateral_movement',
                     'subunit': app.get('subunit', ''),
                     'event_description': f"Otorgamiento de acceso para {app.get('logical_access_name', '')} (lateral movement - nueva posición)",
                     'ticket_email': app.get('path_email_url', ''),
