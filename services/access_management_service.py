@@ -1284,21 +1284,87 @@ class AccessManagementService:
             return False, f"Error procesando onboarding: {str(e)}", []
 
     def process_employee_offboarding(self, scotia_id: str, responsible: str = "Sistema") -> Tuple[bool, str, List[Dict[str, Any]]]:
-        """Procesa el offboarding de un empleado (revoca todo lo que figure completado)."""
+        """Procesa el offboarding de un empleado (revoca todo lo que figure completado).
+        
+        Solo revoca accesos que:
+        - Tienen estado 'closed completed'
+        - Son de tipos: onboarding, lateral_movement, flex_staff, manual_access
+        - NO han sido ya revocados en un offboarding anterior
+        """
         try:
             employee = self.get_employee_by_id(scotia_id)
             if not employee:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
             history = self.get_employee_history(scotia_id)
-            # Considerar solo accesos en estado 'closed completed' de tipos: onboarding, lateral_movement, flex_staff y manual_access
-            active_access = [
-                h for h in history 
-                if h.get('process_access') in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
-                and h.get('status', '').strip().lower() == 'closed completed'
-            ]
             
-            print(f"DEBUG: Accesos encontrados para revocar (solo 'closed completed'): {len(active_access)}")
+            # Crear un diccionario de accesos revocados con sus fechas de revocación
+            # Clave: app_name (lowercase), Valor: fecha más reciente de revocación
+            revoked_accesses = {}
+            for h in history:
+                status = h.get('status') or ''
+                if isinstance(status, str):
+                    status = status.strip().lower()
+                else:
+                    status = str(status).strip().lower() if status else ''
+                
+                if (h.get('process_access') == 'offboarding' and 
+                    status == 'closed completed'):
+                    app_name = h.get('app_access_name') or h.get('app_logical_access_name')
+                    if app_name:
+                        app_key = app_name.lower()
+                        record_date = h.get('record_date')
+                        # Si no existe o esta fecha es más reciente, actualizar
+                        if app_key not in revoked_accesses or (record_date and 
+                            (revoked_accesses[app_key] is None or record_date > revoked_accesses[app_key])):
+                            revoked_accesses[app_key] = record_date
+            
+            # Considerar solo accesos en estado 'closed completed' de tipos: onboarding, lateral_movement, flex_staff y manual_access
+            # Y que NO hayan sido ya revocados en un offboarding anterior (verificando fechas)
+            active_access = []
+            for h in history:
+                process_type = h.get('process_access') or ''
+                status = h.get('status') or ''
+                if isinstance(status, str):
+                    status = status.strip().lower()
+                else:
+                    status = str(status).strip().lower() if status else ''
+                
+                app_name = h.get('app_access_name') or h.get('app_logical_access_name')
+                record_date = h.get('record_date')
+                
+                # Verificar que sea un tipo de acceso válido y esté completado
+                if (process_type in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access') and
+                    status == 'closed completed' and
+                    app_name):
+                    app_key = app_name.lower()
+                    
+                    # Verificar si el acceso ya fue revocado después de este otorgamiento
+                    already_revoked = False
+                    if app_key in revoked_accesses:
+                        revoked_date = revoked_accesses[app_key]
+                        # Si hay fecha de revocación y es posterior o igual a la fecha de otorgamiento, ya fue revocado
+                        if revoked_date and record_date:
+                            try:
+                                # Convertir a datetime si son strings
+                                if isinstance(revoked_date, str):
+                                    revoked_date = datetime.fromisoformat(revoked_date.replace('Z', '+00:00'))
+                                if isinstance(record_date, str):
+                                    record_date = datetime.fromisoformat(record_date.replace('Z', '+00:00'))
+                                if revoked_date >= record_date:
+                                    already_revoked = True
+                            except:
+                                # Si hay error en la conversión, asumir que ya fue revocado para ser conservador
+                                already_revoked = True
+                        elif revoked_date:
+                            # Si solo hay fecha de revocación, asumir que ya fue revocado
+                            already_revoked = True
+                    
+                    # Solo agregar si no fue ya revocado
+                    if not already_revoked:
+                        active_access.append(h)
+            
+            print(f"DEBUG: Accesos encontrados para revocar (solo 'closed completed' y no revocados previamente): {len(active_access)}")
             for acc in active_access:
                 print(f"DEBUG: Acceso a revocar: {acc.get('app_access_name') or acc.get('app_logical_access_name')} - Status: {acc.get('status')}")
 
@@ -1642,6 +1708,10 @@ class AccessManagementService:
             # Obtener accesos actuales del empleado (posición original)
             current_access = self.get_employee_current_access(scotia_id)
             
+            # También obtener accesos flex_staff existentes (pendientes y completados) para evitar duplicados
+            flex_staff_access = self._get_all_flex_staff_access(scotia_id)
+            print(f"DEBUG: Accesos flex_staff existentes (pendientes y completados): {len(flex_staff_access)}")
+            
             # Obtener accesos requeridos para la posición temporal usando lógica flexible
             # No usar subunidad para flex staff - buscar solo por posición y unidad
             print(f"DEBUG: Buscando aplicaciones para posición temporal: {temporary_position} en unidad: {temporary_unit}")
@@ -1650,12 +1720,19 @@ class AccessManagementService:
             for app in temp_mesh_apps:
                 print(f"DEBUG: - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('subunit', '')}")
             
-            # Crear índices para comparación
+            # Crear índices para comparación (incluyendo accesos flex_staff existentes)
             current_apps_by_name = {}
             for acc in current_access:
                 app_name = acc.get('logical_access_name', '').strip().upper()
                 if app_name:
                     current_apps_by_name[app_name] = acc
+            
+            # Agregar accesos flex_staff existentes a la comparación para evitar duplicados
+            for acc in flex_staff_access:
+                app_name = acc.get('logical_access_name', '').strip().upper()
+                if app_name and app_name not in current_apps_by_name:
+                    current_apps_by_name[app_name] = acc
+                    print(f"DEBUG: Acceso flex_staff existente incluido en comparación: {app_name}")
             
             temp_apps_by_name = {}
             for app in temp_mesh_apps:
@@ -1772,6 +1849,39 @@ class AccessManagementService:
 
         except Exception as e:
             return False, f"Error procesando retorno flex staff: {str(e)}", []
+
+    def _get_all_flex_staff_access(self, scotia_id: str) -> List[Dict[str, Any]]:
+        """Obtiene TODOS los accesos flex_staff de un empleado (pendientes y completados) para evitar duplicados"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT DISTINCT
+                    h.app_access_name as logical_access_name,
+                    h.subunit as unit,
+                    h.subunit,
+                    h.event_description,
+                    h.record_date,
+                    h.status,
+                    h.expiration_date
+                FROM historico h
+                WHERE h.scotia_id = ?
+                AND h.process_access = 'flex_staff'
+                AND h.app_access_name IS NOT NULL
+                ORDER BY h.app_access_name
+            ''', (scotia_id,))
+            
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            access_list = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
+            return access_list
+            
+        except Exception as e:
+            print(f"Error obteniendo todos los accesos flex staff: {e}")
+            return []
 
     def get_employee_flex_staff_access(self, scotia_id: str) -> List[Dict[str, Any]]:
         """Obtiene los accesos temporales (flex_staff) de un empleado"""
