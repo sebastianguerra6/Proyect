@@ -24,6 +24,15 @@ class AccessManagementService:
     # UTILIDADES INTERNAS
     # ==============================
     @staticmethod
+    def _safe_strip(value: Optional[str], default: str = '') -> str:
+        """Maneja de forma segura el strip de valores que pueden ser None"""
+        if value is None:
+            return default
+        if isinstance(value, str):
+            return value.strip()
+        return str(value).strip() if value else default
+    
+    @staticmethod
     def _access_key(unit: Optional[str], subunit: Optional[str], position_role: Optional[str], logical_access_name: Optional[str]) -> Tuple[str, str, str, str]:
         """Crea una clave normalizada para comparar accesos por 4 campos.
         Orden: (unit, subunit, position_role, logical_access_name)
@@ -402,10 +411,14 @@ class AccessManagementService:
                 query += ' AND UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))'
                 params.append(position)
             
-            # Filtrar por unidad_subunidad (obligatorio) - usar LIKE para coincidencia parcial
+            # Filtrar por unidad_subunidad (obligatorio) - buscar solo coincidencia exacta
+            # Esto evita encontrar "eddu/qa" cuando se busca "eddu" (solo encuentra "eddu" exacto)
             if unit:
-                query += ' AND UPPER(LTRIM(RTRIM(unidad_subunidad))) LIKE UPPER(LTRIM(RTRIM(?)))'
-                params.append(f'%{unit}%')
+                # Normalizar el valor de búsqueda para comparación exacta
+                unit_normalized = unit.strip().upper()
+                # Buscar solo coincidencia exacta de unidad_subunidad
+                query += ' AND UPPER(LTRIM(RTRIM(unidad_subunidad))) = ?'
+                params.append(unit_normalized)
             
             # Subunidad es opcional - no filtrar si no se proporciona
             if subunit:
@@ -1218,9 +1231,9 @@ class AccessManagementService:
             unidad_subunidad = unit  # Usar directamente el valor del formulario
             
             # 4. Actualizar posición, unidad y unidad_subunidad del empleado si están vacías
-            current_position = (employee.get('position') or '').strip()
-            current_unit = (employee.get('unit') or '').strip()
-            current_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
+            current_position = self._safe_strip(employee.get('position'), '')
+            current_unit = self._safe_strip(employee.get('unit'), '')
+            current_unidad_subunidad = self._safe_strip(employee.get('unidad_subunidad'), '')
             
             if not current_position or not current_unit or not current_unidad_subunidad:
                 conn = self.get_connection()
@@ -1249,9 +1262,9 @@ class AccessManagementService:
             seen_triplets = set()
 
             for app in required_apps:
-                unit_n = (app.get('unit') or '').strip().upper()
-                pos_n = (app.get('position_role') or '').strip().upper()
-                lan_n = (app.get('logical_access_name') or '').strip().upper()
+                unit_n = self._safe_strip(app.get('unit'), '').upper()
+                pos_n = self._safe_strip(app.get('position_role'), '').upper()
+                lan_n = self._safe_strip(app.get('logical_access_name'), '').upper()
 
                 tkey = (unit_n, pos_n, lan_n)
                 if tkey in seen_triplets:
@@ -1461,9 +1474,9 @@ class AccessManagementService:
                 print(f"DEBUG: Error - Empleado {scotia_id} no encontrado")
                 return False, f"Empleado {scotia_id} no encontrado", []
 
-            old_position = (employee.get('position') or '').strip()
-            old_unit = (employee.get('unit') or '').strip()
-            old_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
+            old_position = self._safe_strip(employee.get('position'), '')
+            old_unit = self._safe_strip(employee.get('unit'), '')
+            old_unidad_subunidad = self._safe_strip(employee.get('unidad_subunidad'), '')
             
             print(f"DEBUG: Posición anterior: {old_position}")
             print(f"DEBUG: Unidad anterior: {old_unit}")
@@ -1489,10 +1502,10 @@ class AccessManagementService:
             # Obtener unidad_subunidad del headcount para usar como fallback
             cursor.execute('SELECT unidad_subunidad FROM headcount WHERE scotia_id = ?', (scotia_id,))
             hc_result = cursor.fetchone()
-            default_unidad_subunidad = (hc_result[0] or '').strip().upper() if hc_result else ''
+            default_unidad_subunidad = self._safe_strip(hc_result[0] if hc_result else None, '').upper()
             
             # Obtener unidad_subunidad de todas las aplicaciones actuales de una vez
-            app_names = [acc.get('logical_access_name', '').strip().upper() for acc in current_access if acc.get('logical_access_name')]
+            app_names = [self._safe_strip(acc.get('logical_access_name'), '').upper() for acc in current_access if acc.get('logical_access_name')]
             app_unidad_subunidad_map = {}
             
             if app_names:
@@ -1503,13 +1516,13 @@ class AccessManagementService:
                     WHERE a.logical_access_name IN ({placeholders})
                 ''', tuple(app_names))
                 for row in cursor.fetchall():
-                    app_unidad_subunidad_map[row[0].strip().upper()] = (row[1] or '').strip().upper()
+                    app_unidad_subunidad_map[self._safe_strip(row[0], '').upper()] = self._safe_strip(row[1], '').upper()
             
             conn.close()
             
             current_access_by_key = {}
             for acc in current_access:
-                app_name = (acc.get('logical_access_name') or '').strip().upper()
+                app_name = self._safe_strip(acc.get('logical_access_name'), '').upper()
                 if app_name:
                     # Usar unidad_subunidad de la aplicación si está disponible, sino usar la del headcount
                     app_unidad_subunidad = app_unidad_subunidad_map.get(app_name, default_unidad_subunidad)
@@ -1529,8 +1542,8 @@ class AccessManagementService:
             # Crear índice de accesos requeridos para la nueva posición
             new_apps_by_key = {}
             for app in new_mesh_apps:
-                app_name = app.get('logical_access_name', '').strip().upper()
-                app_unidad_subunidad = app.get('unidad_subunidad', '').strip().upper()
+                app_name = self._safe_strip(app.get('logical_access_name'), '').upper()
+                app_unidad_subunidad = self._safe_strip(app.get('unidad_subunidad'), '').upper()
                 key = f"{app_name}|||{app_unidad_subunidad}"
                 if app_name:  # Solo agregar si tiene nombre
                     new_apps_by_key[key] = app
@@ -1550,7 +1563,7 @@ class AccessManagementService:
                 if key not in new_apps_by_key:
                     # Este acceso actual no es necesario en la nueva posición, revocarlo
                     # Pero solo si está en 'closed completed'
-                    if current_acc.get('status', '').strip().lower() == 'closed completed':
+                    if self._safe_strip(current_acc.get('status'), '').lower() == 'closed completed':
                         # Buscar la app completa en applications para obtener todos los datos
                         conn = self.get_connection()
                         cursor = conn.cursor()
@@ -1702,8 +1715,8 @@ class AccessManagementService:
                 print(f"DEBUG: Error - Empleado {scotia_id} no encontrado")
                 return False, f"Empleado {scotia_id} no encontrado", []
 
-            original_position = (employee.get('position') or '').strip()
-            original_unit = (employee.get('unit') or '').strip()
+            original_position = self._safe_strip(employee.get('position'), '')
+            original_unit = self._safe_strip(employee.get('unit'), '')
 
             # Obtener accesos actuales del empleado (posición original)
             current_access = self.get_employee_current_access(scotia_id)
@@ -1723,20 +1736,20 @@ class AccessManagementService:
             # Crear índices para comparación (incluyendo accesos flex_staff existentes)
             current_apps_by_name = {}
             for acc in current_access:
-                app_name = acc.get('logical_access_name', '').strip().upper()
+                app_name = self._safe_strip(acc.get('logical_access_name'), '').upper()
                 if app_name:
                     current_apps_by_name[app_name] = acc
             
             # Agregar accesos flex_staff existentes a la comparación para evitar duplicados
             for acc in flex_staff_access:
-                app_name = acc.get('logical_access_name', '').strip().upper()
+                app_name = self._safe_strip(acc.get('logical_access_name'), '').upper()
                 if app_name and app_name not in current_apps_by_name:
                     current_apps_by_name[app_name] = acc
                     print(f"DEBUG: Acceso flex_staff existente incluido en comparación: {app_name}")
             
             temp_apps_by_name = {}
             for app in temp_mesh_apps:
-                app_name = app.get('logical_access_name', '').strip().upper()
+                app_name = self._safe_strip(app.get('logical_access_name'), '').upper()
                 if app_name:
                     temp_apps_by_name[app_name] = app
 
@@ -1944,9 +1957,9 @@ class AccessManagementService:
             if not employee:
                 return {"error": f"Empleado {scotia_id} no encontrado"}
 
-            emp_unit = (employee.get('unit') or '').strip()
-            emp_position = (employee.get('position') or '').strip()
-            emp_unidad_subunidad = (employee.get('unidad_subunidad') or '').strip()
+            emp_unit = self._safe_strip(employee.get('unit'), '')
+            emp_position = self._safe_strip(employee.get('position'), '')
+            emp_unidad_subunidad = self._safe_strip(employee.get('unidad_subunidad'), '')
             
             # Debug: mostrar valores del empleado
             print(f"DEBUG empleado {scotia_id}:")
@@ -1965,7 +1978,7 @@ class AccessManagementService:
                     # Buscar el subunit más reciente del historial
                     for h in history:
                         if h.get('area') == emp_unit and h.get('subunit'):
-                            emp_subunit = h.get('subunit', '').strip()
+                            emp_subunit = self._safe_strip(h.get('subunit'), '')
                             break
                 
                 # Si no encontramos subunit, usar un valor por defecto basado en la unidad
@@ -1986,8 +1999,8 @@ class AccessManagementService:
             # Filtrar aplicaciones que coincidan exactamente con unidad_subunidad y position_role
             filtered_required_apps = []
             for app in required_apps:
-                app_unidad_subunidad = app.get('unidad_subunidad', '').strip()
-                app_position = app.get('position_role', '').strip()
+                app_unidad_subunidad = self._safe_strip(app.get('unidad_subunidad'), '')
+                app_position = self._safe_strip(app.get('position_role'), '')
                 
                 # Solo incluir si coincide exactamente con unidad_subunidad y position
                 if app_unidad_subunidad == emp_unidad_subunidad and app_position == emp_position:
