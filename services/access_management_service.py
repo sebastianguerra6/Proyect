@@ -1299,6 +1299,9 @@ class AccessManagementService:
     def process_employee_offboarding(self, scotia_id: str, responsible: str = "Sistema") -> Tuple[bool, str, List[Dict[str, Any]]]:
         """Procesa el offboarding de un empleado (revoca todo lo que figure completado).
         
+        Busca directamente en la base de datos todos los accesos con 'closed completed' del empleado,
+        sin filtrar por subunidad u otros campos. Solo busca por scotia_id.
+        
         Solo revoca accesos que:
         - Tienen estado 'closed completed'
         - Son de tipos: onboarding, lateral_movement, flex_staff, manual_access
@@ -1309,84 +1312,57 @@ class AccessManagementService:
             if not employee:
                 return False, f"Empleado {scotia_id} no encontrado", []
 
-            history = self.get_employee_history(scotia_id)
+            conn = self.get_connection()
+            cursor = conn.cursor()
             
-            # Crear un diccionario de accesos revocados con sus fechas de revocación
-            # Clave: app_name (lowercase), Valor: fecha más reciente de revocación
-            revoked_accesses = {}
-            for h in history:
-                status = h.get('status') or ''
-                if isinstance(status, str):
-                    status = status.strip().lower()
-                else:
-                    status = str(status).strip().lower() if status else ''
-                
-                if (h.get('process_access') == 'offboarding' and 
-                    status == 'closed completed'):
-                    app_name = h.get('app_access_name') or h.get('app_logical_access_name')
-                    if app_name:
-                        app_key = app_name.lower()
-                        record_date = h.get('record_date')
-                        # Si no existe o esta fecha es más reciente, actualizar
-                        if app_key not in revoked_accesses or (record_date and 
-                            (revoked_accesses[app_key] is None or record_date > revoked_accesses[app_key])):
-                            revoked_accesses[app_key] = record_date
+            # Buscar directamente en la base de datos todos los accesos completados del empleado
+            # que NO hayan sido ya revocados en un offboarding anterior
+            cursor.execute('''
+                SELECT DISTINCT
+                    h.id,
+                    h.app_access_name,
+                    h.process_access,
+                    h.record_date,
+                    h.subunit,
+                    h.event_description
+                FROM historico h
+                WHERE h.scotia_id = ?
+                AND UPPER(LTRIM(RTRIM(h.status))) = 'CLOSED COMPLETED'
+                AND h.process_access IN ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access')
+                AND h.app_access_name IS NOT NULL
+                AND NOT EXISTS (
+                    -- Verificar que no haya un offboarding completado posterior para este mismo acceso
+                    SELECT 1 
+                    FROM historico h2 
+                    WHERE h2.scotia_id = h.scotia_id
+                    AND h2.app_access_name = h.app_access_name
+                    AND h2.process_access = 'offboarding'
+                    AND UPPER(LTRIM(RTRIM(h2.status))) = 'CLOSED COMPLETED'
+                    AND h2.record_date >= h.record_date
+                )
+                ORDER BY h.record_date DESC
+            ''', (scotia_id,))
             
-            # Considerar solo accesos en estado 'closed completed' de tipos: onboarding, lateral_movement, flex_staff y manual_access
-            # Y que NO hayan sido ya revocados en un offboarding anterior (verificando fechas)
-            active_access = []
-            for h in history:
-                process_type = h.get('process_access') or ''
-                status = h.get('status') or ''
-                if isinstance(status, str):
-                    status = status.strip().lower()
-                else:
-                    status = str(status).strip().lower() if status else ''
-                
-                app_name = h.get('app_access_name') or h.get('app_logical_access_name')
-                record_date = h.get('record_date')
-                
-                # Verificar que sea un tipo de acceso válido y esté completado
-                if (process_type in ('onboarding', 'lateral_movement', 'flex_staff', 'manual_access') and
-                    status == 'closed completed' and
-                    app_name):
-                    app_key = app_name.lower()
-                    
-                    # Verificar si el acceso ya fue revocado después de este otorgamiento
-                    already_revoked = False
-                    if app_key in revoked_accesses:
-                        revoked_date = revoked_accesses[app_key]
-                        # Si hay fecha de revocación y es posterior o igual a la fecha de otorgamiento, ya fue revocado
-                        if revoked_date and record_date:
-                            try:
-                                # Convertir a datetime si son strings
-                                if isinstance(revoked_date, str):
-                                    revoked_date = datetime.fromisoformat(revoked_date.replace('Z', '+00:00'))
-                                if isinstance(record_date, str):
-                                    record_date = datetime.fromisoformat(record_date.replace('Z', '+00:00'))
-                                if revoked_date >= record_date:
-                                    already_revoked = True
-                            except:
-                                # Si hay error en la conversión, asumir que ya fue revocado para ser conservador
-                                already_revoked = True
-                        elif revoked_date:
-                            # Si solo hay fecha de revocación, asumir que ya fue revocado
-                            already_revoked = True
-                    
-                    # Solo agregar si no fue ya revocado
-                    if not already_revoked:
-                        active_access.append(h)
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            active_access = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
             
             print(f"DEBUG: Accesos encontrados para revocar (solo 'closed completed' y no revocados previamente): {len(active_access)}")
             for acc in active_access:
-                print(f"DEBUG: Acceso a revocar: {acc.get('app_access_name') or acc.get('app_logical_access_name')} - Status: {acc.get('status')}")
+                app_name = acc.get('app_access_name') or ''
+                print(f"DEBUG: Acceso a revocar: {app_name} - Tipo: {acc.get('process_access', 'N/A')}")
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
 
             for access in active_access:
-                app_name = access.get('app_access_name') or access.get('app_logical_access_name')
-                access_type = access.get('process_access', '')
+                app_name = self._safe_strip(access.get('app_access_name'), '')
+                if not app_name:
+                    continue  # Saltar si no hay nombre de aplicación
+                
+                access_type = self._safe_strip(access.get('process_access'), '')
                 
                 # Crear descripción específica según el tipo de acceso
                 if access_type == 'flex_staff':
@@ -1405,7 +1381,7 @@ class AccessManagementService:
                     'process_access': 'offboarding',
                     'subunit': 'out of the company',  # Subárea fija para offboarding
                     'event_description': event_description,
-                    'ticket_email': f"{responsible}@empresa.com",  # No hay app data disponible aquí
+                    'ticket_email': f"{responsible}@empresa.com",
                     'app_access_name': app_name,
                     'computer_system_type': 'Desktop',
                     'status': 'Pendiente',
