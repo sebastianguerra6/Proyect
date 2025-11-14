@@ -41,13 +41,12 @@ from typing import List, Dict, Any
 #   "MI-SQL-SRV"
 #   "MI-SQL-SRV\\INSTANCIA"
 #   "10.0.0.5"
-SQL_SERVER = "TU_SERVIDOR_SQL"
+#   "localhost\\SQLEXPRESS01"
+SQL_SERVER = "localhost\\SQLEXPRESS01"
 
 # Lista de bases de datos a catalogar (usa los nombres reales)
 DATABASES = [
-    "BaseCoreBanking",
-    "BaseTarjetas",
-    "BaseClientes",
+    "GAMLO_Empleados"
     # Agrega las que necesites
 ]
 
@@ -171,11 +170,18 @@ BUSINESS_SYNONYMS = {
     "cliente": ["cliente", "customer", "titular", "id_cliente"],
     "telefono": ["telefono", "celular", "phone", "mobile"],
     "correo": ["email", "correo", "correo_electronico", "mail"],
+    "aplicacion": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name", "app_name"],
+    "aplicaciones": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name", "app_name"],
+    "nombre": ["nombre", "name", "logical_access_name", "app_access_name", "app_name"],
+    "empleado": ["empleado", "employee", "scotia_id", "sid"],
+    "acceso": ["acceso", "access", "logical_access", "app_access"],
 
     # Inglés
     "id": ["id", "identifier", "id_customer", "id_client"],
     "customer": ["customer", "client", "cliente"],
     "balance": ["balance", "saldo", "monto"],
+    "application": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name"],
+    "app": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name"],
 }
 
 
@@ -222,12 +228,20 @@ def search_catalog(question: str,
     scored = []
 
     for item in catalog:
+        # Crear texto de búsqueda más completo
         text = f"{item['database']} {item['schema']} {item['table']} {item['column']} {item['description']}".lower()
         score = 0
 
         for kw in keywords:
-            if kw in text:
-                score += 4  # Match directo
+            # Match directo en columna (mayor peso)
+            if kw in item['column'].lower():
+                score += 6
+            # Match directo en nombre de tabla
+            elif kw in item['table'].lower():
+                score += 5
+            # Match directo en texto completo
+            elif kw in text:
+                score += 4
             else:
                 # Similaridad aproximada
                 s = difflib.SequenceMatcher(None, kw, text).ratio()
