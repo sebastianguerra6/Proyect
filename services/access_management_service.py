@@ -1356,6 +1356,8 @@ class AccessManagementService:
 
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
+            processed_access = []
+            skipped_inactive_access = []
 
             for access in active_access:
                 app_name = self._safe_strip(access.get('app_access_name'), '')
@@ -1363,6 +1365,14 @@ class AccessManagementService:
                     continue  # Saltar si no hay nombre de aplicación
                 
                 access_type = self._safe_strip(access.get('process_access'), '')
+                
+                # Verificar si el acceso de la aplicación está activo
+                app_info = self._get_application_by_name(app_name)
+                access_status = self._safe_strip(app_info.get('access_status'), '') if app_info else ''
+                if access_status and access_status.lower() != 'activo':
+                    print(f"DEBUG: Omitiendo offboarding para {app_name} porque el acceso está '{access_status}'")
+                    skipped_inactive_access.append(app_name)
+                    continue
                 
                 # Crear descripción específica según el tipo de acceso
                 if access_type == 'flex_staff':
@@ -1391,6 +1401,7 @@ class AccessManagementService:
                 success, message = self.create_historical_record(record_data)
                 if success:
                     created_records.append(record_data)
+                    processed_access.append(access)
                 else:
                     print(f"Error creando registro de offboarding para {app_name}: {message}")
 
@@ -1408,7 +1419,7 @@ class AccessManagementService:
 
             # Crear mensaje detallado con conteo por tipo de acceso
             access_counts = {}
-            for access in active_access:
+            for access in processed_access:
                 access_type = access.get('process_access', '')
                 access_counts[access_type] = access_counts.get(access_type, 0) + 1
             
@@ -1424,6 +1435,9 @@ class AccessManagementService:
                     message += f"- Accesos manuales: {count}\n"
                 else:
                     message += f"- Accesos {access_type}: {count}\n"
+            
+            if skipped_inactive_access:
+                message += f"- Accesos omitidos por estar inactivos: {', '.join(skipped_inactive_access)}\n"
             
             return True, message.strip(), created_records
 

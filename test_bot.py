@@ -5,8 +5,10 @@
 Asistente simple de estructuras de SQL Server (solo metadatos).
 
 Funcionalidades:
-1) Construir un catálogo de columnas (JSON) recorriendo varias bases de datos.
-2) Iniciar un "chat" en consola para buscar tablas/columnas por descripción.
+1) Construir un catálogo de columnas recorriendo varias bases de datos.
+   El resultado se almacena localmente en SQLite (schema_catalog.db) para evitar JSON masivos.
+2) Iniciar un "chat" en consola para buscar tablas/columnas por descripción
+   usando coincidencias léxicas y heurísticas (sin depender de IA ni catálogos manuales).
 
 Requisitos:
     pip install pyodbc
@@ -26,10 +28,12 @@ IMPORTANTE:
 """
 
 import pyodbc
-import json
+import sqlite3
 import os
 import difflib
 import argparse
+import re
+import unicodedata
 from typing import List, Dict, Any
 
 # ==========================
@@ -50,8 +54,10 @@ DATABASES = [
     # Agrega las que necesites
 ]
 
-# Archivo donde se guarda el catálogo
-CATALOG_FILE = "schema_catalog.json"
+# Archivo local donde se guarda el catálogo (SQLite para evitar JSON masivo)
+CATALOG_DB_FILE = "schema_catalog.db"
+BATCH_SIZE = 500
+CANDIDATE_LIMIT = 400
 
 
 # ==========================
@@ -72,27 +78,145 @@ def get_connection(database: str):
     return pyodbc.connect(conn_str)
 
 
+def init_catalog_store(reset: bool = False) -> sqlite3.Connection:
+    """
+    Inicializa la base SQLite que almacena el catálogo.
+    """
+    conn = sqlite3.connect(CATALOG_DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            database_name TEXT NOT NULL,
+            schema_name TEXT NOT NULL,
+            table_name TEXT NOT NULL,
+            column_name TEXT NOT NULL,
+            data_type TEXT,
+            max_length INTEGER,
+            is_nullable INTEGER,
+            description TEXT
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalog_table ON catalog(table_name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalog_column ON catalog(column_name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalog_schema ON catalog(schema_name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_catalog_desc ON catalog(description)")
+    cursor.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS catalog_fts 
+        USING fts5(
+            catalog_id UNINDEXED,
+            content,
+            tokenize = 'unicode61 remove_diacritics 2'
+        )
+    """)
+    if reset:
+        cursor.execute("DELETE FROM catalog")
+        cursor.execute("DELETE FROM catalog_fts")
+    conn.commit()
+    return conn
+
+
+# ==========================
+# UTILIDADES DE NORMALIZACIÓN
+# ==========================
+
+WORD_PATTERN = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]+")
+CAMEL_SPLIT_PATTERN = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def normalize_token(value: str) -> str:
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    without_marks = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return without_marks.lower()
+
+
+def split_identifier(value: str) -> List[str]:
+    if not value:
+        return []
+    replaced = value.replace("_", " ").replace("-", " ").replace("/", " ")
+    camel = CAMEL_SPLIT_PATTERN.sub(" ", replaced)
+    tokens = WORD_PATTERN.findall(camel)
+    return tokens
+
+
+def generate_word_variants(token: str) -> List[str]:
+    variants = {token}
+    if token.endswith("es") and len(token) > 3:
+        variants.add(token[:-2])
+    if token.endswith("s") and len(token) > 3:
+        variants.add(token[:-1])
+    else:
+        variants.add(f"{token}s")
+    if token.startswith("num"):
+        variants.add(token.replace("num", "numero"))
+    if "numero" in token:
+        variants.add(token.replace("numero", "num"))
+    if token.endswith("cion"):
+        variants.add(token[:-3] + "ción")
+    consonants = re.sub(r"[aeiouáéíóúü]", "", token)
+    if len(consonants) >= 3:
+        variants.add(consonants)
+    if len(token) > 4:
+        variants.add(token[:4])
+    variants = {v for v in variants if v}
+    return list(variants)
+
+
+def build_acronym(text: str) -> str:
+    parts = split_identifier(text)
+    acronym = "".join(part[0] for part in parts if part)
+    acronym = normalize_token(acronym)
+    return acronym if len(acronym) >= 2 else ""
+
+
+def build_search_blob(entry: Dict[str, Any]) -> str:
+    texts = []
+    for field in ("database", "schema", "table", "column", "data_type", "description"):
+        value = entry.get(field) or ""
+        if not value:
+            continue
+        texts.append(value)
+        texts.append(value.replace("_", " "))
+    tokens = []
+    for text in texts:
+        for token in split_identifier(text):
+            normalized = normalize_token(token)
+            if normalized:
+                tokens.extend(generate_word_variants(normalized))
+    for field in ("table", "column"):
+        acronym = build_acronym(entry.get(field, "") or "")
+        if acronym:
+            tokens.append(acronym)
+    unique_tokens = sorted(set(tokens))
+    return " ".join(unique_tokens)
+
+
+def sanitize_for_fts(keyword: str) -> str:
+    return re.sub(r"[^0-9a-z_]", "", keyword)
+
+
 # ==========================
 # CONSTRUCCIÓN DEL CATÁLOGO
 # ==========================
 
-def build_catalog() -> List[Dict[str, Any]]:
+def build_catalog() -> int:
     """
-    Recorre las bases de datos configuradas y arma un catálogo de columnas.
-
-    SOLO lee metadatos (sys.tables, sys.columns, etc.).
-    No se leen filas de datos.
+    Recorre las bases de datos configuradas y almacena un catálogo de columnas
+    en SQLite (evita generar un JSON gigante).
     """
-    catalog = []
+    catalog_conn = init_catalog_store(reset=True)
+    insert_cursor = catalog_conn.cursor()
+    total = 0
 
     for db_name in DATABASES:
         print(f"[INFO] Catalogando base de datos: {db_name} ...")
-        conn = get_connection(db_name)
-        cursor = conn.cursor()
+        sql_conn = get_connection(db_name)
+        sql_cursor = sql_conn.cursor()
 
-        # Consulta de metadatos (tablas, columnas, tipos)
-        # Incluye descripción si se usa MS_Description en extended properties
-        cursor.execute("""
+        sql_cursor.execute("""
             SELECT
                 DB_NAME() AS database_name,
                 s.name AS schema_name,
@@ -113,77 +237,60 @@ def build_catalog() -> List[Dict[str, Any]]:
             ORDER BY s.name, t.name, c.column_id;
         """)
 
-        rows = cursor.fetchall()
-        for row in rows:
-            catalog.append({
-                "database": row.database_name,
-                "schema": row.schema_name,
-                "table": row.table_name,
-                "column": row.column_name,
-                "data_type": row.data_type,
-                "max_length": int(row.max_length) if row.max_length is not None else None,
-                "is_nullable": bool(row.is_nullable),
-                "description": str(row.column_description) if row.column_description is not None else ""
-            })
+        while True:
+            rows = sql_cursor.fetchmany(BATCH_SIZE)
+            if not rows:
+                break
 
-        conn.close()
+            for row in rows:
+                entry = {
+                    "database": row.database_name,
+                    "schema": row.schema_name,
+                    "table": row.table_name,
+                    "column": row.column_name,
+                    "data_type": row.data_type,
+                    "max_length": int(row.max_length) if row.max_length is not None else None,
+                    "is_nullable": int(bool(row.is_nullable)),
+                    "description": str(row.column_description) if row.column_description is not None else ""
+                }
 
-    print(f"[INFO] Se catalogaron {len(catalog)} columnas en total.")
-    return catalog
+                insert_cursor.execute("""
+                    INSERT INTO catalog (
+                        database_name, schema_name, table_name, column_name,
+                        data_type, max_length, is_nullable, description
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    entry["database"],
+                    entry["schema"],
+                    entry["table"],
+                    entry["column"],
+                    entry["data_type"],
+                    entry["max_length"],
+                    entry["is_nullable"],
+                    entry["description"]
+                ))
 
+                catalog_id = insert_cursor.lastrowid
+                content_blob = build_search_blob(entry) or entry["column"]
+                insert_cursor.execute("""
+                    INSERT INTO catalog_fts (catalog_id, content)
+                    VALUES (?, ?)
+                """, (catalog_id, content_blob))
 
-def save_catalog(catalog: List[Dict[str, Any]], filename: str = CATALOG_FILE):
-    """
-    Guarda el catálogo en un archivo JSON.
-    """
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(catalog, f, ensure_ascii=False, indent=2)
-    print(f"[INFO] Catálogo guardado en: {filename}")
+                total += 1
 
+            catalog_conn.commit()
 
-def load_catalog(filename: str = CATALOG_FILE) -> List[Dict[str, Any]]:
-    """
-    Carga el catálogo desde un archivo JSON.
-    """
-    if not os.path.exists(filename):
-        print(f"[ERROR] No se encontró el archivo {filename}.")
-        print("        Primero ejecuta el script con --build-catalog.")
-        return []
+        sql_conn.close()
 
-    with open(filename, "r", encoding="utf-8") as f:
-        catalog = json.load(f)
-    print(f"[INFO] Catálogo cargado. Columnas totales: {len(catalog)}")
-    return catalog
+    catalog_conn.close()
+    print(f"[INFO] Se catalogaron {total} columnas en total.")
+    return total
 
 
 # ==========================
 # BÚSQUEDA "INTELIGENTE"
 # ==========================
-
-# Diccionario de sinónimos de negocio (adáptalo al contexto de tu banco)
-BUSINESS_SYNONYMS = {
-    # Español
-    "cedula": ["cedula", "dni", "documento", "num_documento", "numero_documento", "id_cliente"],
-    "documento": ["dni", "documento", "num_documento"],
-    "tarjeta": ["tarjeta", "card", "num_tarjeta", "pan"],
-    "cuenta": ["cuenta", "num_cuenta", "numero_cuenta", "acct", "account"],
-    "cliente": ["cliente", "customer", "titular", "id_cliente"],
-    "telefono": ["telefono", "celular", "phone", "mobile"],
-    "correo": ["email", "correo", "correo_electronico", "mail"],
-    "aplicacion": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name", "app_name"],
-    "aplicaciones": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name", "app_name"],
-    "nombre": ["nombre", "name", "logical_access_name", "app_access_name", "app_name"],
-    "empleado": ["empleado", "employee", "scotia_id", "sid"],
-    "acceso": ["acceso", "access", "logical_access", "app_access"],
-
-    # Inglés
-    "id": ["id", "identifier", "id_customer", "id_client"],
-    "customer": ["customer", "client", "cliente"],
-    "balance": ["balance", "saldo", "monto"],
-    "application": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name"],
-    "app": ["aplicacion", "aplicaciones", "app", "application", "logical_access_name", "app_access_name"],
-}
-
 
 STOPWORDS = {
     # Español
@@ -197,19 +304,57 @@ STOPWORDS = {
 
 def expand_keywords(words: List[str]) -> List[str]:
     """
-    Expande las palabras clave usando el diccionario de sinónimos.
+    Expande las palabras clave usando normalización y heurísticas básicas.
     """
-    expanded = set(words)
+    expanded = set()
     for w in words:
-        base = w.lower()
-        if base in BUSINESS_SYNONYMS:
-            for syn in BUSINESS_SYNONYMS[base]:
-                expanded.add(syn.lower())
+        normalized = normalize_token(w)
+        if not normalized:
+            continue
+        for variant in generate_word_variants(normalized):
+            expanded.add(variant)
     return list(expanded)
 
 
+def _collect_candidates(conn: sqlite3.Connection, keywords: List[str]) -> List[Dict[str, Any]]:
+    """
+    Recupera candidatos desde SQLite usando coincidencias por LIKE para cada palabra clave.
+    """
+    candidates: Dict[str, Dict[str, Any]] = {}
+    cursor = conn.cursor()
+    for kw in keywords:
+        like_kw = f"%{kw}%"
+        cursor.execute("""
+            SELECT 
+                database_name, schema_name, table_name, column_name,
+                data_type, max_length, is_nullable, description
+            FROM catalog
+            WHERE column_name LIKE ?
+               OR table_name LIKE ?
+               OR description LIKE ?
+               OR schema_name LIKE ?
+               OR database_name LIKE ?
+            LIMIT ?
+        """, (like_kw, like_kw, like_kw, like_kw, like_kw, CANDIDATE_LIMIT))
+
+        for row in cursor.fetchall():
+            key = f"{row['database_name']}|{row['schema_name']}|{row['table_name']}|{row['column_name']}"
+            if key not in candidates:
+                candidates[key] = {
+                    "database": row["database_name"],
+                    "schema": row["schema_name"],
+                    "table": row["table_name"],
+                    "column": row["column_name"],
+                    "data_type": row["data_type"],
+                    "max_length": row["max_length"],
+                    "is_nullable": bool(row["is_nullable"]),
+                    "description": row["description"] or ""
+                }
+    return list(candidates.values())
+
+
 def search_catalog(question: str,
-                   catalog: List[Dict[str, Any]],
+                   conn: sqlite3.Connection,
                    max_results: int = 10) -> List[Dict[str, Any]]:
     """
     Busca en el catálogo las columnas más relacionadas con la pregunta.
@@ -225,9 +370,13 @@ def search_catalog(question: str,
     if not keywords:
         return []
 
+    candidates = _collect_candidates(conn, keywords)
+    if not candidates:
+        return []
+
     scored = []
 
-    for item in catalog:
+    for item in candidates:
         # Crear texto de búsqueda más completo
         text = f"{item['database']} {item['schema']} {item['table']} {item['column']} {item['description']}".lower()
         score = 0
@@ -275,13 +424,16 @@ def format_result(item: Dict[str, Any]) -> str:
     )
 
 
-def run_chat(catalog: List[Dict[str, Any]]):
+def run_chat():
     """
     Inicia un chat simple por consola.
     """
-    if not catalog:
-        print("[ERROR] El catálogo está vacío. ¿Ya lo construiste?")
+    if not os.path.exists(CATALOG_DB_FILE):
+        print(f"[ERROR] No se encontró {CATALOG_DB_FILE}. Ejecuta primero el script con --build-catalog.")
         return
+
+    conn = sqlite3.connect(CATALOG_DB_FILE)
+    conn.row_factory = sqlite3.Row
 
     print("==============================================")
     print(" Asistente de estructura de BD (solo metadatos)")
@@ -305,7 +457,7 @@ def run_chat(catalog: List[Dict[str, Any]]):
             print("[INFO] Saliendo...")
             break
 
-        results = search_catalog(q, catalog)
+        results = search_catalog(q, conn)
 
         if not results:
             print("Bot: No encontré columnas relacionadas con esa descripción.")
@@ -314,6 +466,8 @@ def run_chat(catalog: List[Dict[str, Any]]):
         print("Bot: Podría estar en alguno de estos campos:")
         for r in results:
             print("  - " + format_result(r))
+
+    conn.close()
 
 
 # ==========================
@@ -327,14 +481,22 @@ def main():
         action="store_true",
         help="Reconstruye el catálogo de columnas a partir de las bases de datos configuradas."
     )
+    parser.add_argument(
+        "--export-synonyms",
+        action="store_true",
+        help="Genera un archivo CSV editable con ejemplos de sinónimos."
+    )
     args = parser.parse_args()
 
+    if args.export_synonyms:
+        export_synonyms_template()
+        return
+
     if args.build_catalog:
-        catalog = build_catalog()
-        save_catalog(catalog, CATALOG_FILE)
+        total = build_catalog()
+        print(f"[INFO] Catálogo guardado en {CATALOG_DB_FILE} ({total} columnas).")
     else:
-        catalog = load_catalog(CATALOG_FILE)
-        run_chat(catalog)
+        run_chat()
 
 
 if __name__ == "__main__":
