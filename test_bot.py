@@ -27,14 +27,24 @@ IMPORTANTE:
   en las bases de datos que quieras catalogar.
 """
 
-import pyodbc
-import sqlite3
+import csv
+import json
 import os
-import difflib
-import argparse
 import re
+import sqlite3
+import sys
 import unicodedata
-from typing import List, Dict, Any
+import argparse
+import difflib
+import pyodbc
+from functools import lru_cache
+from typing import List, Dict, Any, Tuple, Optional
+
+try:
+    from nltk.corpus import wordnet as wn  # type: ignore
+    WORDNET_AVAILABLE = True
+except (ImportError, LookupError):
+    WORDNET_AVAILABLE = False
 
 # ==========================
 # CONFIGURACIÓN
@@ -198,6 +208,35 @@ def sanitize_for_fts(keyword: str) -> str:
     return re.sub(r"[^0-9a-z_]", "", keyword)
 
 
+def get_wordnet_variants(token: str) -> List[str]:
+    """
+    Obtiene sinónimos desde WordNet (si está disponible) para enriquecer la búsqueda.
+    Se apoya en los vocabularios en inglés y español. Requiere haber ejecutado:
+        >>> import nltk; nltk.download('wordnet'); nltk.download('omw-1.4')
+    """
+    if not WORDNET_AVAILABLE or not token:
+        return []
+
+    synonyms = set()
+    try:
+        synsets = wn.synsets(token, lang='spa') + wn.synsets(token, lang='eng')
+    except LookupError:
+        # Datos de wordnet no descargados aún
+        return []
+
+    for synset in synsets:
+        for lemma in synset.lemmas(lang='eng'):
+            synonyms.add(normalize_token(lemma.name()))
+        try:
+            for lemma in synset.lemmas(lang='spa'):
+                synonyms.add(normalize_token(lemma.name()))
+        except KeyError:
+            # El synset puede no contener lemmas en español
+            continue
+
+    return [syn for syn in synonyms if syn and syn != token]
+
+
 # ==========================
 # CONSTRUCCIÓN DEL CATÁLOGO
 # ==========================
@@ -302,21 +341,38 @@ STOPWORDS = {
 }
 
 
-def expand_keywords(words: List[str]) -> List[str]:
+def expand_keywords(words: List[str], debug: bool = False) -> Tuple[List[str], Dict[str, List[str]]]:
     """
-    Expande las palabras clave usando normalización y heurísticas básicas.
+    Expande las palabras clave usando normalización, heurísticas básicas y sinónimos (WordNet).
+    Retorna la lista de términos y, si debug es True, las variantes generadas por cada palabra.
     """
     expanded = set()
+    debug_map: Dict[str, List[str]] = {}
+
     for w in words:
         normalized = normalize_token(w)
         if not normalized:
             continue
-        for variant in generate_word_variants(normalized):
-            expanded.add(variant)
-    return list(expanded)
+
+        variants = set([normalized])
+        heuristic = generate_word_variants(normalized)
+        variants.update(heuristic)
+        wordnet_variants = get_wordnet_variants(normalized)
+        variants.update(wordnet_variants)
+        expanded.update(variants)
+
+        if debug:
+            debug_map[normalized] = sorted(variants)
+
+    return list(expanded), debug_map
 
 
-def _collect_candidates(conn: sqlite3.Connection, keywords: List[str]) -> List[Dict[str, Any]]:
+def _collect_candidates(
+    conn: sqlite3.Connection,
+    keywords: List[str],
+    db_filter: Optional[str] = None,
+    schema_filter: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Recupera candidatos desde SQLite usando coincidencias por LIKE para cada palabra clave.
     """
@@ -324,18 +380,32 @@ def _collect_candidates(conn: sqlite3.Connection, keywords: List[str]) -> List[D
     cursor = conn.cursor()
     for kw in keywords:
         like_kw = f"%{kw}%"
-        cursor.execute("""
+        query = """
             SELECT 
                 database_name, schema_name, table_name, column_name,
                 data_type, max_length, is_nullable, description
             FROM catalog
-            WHERE column_name LIKE ?
-               OR table_name LIKE ?
-               OR description LIKE ?
-               OR schema_name LIKE ?
-               OR database_name LIKE ?
-            LIMIT ?
-        """, (like_kw, like_kw, like_kw, like_kw, like_kw, CANDIDATE_LIMIT))
+            WHERE (
+                column_name LIKE ?
+                OR table_name LIKE ?
+                OR description LIKE ?
+                OR schema_name LIKE ?
+                OR database_name LIKE ?
+            )
+        """
+        params: List[Any] = [like_kw, like_kw, like_kw, like_kw, like_kw]
+
+        if db_filter:
+            query += " AND database_name = ?"
+            params.append(db_filter)
+        if schema_filter:
+            query += " AND schema_name = ?"
+            params.append(schema_filter)
+
+        query += " LIMIT ?"
+        params.append(CANDIDATE_LIMIT)
+
+        cursor.execute(query, tuple(params))
 
         for row in cursor.fetchall():
             key = f"{row['database_name']}|{row['schema_name']}|{row['table_name']}|{row['column_name']}"
@@ -353,46 +423,42 @@ def _collect_candidates(conn: sqlite3.Connection, keywords: List[str]) -> List[D
     return list(candidates.values())
 
 
-def search_catalog(question: str,
-                   conn: sqlite3.Connection,
-                   max_results: int = 10) -> List[Dict[str, Any]]:
+@lru_cache(maxsize=256)
+def _cached_search(signature_json: str) -> List[Dict[str, Any]]:
     """
-    Busca en el catálogo las columnas más relacionadas con la pregunta.
-    Utiliza:
-        - Coincidencias directas por substring
-        - Similaridad aproximada (difflib)
+    Ejecuta la búsqueda usando una firma cacheable (keywords + filtros).
+    La conexión SQLite se abre aquí para evitar serializar objetos no cacheables.
     """
-    # Tokenizar pregunta muy simple
-    raw_tokens = [w.strip("¿?!.:,;()").lower() for w in question.split()]
-    keywords = [w for w in raw_tokens if w and w not in STOPWORDS]
-    keywords = expand_keywords(keywords)
+    signature = json.loads(signature_json)
+    keywords = signature["keywords"]
+    db_filter = signature.get("db_filter")
+    schema_filter = signature.get("schema_filter")
+    limit = signature.get("limit", 10)
 
-    if not keywords:
-        return []
+    conn = sqlite3.connect(CATALOG_DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        candidates = _collect_candidates(conn, keywords, db_filter=db_filter, schema_filter=schema_filter)
+    finally:
+        conn.close()
 
-    candidates = _collect_candidates(conn, keywords)
     if not candidates:
         return []
 
     scored = []
 
     for item in candidates:
-        # Crear texto de búsqueda más completo
         text = f"{item['database']} {item['schema']} {item['table']} {item['column']} {item['description']}".lower()
         score = 0
 
         for kw in keywords:
-            # Match directo en columna (mayor peso)
             if kw in item['column'].lower():
                 score += 6
-            # Match directo en nombre de tabla
             elif kw in item['table'].lower():
                 score += 5
-            # Match directo en texto completo
             elif kw in text:
                 score += 4
             else:
-                # Similaridad aproximada
                 s = difflib.SequenceMatcher(None, kw, text).ratio()
                 if s > 0.6:
                     score += int(s * 3)
@@ -400,10 +466,46 @@ def search_catalog(question: str,
         if score > 0:
             scored.append((score, item))
 
-    # Ordenar por score descendente
     scored.sort(key=lambda x: x[0], reverse=True)
+    return [x[1] for x in scored[:limit]]
 
-    return [x[1] for x in scored[:max_results]]
+
+def search_catalog(question: str,
+                   conn: sqlite3.Connection,
+                   max_results: int = 10,
+                   db_filter: Optional[str] = None,
+                   schema_filter: Optional[str] = None,
+                   debug: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
+    """
+    Busca en el catálogo las columnas más relacionadas con la pregunta.
+    Admite filtros in-line como @db=NombreBD y @schema=NombreSchema.
+    """
+    raw_tokens = [w.strip("¿?!.:,;()").lower() for w in question.split()]
+
+    keywords: List[str] = []
+
+    for token in raw_tokens:
+        if token.startswith("@db="):
+            db_filter = token.split("=", 1)[1]
+        elif token.startswith("@schema="):
+            schema_filter = token.split("=", 1)[1]
+        elif token and token not in STOPWORDS:
+            keywords.append(token)
+
+    keywords, debug_map = expand_keywords(keywords, debug=debug)
+
+    if not keywords:
+        return [], debug_map
+
+    signature_json = json.dumps({
+        "keywords": keywords,
+        "db_filter": db_filter,
+        "schema_filter": schema_filter,
+        "limit": max_results,
+    }, sort_keys=True)
+
+    results = _cached_search(signature_json)
+    return results, debug_map
 
 
 # ==========================
@@ -424,7 +526,7 @@ def format_result(item: Dict[str, Any]) -> str:
     )
 
 
-def run_chat():
+def run_chat(output_format: str = "text", limit: int = 10, debug: bool = False):
     """
     Inicia un chat simple por consola.
     """
@@ -457,15 +559,38 @@ def run_chat():
             print("[INFO] Saliendo...")
             break
 
-        results = search_catalog(q, conn)
+        results, debug_map = search_catalog(q, conn, max_results=limit, debug=debug)
+
+        if debug and debug_map:
+            print("DEBUG: Variantes generadas por palabra:")
+            for token, variants in debug_map.items():
+                print(f"  {token}: {', '.join(variants)}")
 
         if not results:
             print("Bot: No encontré columnas relacionadas con esa descripción.")
             continue
 
-        print("Bot: Podría estar en alguno de estos campos:")
-        for r in results:
-            print("  - " + format_result(r))
+        if output_format == "json":
+            print(json.dumps(results, ensure_ascii=False, indent=2))
+        elif output_format == "csv":
+            writer = csv.DictWriter(
+                sys.stdout,
+                fieldnames=["database", "schema", "table", "column", "data_type", "description"]
+            )
+            writer.writeheader()
+            for r in results:
+                writer.writerow({
+                    "database": r["database"],
+                    "schema": r["schema"],
+                    "table": r["table"],
+                    "column": r["column"],
+                    "data_type": r["data_type"],
+                    "description": r["description"],
+                })
+        else:
+            print("Bot: Podría estar en alguno de estos campos:")
+            for r in results:
+                print("  - " + format_result(r))
 
     conn.close()
 
@@ -482,21 +607,29 @@ def main():
         help="Reconstruye el catálogo de columnas a partir de las bases de datos configuradas."
     )
     parser.add_argument(
-        "--export-synonyms",
+        "--output",
+        choices=["text", "json", "csv"],
+        default="text",
+        help="Formato de salida para los resultados del chat."
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Número máximo de resultados por consulta."
+    )
+    parser.add_argument(
+        "--debug",
         action="store_true",
-        help="Genera un archivo CSV editable con ejemplos de sinónimos."
+        help="Muestra las variantes/sinónimos generados para cada término."
     )
     args = parser.parse_args()
-
-    if args.export_synonyms:
-        export_synonyms_template()
-        return
 
     if args.build_catalog:
         total = build_catalog()
         print(f"[INFO] Catálogo guardado en {CATALOG_DB_FILE} ({total} columnas).")
     else:
-        run_chat()
+        run_chat(output_format=args.output, limit=args.limit, debug=args.debug)
 
 
 if __name__ == "__main__":
