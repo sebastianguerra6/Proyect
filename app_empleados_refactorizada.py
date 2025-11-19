@@ -724,7 +724,6 @@ class ConciliacionFrame:
                     conn.close()
                     
                     # Crear aplicaciones de ejemplo si no existen
-                    self._ensure_sample_applications()
                     
                     messagebox.showinfo("Datos Actualizados", 
                         "Se han asignado datos de ejemplo al empleado.\n"
@@ -750,42 +749,6 @@ class ConciliacionFrame:
         except Exception as e:
             messagebox.showerror("Error", f"Error durante la conciliación: {str(e)}")
     
-    def _ensure_sample_applications(self):
-        """Asegura que existan aplicaciones de ejemplo para la conciliación"""
-        try:
-            conn = access_service.get_connection()
-            cursor = conn.cursor()
-            
-            # Verificar si ya existen aplicaciones para ANALISTA SENIOR en TECNOLOGÍA
-            cursor.execute("""
-                SELECT COUNT(*) FROM applications 
-                WHERE unidad_subunidad = 'Tecnología/Desarrollo' AND position_role = 'Analista Senior'
-            """)
-            count = cursor.fetchone()[0]
-            
-            if count == 0:
-                # Crear aplicaciones de ejemplo
-                applications_data = [
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'JIRA', 'JIRA', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de gestión de proyectos'),
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'CONFLUENCE', 'CONFLUENCE', 'ANALISTA SENIOR', 'USER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de documentación'),
-                    ('Global', 'TECNOLOGÍA', 'DESARROLLO', 'Tecnología/Desarrollo', 'GITLAB', 'GITLAB', 'ANALISTA SENIOR', 'DEVELOPER', 'Aplicación', 'Desarrollo', 'Activo', 'Tecnología', 'Sistema de control de versiones'),
-                    ('Global', 'TECNOLOGÍA', 'ANALISIS', 'Tecnología/Desarrollo', 'POWER BI', 'POWER BI', 'ANALISTA SENIOR', 'ANALYST', 'Aplicación', 'Analytics', 'Activo', 'Tecnología', 'Herramienta de análisis de datos')
-                ]
-                
-                for app in applications_data:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO applications 
-                        (jurisdiction, unit, subunit, unidad_subunidad, logical_access_name, alias, position_role, 
-                         role_name, access_type, category, access_status, system_owner, description)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, app)
-                
-                conn.commit()
-            
-            conn.close()
-            
-        except Exception as e:
-            print(f"Error creando aplicaciones de ejemplo: {e}")
     
     def _asignar_accesos_automaticos(self):
         """Asigna accesos automáticamente según la unit y position del empleado"""

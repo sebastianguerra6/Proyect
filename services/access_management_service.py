@@ -510,7 +510,7 @@ class AccessManagementService:
             cursor = conn.cursor()
 
             cursor.execute('''
-                SELECT logical_access_name, jurisdiction, unit, subunit, 
+                SELECT TOP 1 logical_access_name, jurisdiction, unit, subunit, 
                        alias, path_email_url, position_role, exception_tracking, 
                        fulfillment_action, system_owner, role_name, access_type, 
                        category, additional_data, ad_code, access_status, 
@@ -518,7 +518,6 @@ class AccessManagementService:
                        authentication_method
                 FROM applications 
                 WHERE logical_access_name = ?
-                LIMIT 1
             ''', (logical_access_name,))
 
             row = cursor.fetchone()
@@ -704,10 +703,9 @@ class AccessManagementService:
                     conn = self.get_connection()
                     cursor = conn.cursor()
                     cursor.execute('''
-                        SELECT unit, subunit, role_name, description
+                        SELECT TOP 1 unit, subunit, role_name, description
                         FROM applications 
                         WHERE logical_access_name = ? AND position_role = ?
-                        LIMIT 1
                     ''', (app_name, position))
                     
                     app_row = cursor.fetchone()
@@ -1369,7 +1367,9 @@ class AccessManagementService:
                 # Verificar si el acceso de la aplicación está activo
                 app_info = self._get_application_by_name(app_name)
                 access_status = self._safe_strip(app_info.get('access_status'), '') if app_info else ''
-                if access_status and access_status.lower() != 'activo':
+                normalized_status = access_status.lower()
+                is_active_status = normalized_status in ('activo', 'active')
+                if access_status and not is_active_status:
                     print(f"DEBUG: Omitiendo offboarding para {app_name} porque el acceso está '{access_status}'")
                     skipped_inactive_access.append(app_name)
                     continue
@@ -2186,7 +2186,7 @@ class AccessManagementService:
                     
                     # Eliminar solo el primer registro
                     cursor.execute(
-                        "DELETE FROM historico WHERE scotia_id = ? AND case_id = ? LIMIT 1",
+                        "DELETE TOP (1) FROM historico WHERE scotia_id = ? AND case_id = ?",
                         (scotia_id, case_id)
                     )
                 
