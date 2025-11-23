@@ -372,6 +372,8 @@ def _collect_candidates(
     keywords: List[str],
     db_filter: Optional[str] = None,
     schema_filter: Optional[str] = None,
+    table_filter: Optional[str] = None,
+    column_filter: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Recupera candidatos desde SQLite usando coincidencias por LIKE para cada palabra clave.
@@ -401,6 +403,12 @@ def _collect_candidates(
         if schema_filter:
             query += " AND schema_name = ?"
             params.append(schema_filter)
+        if table_filter:
+            query += " AND table_name LIKE ?"
+            params.append(f"%{table_filter}%")
+        if column_filter:
+            query += " AND column_name LIKE ?"
+            params.append(f"%{column_filter}%")
 
         query += " LIMIT ?"
         params.append(CANDIDATE_LIMIT)
@@ -433,12 +441,21 @@ def _cached_search(signature_json: str) -> List[Dict[str, Any]]:
     keywords = signature["keywords"]
     db_filter = signature.get("db_filter")
     schema_filter = signature.get("schema_filter")
+    table_filter = signature.get("table_filter")
+    column_filter = signature.get("column_filter")
     limit = signature.get("limit", 10)
 
     conn = sqlite3.connect(CATALOG_DB_FILE)
     conn.row_factory = sqlite3.Row
     try:
-        candidates = _collect_candidates(conn, keywords, db_filter=db_filter, schema_filter=schema_filter)
+        candidates = _collect_candidates(
+            conn,
+            keywords,
+            db_filter=db_filter,
+            schema_filter=schema_filter,
+            table_filter=table_filter,
+            column_filter=column_filter,
+        )
     finally:
         conn.close()
 
@@ -475,6 +492,8 @@ def search_catalog(question: str,
                    max_results: int = 10,
                    db_filter: Optional[str] = None,
                    schema_filter: Optional[str] = None,
+                   table_filter: Optional[str] = None,
+                   column_filter: Optional[str] = None,
                    debug: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
     """
     Busca en el catálogo las columnas más relacionadas con la pregunta.
@@ -489,6 +508,10 @@ def search_catalog(question: str,
             db_filter = token.split("=", 1)[1]
         elif token.startswith("@schema="):
             schema_filter = token.split("=", 1)[1]
+        elif token.startswith("@table="):
+            table_filter = token.split("=", 1)[1]
+        elif token.startswith("@column="):
+            column_filter = token.split("=", 1)[1]
         elif token and token not in STOPWORDS:
             keywords.append(token)
 
@@ -501,6 +524,8 @@ def search_catalog(question: str,
         "keywords": keywords,
         "db_filter": db_filter,
         "schema_filter": schema_filter,
+        "table_filter": table_filter,
+        "column_filter": column_filter,
         "limit": max_results,
     }, sort_keys=True)
 
@@ -543,6 +568,7 @@ def run_chat(output_format: str = "text", limit: int = 10, debug: bool = False):
     print(" Ejemplos de preguntas:")
     print("   - ¿Dónde está el número de cuenta del cliente?")
     print("   - columnas donde se guarda la cédula del cliente")
+    print("   - Usa filtros como @db=NombreBD, @schema=Schema, @table=Tabla, @column=Columna")
     print("==============================================")
 
     while True:
@@ -559,7 +585,12 @@ def run_chat(output_format: str = "text", limit: int = 10, debug: bool = False):
             print("[INFO] Saliendo...")
             break
 
-        results, debug_map = search_catalog(q, conn, max_results=limit, debug=debug)
+        results, debug_map = search_catalog(
+            q,
+            conn,
+            max_results=limit,
+            debug=debug,
+        )
 
         if debug and debug_map:
             print("DEBUG: Variantes generadas por palabra:")

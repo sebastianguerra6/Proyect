@@ -1411,7 +1411,10 @@ class AccessManagementService:
             inactivation_date = datetime.now().strftime('%Y-%m-%d')
             cursor.execute('''
                 UPDATE headcount 
-                SET activo = 0, inactivation_date = ? 
+                SET activo = 0, 
+                    inactivation_date = ?, 
+                    unit = 'out of the unit',
+                    unidad_subunidad = 'out of the unit'
                 WHERE scotia_id = ?
             ''', (inactivation_date, scotia_id))
             conn.commit()
