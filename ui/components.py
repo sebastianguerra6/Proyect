@@ -904,7 +904,7 @@ class EdicionBusquedaFrame:
                     resultado.get('unit', ''),       # Departamento
                     resultado.get('unidad_subunidad', ''),  # Unidad/Subunidad
                     resultado.get('position', ''),   # Cargo
-                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
+                    'Active' if resultado.get('activo', True) else 'Inactive'  # Estado
                 )
                 
                 if i < 2:  # Debug para los primeros 2 registros
@@ -1834,7 +1834,7 @@ class CreacionPersonaFrame:
             'size': tk.StringVar(),
             'birthday': tk.StringVar(),
             'validacion': tk.StringVar(),
-            'activo': tk.StringVar(value="Activo"),
+            'activo': tk.StringVar(value="Active"),
             'inactivation_date': tk.StringVar(),
             # Campos para filtros
             'filtro_texto': tk.StringVar(),
@@ -1862,7 +1862,7 @@ class CreacionPersonaFrame:
             "Size": "size",
             "Cumpleaños": "birthday",
             "Validación": "validacion",
-            "Activo": "activo",
+            "Active": "activo",
             "Fecha de Inactivación": "inactivation_date"
         }
     
@@ -2098,7 +2098,7 @@ class CreacionPersonaFrame:
             for campo_ui, valor_filtro in self.filtros_activos.items():
                 campo_bd = self.campos_filtro.get(campo_ui)
                 if campo_bd:
-                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    valor_campo = self._obtener_valor_persona(resultado, campo_bd)
                     if valor_filtro.lower() not in valor_campo:
                         cumple_filtros = False
                         break
@@ -2147,7 +2147,7 @@ class CreacionPersonaFrame:
             if todos_resultados:
                 resultados_filtrados = []
                 for resultado in todos_resultados:
-                    valor_campo = str(resultado.get(campo_bd, '')).lower()
+                    valor_campo = self._obtener_valor_persona(resultado, campo_bd)
                     if texto_filtro.lower() in valor_campo:
                         resultados_filtrados.append(resultado)
                 todos_resultados = resultados_filtrados
@@ -2157,6 +2157,20 @@ class CreacionPersonaFrame:
         except Exception as e:
             messagebox.showerror("Error", f"Error aplicando filtro: {str(e)}")
             print(f"Error en aplicar_filtro: {e}")
+
+    def _obtener_valor_persona(self, resultado, campo_bd: str) -> str:
+        """Normaliza el valor del campo para filtros de personas."""
+        valor = resultado.get(campo_bd, '')
+        if campo_bd == 'activo':
+            if isinstance(valor, bool):
+                return 'active' if valor else 'inactive'
+            valor_str = str(valor).strip().lower()
+            if valor_str in ('1', 'true', 'active', 'activo', 'yes', 'sí', 'si'):
+                return 'active'
+            if valor_str in ('0', 'false', 'inactive', 'inactivo', 'no'):
+                return 'inactive'
+            return valor_str
+        return str(valor).lower()
     
     def limpiar_filtro(self):
         """Limpia el filtro y muestra todos los registros"""
@@ -2236,7 +2250,7 @@ class CreacionPersonaFrame:
                     resultado.get('email', ''),      # Email
                     resultado.get('unit', ''),       # Departamento
                     resultado.get('position', ''),   # Cargo
-                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
+                    'Active' if resultado.get('activo', True) else 'Inactive'  # Estado
                 ))
     
     
@@ -2285,7 +2299,7 @@ class CreacionPersonaFrame:
         """Limpia todos los campos"""
         for var in self.variables.values():
             var.set("")
-        self.variables['activo'].set("Activo")
+        self.variables['activo'].set("Active")
     
     def actualizar_tabla(self):
         """Actualiza la tabla con todos los registros"""
@@ -2394,7 +2408,7 @@ class CreacionPersonaFrame:
                     resultado.get('unit', ''),       # Departamento
                     resultado.get('unidad_subunidad', ''),  # Unidad/Subunidad
                     resultado.get('position', ''),   # Cargo
-                    'Activo' if resultado.get('activo', True) else 'Inactivo'  # Estado
+                    'Active' if resultado.get('activo', True) else 'Inactive'  # Estado
                 ))
             
             # Mostrar mensaje de confirmación si se especifica
@@ -2697,7 +2711,7 @@ class PersonaDialog:
             ("Tamaño:", "size", "combobox", ["XS", "S", "M", "L", "XL", "XXL"]),
             ("Cumpleaños:", "birthday", "entry"),
             ("Validación:", "validacion", "entry"),
-            ("Estado:", "activo", "combobox", ["Activo", "Inactivo"]),
+            ("Estado:", "activo", "combobox", ["Active", "Inactive"]),
             ("Fecha de Inactivación:", "inactivation_date", "entry")
         ]
         
@@ -2747,7 +2761,7 @@ class PersonaDialog:
             for var_name, var in self.variables.items():
                 if var_name in self.persona_data:
                     if var_name == 'activo':
-                        var.set('Activo' if self.persona_data[var_name] else 'Inactivo')
+                        var.set('Active' if self.persona_data[var_name] else 'Inactive')
                     else:
                         var.set(str(self.persona_data[var_name]) if self.persona_data[var_name] is not None else '')
     
@@ -2774,7 +2788,7 @@ class PersonaDialog:
         self.result = {}
         for var_name, var in self.variables.items():
             if var_name == 'activo':
-                self.result[var_name] = var.get() == 'Activo'
+                self.result[var_name] = var.get() == 'Active'
             else:
                 self.result[var_name] = var.get().strip()
         

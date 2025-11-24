@@ -92,7 +92,7 @@ def get_applications_by_position(conn, position, unit):
         FROM applications
         WHERE UPPER(LTRIM(RTRIM(position_role))) = UPPER(LTRIM(RTRIM(?)))
         AND UPPER(LTRIM(RTRIM(unidad_subunidad))) LIKE UPPER(LTRIM(RTRIM(?)))
-        AND access_status = 'Activo'
+        AND access_status = 'Active'
         ORDER BY logical_access_name
     ''', (position, f'%{unit}%'))
     
@@ -126,7 +126,7 @@ def test_flex_staff_logic(scotia_id: str, temporary_position: str, temporary_uni
         print(f"✅ Empleado encontrado: {employee.get('full_name', 'N/A')}")
         print(f"   Posición original: {employee.get('position', 'N/A')}")
         print(f"   Unidad original: {employee.get('unit', 'N/A')}")
-        print(f"   Activo: {'Sí' if employee.get('activo') else 'No'}\n")
+        print(f"   Active: {'Sí' if employee.get('activo') else 'No'}\n")
         
         # 2. Obtener accesos actuales
         print("📋 PASO 1: Obteniendo accesos actuales del empleado...")

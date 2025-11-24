@@ -45,7 +45,7 @@ BEGIN
         'M',
         '1990-05-20',
         'Validado',
-        1  -- Activo
+        1  -- Active
     );
     PRINT '  ✓ Empleado LM001 creado (Analista - Tecnología/Desarrollo/Backend)';
 END
@@ -79,7 +79,7 @@ BEGIN
         'M',
         '1988-09-15',
         'Validado',
-        1  -- Activo
+        1  -- Active
     );
     PRINT '  ✓ Empleado LM002 creado (Analista Senior - Business Intelligence/Analytics/Data Science)';
 END
@@ -113,7 +113,7 @@ BEGIN
         'Herramientas de Desarrollo',
         'Plataforma de control de versiones Git',
         'gitlab@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación GitLab creada para Analista - Tecnología/Desarrollo/Backend';
 END
@@ -137,7 +137,7 @@ BEGIN
         'Gestión de Proyectos',
         'Herramienta de gestión de proyectos y seguimiento de issues',
         'jira@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Jira creada para Analista - Tecnología/Desarrollo/Backend';
 END
@@ -161,7 +161,7 @@ BEGIN
         'Infraestructura',
         'Registro de contenedores Docker',
         'docker@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Docker Registry creada para Analista - Tecnología/Desarrollo/Backend';
 END
@@ -191,7 +191,7 @@ BEGIN
         'Business Intelligence',
         'Plataforma de visualización y análisis de datos',
         'powerbi@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Power BI creada para Analista Senior - Business Intelligence/Analytics/Data Science';
 END
@@ -215,7 +215,7 @@ BEGIN
         'Business Intelligence',
         'Herramienta de visualización de datos y dashboards',
         'tableau@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Tableau creada para Analista Senior - Business Intelligence/Analytics/Data Science';
 END
@@ -239,7 +239,7 @@ BEGIN
         'Herramientas de Análisis',
         'Plataforma Jupyter para análisis de datos con Python',
         'jupyter@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Python Jupyter creada para Analista Senior - Business Intelligence/Analytics/Data Science';
 END
@@ -263,7 +263,7 @@ BEGIN
         'Productividad',
         'Suite de productividad Microsoft Office 365',
         'office365@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Office 365 creada para Analista Senior - Business Intelligence/Analytics/Data Science';
 END
@@ -287,7 +287,7 @@ BEGIN
         'Productividad',
         'Suite de productividad Microsoft Office 365',
         'office365@empresa.com',
-        'Activo'
+        'Active'
     );
     PRINT '  ✓ Aplicación Office 365 creada para Analista - Tecnología/Desarrollo/Backend (compartida)';
 END

@@ -360,27 +360,27 @@ class AccessManagementService:
                 print("DEBUG: No se encontraron aplicaciones. Verificando qué datos existen...")
                 
                 # Verificar posiciones disponibles
-                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Activo'")
+                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Active'")
                 positions = cursor.fetchall()
                 print(f"DEBUG: Posiciones disponibles: {positions}")
                 
                 # Verificar unidades/subunidades disponibles
-                cursor.execute("SELECT DISTINCT unidad_subunidad FROM applications WHERE access_status = 'Activo'")
+                cursor.execute("SELECT DISTINCT unidad_subunidad FROM applications WHERE access_status = 'Active'")
                 unidades = cursor.fetchall()
                 print(f"DEBUG: Unidades/Subunidades disponibles: {unidades}")
                 
                 # Verificar subunidades disponibles
-                cursor.execute("SELECT DISTINCT subunit FROM applications WHERE access_status = 'Activo'")
+                cursor.execute("SELECT DISTINCT subunit FROM applications WHERE access_status = 'Active'")
                 subunidades = cursor.fetchall()
                 print(f"DEBUG: Subunidades disponibles: {subunidades}")
                 
                 # Buscar aplicaciones que contengan "Summer" en cualquier campo
-                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Activo' AND (position LIKE '%Summer%' OR position_role LIKE '%Summer%')")
+                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Active' AND (position LIKE '%Summer%' OR position_role LIKE '%Summer%')")
                 summer_apps = cursor.fetchall()
                 print(f"DEBUG: Aplicaciones que contienen 'Summer': {summer_apps}")
                 
                 # Buscar aplicaciones que contengan "Business Intelligence" o "Analytics"
-                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Activo' AND (unidad_subunidad LIKE '%Business Intelligence%' OR unidad_subunidad LIKE '%Analytics%' OR subunit LIKE '%Analytics%')")
+                cursor.execute("SELECT logical_access_name, position, position_role, unidad_subunidad, subunit FROM applications WHERE access_status = 'Active' AND (unidad_subunidad LIKE '%Business Intelligence%' OR unidad_subunidad LIKE '%Analytics%' OR subunit LIKE '%Analytics%')")
                 bi_apps = cursor.fetchall()
                 print(f"DEBUG: Aplicaciones relacionadas con Business Intelligence/Analytics: {bi_apps}")
             
@@ -455,22 +455,22 @@ class AccessManagementService:
                 print("DEBUG: No se encontraron aplicaciones para flex staff. Verificando qué datos existen...")
                 
                 # Verificar posiciones disponibles
-                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Activo'")
+                cursor.execute("SELECT DISTINCT position, position_role FROM applications WHERE access_status = 'Active'")
                 positions = cursor.fetchall()
                 print(f"DEBUG: Posiciones disponibles: {positions}")
                 
                 # Verificar unidades disponibles
-                cursor.execute("SELECT DISTINCT unit FROM applications WHERE access_status = 'Activo'")
+                cursor.execute("SELECT DISTINCT unit FROM applications WHERE access_status = 'Active'")
                 units = cursor.fetchall()
                 print(f"DEBUG: Unidades disponibles: {units}")
                 
                 # Buscar aplicaciones que contengan "Analista"
-                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Activo' AND (position LIKE '%Analista%' OR position_role LIKE '%Analista%')")
+                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Active' AND (position LIKE '%Analista%' OR position_role LIKE '%Analista%')")
                 analista_apps = cursor.fetchall()
                 print(f"DEBUG: Aplicaciones que contienen 'Analista': {analista_apps}")
                 
                 # Buscar aplicaciones que contengan "Recursos Humanos"
-                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Activo' AND (unit LIKE '%Recursos Humanos%' OR subunit LIKE '%Recursos Humanos%')")
+                cursor.execute("SELECT logical_access_name, position, position_role, unit, subunit FROM applications WHERE access_status = 'Active' AND (unit LIKE '%Recursos Humanos%' OR subunit LIKE '%Recursos Humanos%')")
                 rh_apps = cursor.fetchall()
                 print(f"DEBUG: Aplicaciones relacionadas con Recursos Humanos: {rh_apps}")
             
@@ -577,7 +577,7 @@ class AccessManagementService:
                 app_data.get('category'),
                 app_data.get('additional_data'),
                 app_data.get('ad_code'),
-                app_data.get('access_status', 'Activo'),
+                app_data.get('access_status', 'Active'),
                 datetime.now().isoformat(),
                 app_data.get('require_licensing'),
                 app_data.get('description'),
@@ -2261,7 +2261,7 @@ class AccessManagementService:
             # 5. Estadísticas por estado de activación
             cursor.execute('''
                 SELECT 
-                    CASE WHEN activo = 1 THEN 'Activo' ELSE 'Inactivo' END as estado,
+                    CASE WHEN activo = 1 THEN 'Active' ELSE 'Inactive' END as estado,
                     COUNT(*) as total_empleados,
                     COUNT(CASE WHEN inactivation_date IS NOT NULL THEN 1 END) as con_fecha_inactivacion
                 FROM headcount
@@ -2293,7 +2293,7 @@ class AccessManagementService:
                     position as puesto,
                     manager,
                     senior_manager,
-                    CASE WHEN activo = 1 THEN 'Activo' ELSE 'Inactivo' END as estado,
+                    CASE WHEN activo = 1 THEN 'Active' ELSE 'Inactive' END as estado,
                     start_date,
                     inactivation_date
                 FROM headcount
@@ -2358,7 +2358,7 @@ class AccessManagementService:
             cursor.execute('''
                 SELECT DISTINCT position_role
                 FROM applications 
-                WHERE access_status = 'Activo' AND position_role IS NOT NULL
+                WHERE access_status = 'Active' AND position_role IS NOT NULL
                 ORDER BY position_role
             ''')
             
@@ -2380,7 +2380,7 @@ class AccessManagementService:
             cursor.execute('''
                 SELECT logical_access_name, description, role_name, unit, subunit
                 FROM applications 
-                WHERE access_status = 'Activo' 
+                WHERE access_status = 'Active' 
                 AND position_role = ?
                 ORDER BY logical_access_name
             ''', (position,))

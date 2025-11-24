@@ -1765,8 +1765,8 @@ class AplicacionesFrame:
                 fecha_formatted = fecha or 'N/A'
             
             # Determinar color del estado
-            status = app.get('status', 'Activo')
-            tags = ('active',) if status == 'Activo' else ('inactive',) if status == 'Inactivo' else ('maintenance',)
+            status = app.get('status', 'Active')
+            tags = ('active',) if status == 'Active' else ('inactive',) if status == 'Inactive' else ('maintenance',)
             
             self.tree.insert('', 'end', values=(
                 app.get('id', ''),
@@ -2120,7 +2120,7 @@ class ApplicationDialog:
         
         # Establecer valores por defecto si están vacíos
         if not self.result.get('access_status'):
-            self.result['access_status'] = 'Activo'
+            self.result['access_status'] = 'Active'
         if not self.result.get('jurisdiction'):
             self.result['jurisdiction'] = 'Global'
         
