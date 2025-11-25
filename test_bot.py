@@ -23,7 +23,7 @@ Uso:
 IMPORTANTE:
 - Se conecta usando Trusted Connection (Windows Authentication).
 - Tu usuario de Windows debe tener como mínimo:
-    GRANT VIEW DEFINITION
+    GRANT VIEW DEFINITIONa
   en las bases de datos que quieras catalogar.
 """
 
@@ -380,8 +380,13 @@ def _collect_candidates(
     """
     candidates: Dict[str, Dict[str, Any]] = {}
     cursor = conn.cursor()
-    for kw in keywords:
-        like_kw = f"%{kw}%"
+    db_filter_norm = db_filter.upper().strip() if db_filter else None
+    schema_filter_norm = schema_filter.upper().strip() if schema_filter else None
+    table_filter_norm = table_filter.upper().strip() if table_filter else None
+    column_filter_norm = column_filter.upper().strip() if column_filter else None
+
+    for kw in keywords if keywords else ['*']:
+        like_kw = '%' if kw == '*' else f"%{kw}%"
         query = """
             SELECT 
                 database_name, schema_name, table_name, column_name,
@@ -397,18 +402,18 @@ def _collect_candidates(
         """
         params: List[Any] = [like_kw, like_kw, like_kw, like_kw, like_kw]
 
-        if db_filter:
-            query += " AND database_name = ?"
-            params.append(db_filter)
-        if schema_filter:
-            query += " AND schema_name = ?"
-            params.append(schema_filter)
-        if table_filter:
-            query += " AND table_name LIKE ?"
-            params.append(f"%{table_filter}%")
-        if column_filter:
-            query += " AND column_name LIKE ?"
-            params.append(f"%{column_filter}%")
+        if db_filter_norm:
+            query += " AND UPPER(database_name) = ?"
+            params.append(db_filter_norm)
+        if schema_filter_norm:
+            query += " AND UPPER(schema_name) = ?"
+            params.append(schema_filter_norm)
+        if table_filter_norm:
+            query += " AND UPPER(table_name) LIKE ?"
+            params.append(f"%{table_filter_norm}%")
+        if column_filter_norm:
+            query += " AND UPPER(column_name) LIKE ?"
+            params.append(f"%{column_filter_norm}%")
 
         query += " LIMIT ?"
         params.append(CANDIDATE_LIMIT)
@@ -469,6 +474,8 @@ def _cached_search(signature_json: str) -> List[Dict[str, Any]]:
         score = 0
 
         for kw in keywords:
+            if kw == '*':
+                continue
             if kw in item['column'].lower():
                 score += 6
             elif kw in item['table'].lower():
@@ -518,7 +525,8 @@ def search_catalog(question: str,
     keywords, debug_map = expand_keywords(keywords, debug=debug)
 
     if not keywords:
-        return [], debug_map
+        # Permitir consultas solo con filtros usando comodín
+        keywords = ['*']
 
     signature_json = json.dumps({
         "keywords": keywords,

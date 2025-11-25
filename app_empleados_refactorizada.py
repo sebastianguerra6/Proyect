@@ -826,16 +826,25 @@ class ConciliacionFrame:
         import pandas as pd
         from datetime import datetime
         import os
+        from pathlib import Path
         
-        # Crear directorio de salida si no existe
-        output_dir = "output"
-        os.makedirs(output_dir, exist_ok=True)
+        # Determinar carpeta de descargas del usuario
+        downloads_dir = Path.home() / "Downloads"
+        fallback_dir = Path("output")
+        
+        try:
+            downloads_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = downloads_dir
+        except Exception as e:
+            # Si no se puede crear en Descargas, usar carpeta local output
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = fallback_dir
         
         # Generar nombre de archivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         sid = self.sid_var.get().strip()
         filename = f"conciliacion_accesos_{sid}_{timestamp}.xlsx"
-        filepath = os.path.join(output_dir, filename)
+        filepath = str(Path(output_dir) / filename)
         
         # Obtener datos del reporte
         reporte = self.resultado_conciliacion
