@@ -2162,36 +2162,46 @@ class AccessManagementService:
         except Exception as e:
             return {"error": f"Error generando reporte: {str(e)}"}
 
-    def delete_historical_record(self, scotia_id: str, case_id: str, app_access_name: str = None) -> bool:
-        """Elimina un registro específico del historial por scotia_id, case_id y app_access_name"""
+    def delete_historical_record(self, scotia_id: str, case_id: str, app_access_name: str = None, delete_all: bool = False) -> bool:
+        """Elimina un registro específico o todos los registros de un case_id."""
         try:
+            print(f"[DEBUG] delete_historical_record called -> scotia_id={scotia_id}, case_id={case_id}, app_access_name={app_access_name}, delete_all={delete_all}")
             with self.db_manager.get_connection() as conn:
                 cursor = conn.cursor()
                 
-                # Si se proporciona app_access_name, eliminar solo ese registro específico
-                if app_access_name:
-                    cursor.execute('SELECT id FROM historico WHERE scotia_id = ? AND case_id = ? AND app_access_name = ?', (scotia_id, case_id, app_access_name))
+                if delete_all:
+                    cursor.execute(
+                        "DELETE FROM historico WHERE CAST(scotia_id AS NVARCHAR(50)) = ? AND case_id = ?",
+                        (scotia_id, case_id)
+                    )
+                    print(f"[DEBUG] delete_all affected rows: {cursor.rowcount}")
+                elif app_access_name:
+                    cursor.execute('SELECT id FROM historico WHERE CAST(scotia_id AS NVARCHAR(50)) = ? AND case_id = ? AND app_access_name = ?', (scotia_id, case_id, app_access_name))
                     
                     if not cursor.fetchone():
+                        print("[DEBUG] No matching record found for provided app_access_name")
                         return False
                     
                     # Eliminar solo el registro específico
                     cursor.execute(
-                        "DELETE FROM historico WHERE scotia_id = ? AND case_id = ? AND app_access_name = ?",
+                        "DELETE FROM historico WHERE CAST(scotia_id AS NVARCHAR(50)) = ? AND case_id = ? AND app_access_name = ?",
                         (scotia_id, case_id, app_access_name)
                     )
+                    print(f"[DEBUG] delete specific rowcount: {cursor.rowcount}")
                 else:
                     # Si no se proporciona app_access_name, eliminar solo el primer registro encontrado
-                    cursor.execute('SELECT TOP 1 id FROM historico WHERE scotia_id = ? AND case_id = ?', (scotia_id, case_id))
+                    cursor.execute('SELECT TOP 1 id FROM historico WHERE CAST(scotia_id AS NVARCHAR(50)) = ? AND case_id = ?', (scotia_id, case_id))
                     
                     if not cursor.fetchone():
+                        print("[DEBUG] No records found for given scotia_id and case_id")
                         return False
                     
                     # Eliminar solo el primer registro
                     cursor.execute(
-                        "DELETE TOP (1) FROM historico WHERE scotia_id = ? AND case_id = ?",
+                        "DELETE TOP (1) FROM historico WHERE CAST(scotia_id AS NVARCHAR(50)) = ? AND case_id = ?",
                         (scotia_id, case_id)
                     )
+                    print(f"[DEBUG] delete first row rowcount: {cursor.rowcount}")
                 
                 return cursor.rowcount > 0
                 

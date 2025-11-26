@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
+from typing import List, Optional
 from tkinter import messagebox
 from services.dropdown_service import dropdown_service
 
@@ -817,59 +818,124 @@ class EdicionBusquedaFrame:
             messagebox.showwarning("Advertencia", "Por favor seleccione un registro para eliminar")
             return
         
+        if not self.service:
+            messagebox.showerror("Error", "Servicio no disponible")
+            return
+        
         # Obtener datos del registro seleccionado
+        items = selection
+        if not items:
+            messagebox.showwarning("Advertencia", "Seleccione al menos un registro para eliminar")
+            return
+        
+        # Si hay más de uno seleccionado, preguntar si eliminar múltiples
+        if len(items) > 1:
+            confirm = messagebox.askyesno(
+                "Eliminar múltiples registros",
+                f"Se eliminarán {len(items)} registros individuales.\n\n¿Desea continuar?"
+            )
+            if not confirm:
+                return
+            
+            errores = []
+            eliminados = 0
+            for item_id in items:
+                values = self.tree.item(item_id)['values']
+                if len(values) < 6:
+                    continue
+                record_id = values[0]
+                scotia_id = values[1]
+                case_id = values[3]
+                app_name = values[5]
+                
+                success, message = self._eliminar_registro_historico(scotia_id, case_id, app_name)
+                if success:
+                    eliminados += 1
+                else:
+                    errores.append(f"SID {scotia_id}, Caso {case_id}: {message}")
+            
+            if eliminados:
+                messagebox.showinfo("Éxito", f"Se eliminaron {eliminados} registros.")
+                self.mostrar_todo_el_historial()
+            if errores:
+                messagebox.showerror("Errores", "\n".join(errores))
+            return
+        
+        # Solo un registro seleccionado
         item = self.tree.item(selection[0])
         values = item['values']
-        
-        if len(values) < 3:
+        if len(values) < 6:
             messagebox.showerror("Error", "Datos de registro no válidos")
             return
         
-        scotia_id = values[0]
-        case_id = values[1]
-        app_name = values[3]
+        record_id = values[0]
+        scotia_id = values[1]
+        case_id = values[3]
+        app_name = values[5]
         
-        # Confirmar eliminación
+        # Preguntar si eliminar todos los registros del caso
+        if messagebox.askyesno(
+            "Eliminar registros del caso",
+            f"¿Desea eliminar TODOS los registros del caso {case_id}?\n\n"
+            "Seleccione 'No' para eliminar solo este registro."
+        ):
+            self._eliminar_registros_caso(scotia_id, case_id)
+            return
+        
+        # Confirmar eliminación individual
         result = messagebox.askyesno(
             "Confirmar Eliminación",
-            f"¿Está seguro de que desea eliminar este registro?\n\n"
+            f"¿Eliminar registro?\n\n"
             f"SID: {scotia_id}\n"
             f"Caso: {case_id}\n"
-            f"Aplicación: {app_name}\n\n"
-            "Esta acción no se puede deshacer."
+            f"Aplicación: {app_name}"
         )
         
-        if result:
-            try:
-                # Eliminar el registro del historial pasando también el app_name para ser específico
-                success, message = self._eliminar_registro_historico(scotia_id, case_id, app_name)
-                
-                if success:
-                    messagebox.showinfo("Éxito", "Registro eliminado correctamente")
-                    # Actualizar la tabla refrescando desde la base de datos
-                    self.mostrar_todo_el_historial()
-                else:
-                    messagebox.showerror("Error", f"Error al eliminar registro: {message}")
-                    
-            except Exception as e:
-                messagebox.showerror("Error", f"Error inesperado: {str(e)}")
+        if not result:
+            return
+        
+        success, message = self._eliminar_registro_historico(scotia_id, case_id, app_name, delete_all=False)
+        if success:
+            messagebox.showinfo("Éxito", "Registro eliminado.")
+            self.mostrar_todo_el_historial()
+        else:
+            messagebox.showerror("Error", message)
     
-    def _eliminar_registro_historico(self, scotia_id, case_id, app_name=None):
+    def _eliminar_registro_historico(self, scotia_id, case_id, app_name=None, delete_all=False):
         """Elimina un registro específico del historial"""
         try:
             if not self.service:
                 return False, "Servicio no disponible"
             
             # Usar el servicio para eliminar el registro específico
-            success = self.service.delete_historical_record(scotia_id, case_id, app_name)
+            success = self.service.delete_historical_record(scotia_id, case_id, app_name, delete_all=delete_all)
             
             if success:
                 return True, "Registro eliminado exitosamente"
             else:
-                return False, "No se pudo eliminar el registro"
+                detalle = f"SID={scotia_id}, Caso={case_id}"
+                if app_name:
+                    detalle += f", App={app_name}"
+                return False, f"No se pudo eliminar el registro ({detalle}). Revisa los mensajes DEBUG en consola."
             
         except Exception as e:
             return False, f"Error eliminando registro: {str(e)}"
+
+    def _eliminar_registros_caso(self, scotia_id: str, case_id: str):
+        """Elimina todos los registros de un caso."""
+        confirm = messagebox.askyesno(
+            "Eliminar caso completo",
+            f"Se eliminarán todos los registros del caso {case_id} (SID {scotia_id}). ¿Continuar?"
+        )
+        if not confirm:
+            return
+
+        success, message = self._eliminar_registro_historico(scotia_id, case_id, app_name=None, delete_all=True)
+        if success:
+            messagebox.showinfo("Éxito", f"Se eliminaron todos los registros del caso {case_id}.")
+            self.mostrar_todo_el_historial()
+        else:
+            messagebox.showerror("Error", message)
     
     def mostrar_resultados_busqueda(self, resultados, busqueda=""):
         """Muestra los resultados de búsqueda en la tabla"""
@@ -2255,11 +2321,35 @@ class CreacionPersonaFrame:
     
     
     
+    def _get_unique_units(self) -> List[str]:
+        """Obtiene unidades únicas existentes en headcount para los combos."""
+        try:
+            registros = self.service.obtener_todo_headcount()
+            unidades = sorted({(reg.get('unit') or '').strip() for reg in registros if reg.get('unit')}, key=str.lower)
+            return unidades
+        except Exception:
+            return []
+
+    def _get_unique_unidad_sub(self) -> List[str]:
+        """Obtiene unidades/subunidades únicas existentes en headcount."""
+        try:
+            registros = self.service.obtener_todo_headcount()
+            unidades = sorted({(reg.get('unidad_subunidad') or '').strip() for reg in registros if reg.get('unidad_subunidad')}, key=str.lower)
+            return unidades
+        except Exception:
+            return []
+
     def crear_persona(self):
         """Crea una nueva persona usando el diálogo de edición"""
         try:
             # Crear diálogo de edición sin datos (para nueva persona)
-            dialog = PersonaDialog(self.parent, "Nueva Persona", None)
+            dialog = PersonaDialog(
+                self.parent,
+                "Nueva Persona",
+                None,
+                unidades=self._get_unique_units(),
+                unidades_sub=self._get_unique_unidad_sub()
+            )
             self.parent.wait_window(dialog.dialog)
             
             if dialog.result:
@@ -2337,7 +2427,13 @@ class CreacionPersonaFrame:
                 return
             
             # Crear diálogo de edición
-            dialog = PersonaDialog(self.parent, "Editar Persona", persona_data)
+            dialog = PersonaDialog(
+                self.parent,
+                "Editar Persona",
+                persona_data,
+                unidades=self._get_unique_units(),
+                unidades_sub=self._get_unique_unidad_sub()
+            )
             self.parent.wait_window(dialog.dialog)
             
             if dialog.result:
@@ -2651,7 +2747,9 @@ Puestos Únicos: {generales.get('puestos_unicos', 0)}
 class PersonaDialog:
     """Diálogo para agregar/editar personas"""
     
-    def __init__(self, parent, title: str, persona_data: dict = None):
+    def __init__(self, parent, title: str, persona_data: dict = None,
+                 unidades: Optional[List[str]] = None,
+                 unidades_sub: Optional[List[str]] = None):
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(title)
         self.dialog.geometry("600x500")
@@ -2663,6 +2761,8 @@ class PersonaDialog:
         self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
         
         self.persona_data = persona_data
+        self.unidades = sorted(unidades or ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"])
+        self.unidades_sub = sorted(unidades_sub or ["Tecnología/Desarrollo", "Recursos Humanos/RRHH"])
         self.result = None
         
         self._setup_ui()
@@ -2700,8 +2800,8 @@ class PersonaDialog:
             ("Posición:", "position", "entry"),
             ("Manager:", "manager", "entry"),
             ("Senior Manager:", "senior_manager", "entry"),
-            ("Unidad:", "unit", "combobox", ["Tecnología", "Recursos Humanos", "Finanzas", "Marketing", "Operaciones", "Ventas", "Legal"]),
-            ("Unidad/Subunidad:", "unidad_subunidad", "entry"),
+            ("Unidad:", "unit", "combobox", self.unidades),
+            ("Unidad/Subunidad:", "unidad_subunidad", "combobox", self.unidades_sub),
             ("Fecha de Inicio:", "start_date", "entry"),
             ("CECO:", "ceco", "entry"),
             ("Skip Level:", "skip_level", "entry"),
