@@ -221,33 +221,81 @@ SQL_SERVER_CONFIG = {
 - **sp_GetEmployeeHistory**: Historial de empleado
 - **sp_GetApplicationsByPosition**: Aplicaciones por posición
 
-## 🎯 Uso del Sistema
+## 🎯 Guía de Usuario
 
-### **1. Gestión de Empleados**
-- **Crear empleado**: Formulario de creación con validaciones completas
-- **Editar empleado**: Modificar datos existentes con verificación
-- **Buscar empleado**: Filtrado avanzado por múltiples criterios
-- **Ver accesos actuales**: Visualización completa de accesos del empleado
+### 🔑 1. Inicio Rápido
+1. Ejecuta `python app_empleados_refactorizada.py` (o el ejecutable generado).  
+2. Inicia sesión con tu usuario de Windows si usas SQL Server con Trusted Connection.  
+3. Usa el menú lateral para navegar entre módulos (Aplicaciones, Personas, Historial, Conciliación, Flex Staff).
 
-### **2. Procesos de Acceso**
-- **Onboarding**: Otorgar accesos para nueva posición
-- **Offboarding**: Revocar accesos al salir de posición
-- **Lateral Movement**: Movimiento aditivo (mantiene accesos actuales + agrega nuevos)
-- **Flex Staff**: Accesos temporales para proyectos específicos
-- **Acceso Manual**: Registro manual con filtrado por posición y nivel de permiso
+### 👥 2. Gestión de Personas (Headcount)
+- `➕ Nueva Persona`: abre un formulario con combos de Unidad/Unidad-Subunidad precargados desde el headcount existente para mantener integridad. Los estados siempre se guardan como `Active`/`Inactive`.  
+- `✏️ Editar`: doble clic en una fila o botón “Editar” para actualizar datos; las validaciones obligatorias mostrarán mensajes si falta un campo crítico.  
+- `🗑️ Eliminar`: selecciona una fila y confirma.  
+- **Búsqueda rápida**: la barra “Buscar” filtra en vivo.  
+- **Filtros múltiples**: agrega varias condiciones (ej. Unidad = Tecnología, Estado = Active) y pulsa “Aplicar filtros”.  
+- **Exportar estadísticas**: disponible desde la barra de herramientas para generar un Excel con métricas del headcount.
 
-### **3. Conciliación de Accesos**
-- **Conciliar por SID**: Analizar accesos de un empleado específico
-- **Conciliar todos**: Procesamiento masivo del sistema
-- **Exportar Excel**: Generar reportes detallados con múltiples hojas
-- **Registrar tickets**: Crear tickets automáticos
-- **Ver accesos actuales**: Visualización completa de accesos
+### 🧩 3. Gestión de Aplicaciones
+- `➕ Nueva Aplicación`: formulario con dropdowns provenientes de `services/dropdown_service`. Al guardar, el `access_status` se normaliza como `Active`.  
+- `✏️ Editar` / doble clic: modifica campos existentes; útil para mantener roles y owners actualizados.  
+- `🗑️ Eliminar`: pide confirmación antes de remover la aplicación.  
+- **Filtros múltiples y búsqueda**: idénticos al módulo de personas, permiten combinar criterios (Unidad, Categoría, Estado, etc.).  
+- **Exportar Excel**: crea reportes en la carpeta `Downloads` del usuario, listos para compartir.
 
-### **4. Búsqueda y Filtrado**
-- **Filtrado en tiempo real**: Resultados se actualizan automáticamente
-- **Selección de columna**: Filtrar por cualquier campo
-- **Búsqueda inteligente**: Coincidencias parciales insensibles a mayúsculas
-- **Filtrado por posición**: En acceso manual para seleccionar nivel correcto
+### 🕓 4. Historial de Procesos
+- `📋 Mostrar Todo`: refresca la tabla con todos los registros (ID, SID, Caso, Proceso, Aplicación, Fechas, Comentarios).  
+- `✏️ Editar Registro`: abre `HistorialDialog` donde puedes modificar cualquier campo; al guardar se actualiza la base.  
+- `🗑️ Eliminar`: 
+  - Selecciona una o varias filas y elige eliminar individualmente. 
+  - Si confirmas “Eliminar registros del caso”, se borran todos los registros que comparten `case_id`. 
+  - Si algo falla, la UI muestra el SID/caso y la consola imprime mensajes `[DEBUG] delete_historical_record …` para diagnóstico.  
+- `📊 Ver Estadísticas / 📤 Exportar Excel`: resumen de estados, unidades y desempeño del historial.
+
+### 🔐 5. Conciliación de Accesos
+- Ingresa un `SID` y ejecuta la conciliación para ver “Accesos actuales”, “A otorgar” y “A revocar”.  
+- `Exportar conciliación`: genera `conciliacion_accesos_<SID>_<timestamp>.xlsx` en `Downloads` con pestañas separadas por sección.  
+- `Registrar tickets`: inserta automáticamente en `historico` los accesos detectados, respetando la lógica de omitir aplicaciones cuyo `access_status` no sea `Active`.  
+- Botón “Conciliar todos” procesa cada empleado de forma masiva (mostrar feedback en la consola).
+
+### 🔁 6. Procesos (Onboarding, Offboarding, Lateral, Flex Staff)
+- **Onboarding / Offboarding**: disponibles en sus respectivos formularios. El servicio `AccessManagementService.process_employee_offboarding` verifica que un acceso esté `Active`; si no, lo omite y lo indica en el mensaje final.  
+- **Lateral Movement**: movimiento aditivo; mantiene accesos actuales y agrega solo los necesarios.  
+- **Flex Staff**: administra accesos temporales, con revocación automática basada en fechas.  
+- **Registro manual**: `ManualAccessDialog` permite documentar un acceso fuera de los flujos principales.
+
+### 🔍 7. Búsqueda y Filtrado Global
+- Todas las tablas incluyen búsqueda en vivo y filtros múltiples.  
+- Para filtros complejos: añade condiciones, revisa la lista “Filtros activos” y usa “Aplicar filtros” / “Limpiar filtros”.  
+- Las comparaciones son insensibles a mayúsculas y aceptan valores como `Active`, `Inactive`, `1`, `0`.
+
+### 🤖 8. Asistente de Metadatos (`test_bot.py`)
+1. Construye el catálogo local (SQLite + FTS) con:
+   ```bash
+   python test_bot.py --build-catalog
+   ```
+2. Inicia el chat con búsqueda semántica:
+   ```bash
+   python test_bot.py
+   ```
+3. Usa filtros inline:  
+   - `@db=GAMLO_Empleados` limita a una base.  
+   - `@schema=dbo`, `@table=clientes`, `@column=cedula`.  
+   - Puedes enviar solo filtros sin keywords para listar resultados de esa sección.  
+4. Flags útiles: `--output json|csv`, `--limit 20`, `--debug` (muestra variantes de sinónimos generados sin IA).  
+5. WordNet se usa offline (descarga previa con `nltk.download('wordnet'); nltk.download('omw-1.4')`).
+
+### 📦 9. Generación de Ejecutables
+- Consulta `pyinstaller_command.txt` para construir tanto la app principal (`app_empleados`) como `test_bot`.  
+- Los comandos incluyen `--add-data` con `config.py`, `services`, `ui`, `images`, `database`, `samples`, `schema_catalog.db/json`.  
+- Tras compilar, valida que la carpeta `Downloads` exista en el entorno objetivo (Windows/macOS/Linux) para que las exportaciones funcionen.
+
+### 🧪 10. Pruebas
+- Ejecuta la prueba de offboarding que verifica que no se generan registros para aplicaciones inactivas:
+  ```bash
+  python -m unittest tests.test_offboarding
+  ```
+- Si tu entorno no tiene `pandas`, instala la dependencia (`pip install pandas`) o ajusta el import según tus necesidades.
 
 ## 🔧 Solución de Problemas
 
