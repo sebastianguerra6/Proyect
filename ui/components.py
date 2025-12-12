@@ -620,20 +620,29 @@ class EdicionBusquedaFrame:
         """Maneja el doble clic en la tabla"""
         self.editar_registro_historial()
     
-    def actualizar_tabla(self):
-        """Actualiza la tabla con todos los registros del historial"""
+    def _refrescar_respetando_filtros(self, mostrar_mensaje: bool = True):
+        """Refresca la tabla manteniendo los filtros activos si existen."""
         try:
             # Limpiar tabla primero
             for item in self.tree.get_children():
                 self.tree.delete(item)
-            
-            # Obtener todos los registros del historial
-            self.mostrar_todo_el_historial()
-            
-            # Mostrar mensaje de confirmación
-            messagebox.showinfo("Actualización", "Tabla actualizada correctamente")
+
+            if self.filtros_activos:
+                # Reaplicar filtros de forma silenciosa
+                self._aplicar_filtros_multiples(silent=True)
+                if mostrar_mensaje:
+                    messagebox.showinfo("Actualización", "Tabla filtrada actualizada correctamente")
+            else:
+                # Mostrar todo si no hay filtros
+                self.mostrar_todo_el_historial()
+                if mostrar_mensaje:
+                    messagebox.showinfo("Actualización", "Tabla actualizada correctamente")
         except Exception as e:
             messagebox.showerror("Error", f"Error actualizando tabla: {str(e)}")
+
+    def actualizar_tabla(self):
+        """Actualiza la tabla con todos los registros del historial respetando filtros activos."""
+        self._refrescar_respetando_filtros(mostrar_mensaje=True)
     
     
     def editar_registro_historial(self):
@@ -693,15 +702,15 @@ class EdicionBusquedaFrame:
             dialog = HistorialDialog(self.parent, f"Editar Registro de Historial - SID: {scotia_id}", historial_data)
             self.parent.wait_window(dialog.dialog)
             
-            if dialog.result:
-                success, message = self.actualizar_registro_historial_por_id(record_id, dialog.result)
-                
-                if success:
-                    messagebox.showinfo("Éxito", message)
-                    # Actualizar la tabla después de editar
-                    self.actualizar_tabla()
-                else:
-                    messagebox.showerror("Error", message)
+                if dialog.result:
+                    success, message = self.actualizar_registro_historial_por_id(record_id, dialog.result)
+                    
+                    if success:
+                        messagebox.showinfo("Éxito", message)
+                        # Refrescar respetando filtros actuales
+                        self._refrescar_respetando_filtros(mostrar_mensaje=False)
+                    else:
+                        messagebox.showerror("Error", message)
                     
         except Exception as e:
             messagebox.showerror("Error", f"Error editando registro: {str(e)}")
@@ -1094,10 +1103,11 @@ class EdicionBusquedaFrame:
         for campo, valor in self.filtros_activos.items():
             self.filtros_listbox.insert(tk.END, f"{campo}: {valor}")
     
-    def _aplicar_filtros_multiples(self):
-        """Aplica todos los filtros activos"""
+    def _aplicar_filtros_multiples(self, silent: bool = False):
+        """Aplica todos los filtros activos. Si silent=True, no muestra mensajes emergentes."""
         if not self.filtros_activos:
-            messagebox.showwarning("Advertencia", "No hay filtros activos para aplicar")
+            if not silent:
+                messagebox.showwarning("Advertencia", "No hay filtros activos para aplicar")
             return
         
         try:
@@ -1115,9 +1125,13 @@ class EdicionBusquedaFrame:
             # Mostrar resultados
             if resultados_filtrados:
                 mensaje = f"Se encontraron {len(resultados_filtrados)} registros con los filtros aplicados"
-                self.mostrar_resultados_historial(resultados_filtrados, mensaje)
+                # En modo silencioso no mostrar popup
+                if not silent:
+                    messagebox.showinfo("Filtros", mensaje)
+                self.mostrar_resultados_historial(resultados_filtrados, "")
             else:
-                messagebox.showinfo("Filtros", "No se encontraron registros que coincidan con los filtros aplicados")
+                if not silent:
+                    messagebox.showinfo("Filtros", "No se encontraron registros que coincidan con los filtros aplicados")
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error aplicando filtros: {str(e)}")

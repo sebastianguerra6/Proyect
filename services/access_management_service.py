@@ -1355,24 +1355,12 @@ class AccessManagementService:
             case_id = f"CASE-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
             created_records = []
             processed_access = []
-            skipped_inactive_access = []
-
             for access in active_access:
                 app_name = self._safe_strip(access.get('app_access_name'), '')
                 if not app_name:
                     continue  # Saltar si no hay nombre de aplicación
                 
                 access_type = self._safe_strip(access.get('process_access'), '')
-                
-                # Verificar si el acceso de la aplicación está activo
-                app_info = self._get_application_by_name(app_name)
-                access_status = self._safe_strip(app_info.get('access_status'), '') if app_info else ''
-                normalized_status = access_status.lower()
-                is_active_status = normalized_status in ('activo', 'active')
-                if access_status and not is_active_status:
-                    print(f"DEBUG: Omitiendo offboarding para {app_name} porque el acceso está '{access_status}'")
-                    skipped_inactive_access.append(app_name)
-                    continue
                 
                 # Crear descripción específica según el tipo de acceso
                 if access_type == 'flex_staff':
@@ -1439,9 +1427,6 @@ class AccessManagementService:
                 else:
                     message += f"- Accesos {access_type}: {count}\n"
             
-            if skipped_inactive_access:
-                message += f"- Accesos omitidos por estar inactivos: {', '.join(skipped_inactive_access)}\n"
-            
             return True, message.strip(), created_records
 
         except Exception as e:
@@ -1479,16 +1464,24 @@ class AccessManagementService:
             new_unidad_subunidad = f"{new_unit}/{new_subunit}" if new_subunit else new_unit
             print(f"DEBUG: Nueva unidad_subunidad: {new_unidad_subunidad}")
             new_mesh_apps = self.get_applications_by_position(new_position, new_unidad_subunidad, subunit=new_subunit)
-            print(f"DEBUG: Aplicaciones encontradas para nueva posición: {len(new_mesh_apps)}")
+            print(f"DEBUG: Aplicaciones encontradas para nueva posición (estricto): {len(new_mesh_apps)}")
             for app in new_mesh_apps:
-                print(f"DEBUG: App requerida para nueva posición: {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
+                print(f"DEBUG: App requerida (estricto): {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
+
+            # Fallback: si no se encontraron apps con la coincidencia exacta, usar la búsqueda flexible
+            if not new_mesh_apps:
+                print("DEBUG: Sin resultados en búsqueda estricta. Usando get_applications_by_position_flexible como respaldo.")
+                new_mesh_apps = self.get_applications_by_position_flexible(new_position, new_unidad_subunidad, subunit=new_subunit)
+                print(f"DEBUG: Aplicaciones encontradas para nueva posición (flexible): {len(new_mesh_apps)}")
+                for app in new_mesh_apps:
+                    print(f"DEBUG: App requerida (flexible): {app.get('logical_access_name', '')} - Unidad/Subunidad: {app.get('unidad_subunidad', '')}")
             
             # Obtener accesos ACTUALES del empleado (no los de la malla anterior, sino los que realmente tiene)
             current_access = self.get_employee_current_position_access(scotia_id)
             print(f"DEBUG: Accesos actuales del empleado: {len(current_access)}")
             
-            # Crear índice de accesos actuales usando logical_access_name + unidad_subunidad
-            # Obtener unidad_subunidad de todas las aplicaciones de una vez
+            # Crear índice de accesos actuales usando logical_access_name + unidad_subunidad + rol/posición
+            # Obtener unidad_subunidad y roles de todas las aplicaciones de una vez
             conn = self.get_connection()
             cursor = conn.cursor()
             
@@ -1497,19 +1490,25 @@ class AccessManagementService:
             hc_result = cursor.fetchone()
             default_unidad_subunidad = self._safe_strip(hc_result[0] if hc_result else None, '').upper()
             
-            # Obtener unidad_subunidad de todas las aplicaciones actuales de una vez
+            # Obtener unidad_subunidad y roles de todas las aplicaciones actuales de una vez
             app_names = [self._safe_strip(acc.get('logical_access_name'), '').upper() for acc in current_access if acc.get('logical_access_name')]
             app_unidad_subunidad_map = {}
+            app_role_map = {}
             
             if app_names:
                 placeholders = ','.join(['?'] * len(app_names))
                 cursor.execute(f'''
-                    SELECT DISTINCT a.logical_access_name, a.unidad_subunidad
+                    SELECT DISTINCT a.logical_access_name, a.unidad_subunidad, a.role_name, a.position_role
                     FROM applications a
                     WHERE a.logical_access_name IN ({placeholders})
                 ''', tuple(app_names))
                 for row in cursor.fetchall():
-                    app_unidad_subunidad_map[self._safe_strip(row[0], '').upper()] = self._safe_strip(row[1], '').upper()
+                    name_key = self._safe_strip(row[0], '').upper()
+                    app_unidad_subunidad_map[name_key] = self._safe_strip(row[1], '').upper()
+                    app_role_map[name_key] = {
+                        'role_name': self._safe_strip(row[2], ''),
+                        'position_role': self._safe_strip(row[3], '')
+                    }
             
             conn.close()
             
@@ -1519,11 +1518,16 @@ class AccessManagementService:
                 if app_name:
                     # Usar unidad_subunidad de la aplicación si está disponible, sino usar la del headcount
                     app_unidad_subunidad = app_unidad_subunidad_map.get(app_name, default_unidad_subunidad)
+                    roles = app_role_map.get(app_name, {})
+                    role_name = self._safe_strip(roles.get('role_name') or acc.get('role_name'), '')
+                    position_role = self._safe_strip(roles.get('position_role') or acc.get('position_role'), '')
                     
-                    key = f"{app_name}|||{app_unidad_subunidad}"
+                    key = f"{app_name}|||{app_unidad_subunidad}|||{role_name.upper()}|||{position_role.upper()}"
                     current_access_by_key[key] = {
                         'logical_access_name': app_name,
                         'unidad_subunidad': app_unidad_subunidad,
+                        'role_name': role_name,
+                        'position_role': position_role,
                         'process_access': acc.get('process_access', ''),
                         'status': acc.get('status', '')
                     }
@@ -1532,12 +1536,14 @@ class AccessManagementService:
             for key, acc in current_access_by_key.items():
                 print(f"DEBUG: Acceso actual: {acc.get('logical_access_name', '')} - {acc.get('unidad_subunidad', '')}")
             
-            # Crear índice de accesos requeridos para la nueva posición
+            # Crear índice de accesos requeridos para la nueva posición (incluyendo rol/posición)
             new_apps_by_key = {}
             for app in new_mesh_apps:
                 app_name = self._safe_strip(app.get('logical_access_name'), '').upper()
                 app_unidad_subunidad = self._safe_strip(app.get('unidad_subunidad'), '').upper()
-                key = f"{app_name}|||{app_unidad_subunidad}"
+                role_name = self._safe_strip(app.get('role_name'), '')
+                position_role = self._safe_strip(app.get('position_role'), '')
+                key = f"{app_name}|||{app_unidad_subunidad}|||{role_name.upper()}|||{position_role.upper()}"
                 if app_name:  # Solo agregar si tiene nombre
                     new_apps_by_key[key] = app
             
@@ -1727,30 +1733,38 @@ class AccessManagementService:
                 print(f"DEBUG: - {app.get('logical_access_name', '')} | {app.get('unit', '')} | {app.get('subunit', '')}")
             
             # Crear índices para comparación (incluyendo accesos flex_staff existentes)
-            current_apps_by_name = {}
+            # Comparar usando clave extendida: nombre + unidad_subunidad + rol + posición
+            def _build_key(app_dict):
+                name = self._safe_strip(app_dict.get('logical_access_name'), '').upper()
+                unidad_sub = self._safe_strip(app_dict.get('unidad_subunidad') or app_dict.get('unit') or app_dict.get('subunit'), '').upper()
+                role_name = self._safe_strip(app_dict.get('role_name') or '', '').upper()
+                position_role = self._safe_strip(app_dict.get('position_role') or '', '').upper()
+                return f"{name}|||{unidad_sub}|||{role_name}|||{position_role}"
+            
+            current_apps_by_key = {}
             for acc in current_access:
-                app_name = self._safe_strip(acc.get('logical_access_name'), '').upper()
-                if app_name:
-                    current_apps_by_name[app_name] = acc
+                key = _build_key(acc)
+                if key.strip('|'):
+                    current_apps_by_key[key] = acc
             
             # Agregar accesos flex_staff existentes a la comparación para evitar duplicados
             for acc in flex_staff_access:
-                app_name = self._safe_strip(acc.get('logical_access_name'), '').upper()
-                if app_name and app_name not in current_apps_by_name:
-                    current_apps_by_name[app_name] = acc
-                    print(f"DEBUG: Acceso flex_staff existente incluido en comparación: {app_name}")
+                key = _build_key(acc)
+                if key.strip('|') and key not in current_apps_by_key:
+                    current_apps_by_key[key] = acc
+                    print(f"DEBUG: Acceso flex_staff existente incluido en comparación: {key}")
             
-            temp_apps_by_name = {}
+            temp_apps_by_key = {}
             for app in temp_mesh_apps:
-                app_name = self._safe_strip(app.get('logical_access_name'), '').upper()
-                if app_name:
-                    temp_apps_by_name[app_name] = app
+                key = _build_key(app)
+                if key.strip('|'):
+                    temp_apps_by_key[key] = app
 
-            # Calcular qué accesos temporales otorgar (solo los que no tiene)
+            # Calcular qué accesos temporales otorgar (solo los que no tiene con la clave extendida)
             to_grant_temp = []
             
-            for app_name, app in temp_apps_by_name.items():
-                if app_name not in current_apps_by_name:
+            for key, app in temp_apps_by_key.items():
+                if key not in current_apps_by_key:
                     to_grant_temp.append(app)
 
             case_id = f"FLEX-{datetime.now().strftime('%Y%m%d%H%M%S')}-{scotia_id}"
